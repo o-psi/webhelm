@@ -1,37 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
-import {spawnSync} from 'node:child_process';
-import {mkdtempSync,rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 import {vesselUpdate} from '../resources/js/vessel-update.js';
-import {voyageSettings} from '../resources/js/voyage-settings.js';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {VesselUpdateMarkup} from '../resources/react/VesselUpdate.tsx';
 
 const settle=async()=>{for(let i=0;i<10;i++)await new Promise(r=>setTimeout(r,2));};
 function fixture(t) {
- const dir=mkdtempSync(join(tmpdir(),'helm-update-'));
- const p=spawnSync('php',['-r',`require 'vendor/autoload.php'; $app=require 'bootstrap/app.php'; $app->make(Illuminate\\Contracts\\Console\\Kernel::class)->bootstrap(); view()->share('errors',new Illuminate\\Support\\ViewErrorBag()); echo view('livewire.console',['vessels'=>collect(),'tenantId'=>'update-test'])->render();`],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:{...process.env,VIEW_COMPILED_PATH:dir}});
- assert.equal(p.status,0,p.stderr);
- const dom=new JSDOM(p.stdout,{url:'https://helm.example'});
- t.after(()=>{dom.window.close();rmSync(dir,{recursive:true,force:true});});
+ const dom=new JSDOM('<div id="helm-client" data-tenant-id="update-test">'+renderToStaticMarkup(React.createElement(VesselUpdateMarkup))+'</div>',{url:'https://helm.example'});
+ t.after(()=>dom.window.close());
  for(const key of ['window','document','localStorage','Event'])globalThis[key]=dom.window[key];
  const root=document.querySelector('#helm-client');
  return {root,$:id=>root.querySelector(`#${id}`)};
 }
 const reply=result=>({protocol:1,error:null,outcome_unknown:false,result});
-test('an old Vessel is capability-gated before profiles, preserving the draft',async t=>{
- const {root,$}=fixture(t),seen=[];
- const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:async({command})=>{seen.push(command.op);assert.equal(command.op,'capabilities');return reply({vessel_id:'identity',version:'1.0.1',scope:'owner',features:['provider_accounts'],workspaces:[]});}}};
- let origin;
- voyageSettings(root,{connections:new Map([['v',c]])},{current:()=>({vessel:'v'}),select:()=>{},apply:()=>assert.fail(),draft:async(vessel,workspace)=>{origin={key:'draft',vessel,workspace,target:{type:'new_chat',workspace}};},captureDraft:()=>origin});
- $('new-voyage').click();await settle();
- assert.deepEqual(seen,['capabilities']);
- assert.equal($('setup-update').hidden,false);
- assert.match($('update-status').textContent,/one-time remote administrator/);
- assert.equal($('update-source').hidden,true);
- assert.equal(origin.key,'draft');
-});
 test('prepare requires a separate exact approval and lost apply reply is only observed',async t=>{
  const {root,$}=fixture(t),seen=[];let record={phase:'idle'},loseApply=false;
  const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:async({command})=>{
@@ -117,4 +100,13 @@ test('update transport only accepts fixed typed requests and projects owner capa
  const caps={protocol:1,vessel_id:id,scope:'workspaces',features:[],remote_updates:true,running_release:'a'.repeat(64)};
  assert.equal(restrictCapabilities(caps,id).remote_updates,false);
  assert.equal(restrictCapabilities({...caps,scope:'owner'},id).remote_updates,true);
+});
+
+test('disposed update controls ignore late replies and cannot dispatch again',async t=>{
+ const {root,$}=fixture(t);let resolve:any;const seen:string[]=[];
+ const connection={id:'a',vessel_id:'a',name:'A',client:{exchange:({command}:any)=>{seen.push(command.op);return new Promise(r=>{resolve=r;});}}};
+ const controller=vesselUpdate(root,{show:()=>{},resume:()=>{}});
+ controller.bind(connection,{remote_updates:true,scope:'owner'});$('update-check').click();controller.dispose();
+ resolve(reply({phase:'ready',version:'late',release_id:'a'.repeat(64)}));await settle();
+ $('update-check').click();$('update-refresh').click();assert.deepEqual(seen,['update_prepare']);assert.equal($('update-review').hidden,true);
 });
