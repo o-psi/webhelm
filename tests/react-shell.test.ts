@@ -17,10 +17,11 @@ test('React shell renders safely without Livewire and uses the production consol
         assert.doesNotMatch(output.body.textContent!, /React preview|existing console/i);
         assert.equal(output.querySelector('.tabs'), null);
         assert.equal(output.querySelector('.welcome'), null);
-        assert.equal(output.querySelector('textarea'), null);
-        assert.match(output.querySelector('main')?.textContent || '', /Choose a voyage from the sidebar or start a new one/);
+        assert.equal(output.querySelectorAll('main textarea[aria-label="Message"]').length, 1);
+        assert.match(output.querySelector('main')?.textContent || '', /What should we work on\?/);
         assert.ok(output.querySelector('#voyage-vessel-filter'));
-        assert.equal(output.querySelector('main button')?.textContent, 'New voyage');
+        assert.equal(output.querySelectorAll('main form[aria-label="New voyage composer"]').length, 1);
+        assert.equal(output.querySelector('main button[type="submit"]')?.textContent, 'Send');
         assert.ok(output.querySelector('[aria-label="Open voyage navigation"]'));
         assert.ok(output.querySelector('[aria-label="Account and appearance"]'));
         assert.equal(output.querySelector('form')?.getAttribute('method'), 'post');

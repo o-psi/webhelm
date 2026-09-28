@@ -54,7 +54,9 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
-                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'fixture-version',features:['execution_profiles'],remote_updates:true};
+                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'fixture-version',features:['execution_profiles'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
+                else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
+                else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
                 else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',revision:1,observation_cursor:5,messages:Array.from({length:40},(_,i)=>({role:'assistant',content:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
                 else if(c.op==='decisions')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:[]};
@@ -69,8 +71,10 @@ try {
         window.WebSocket=Socket;
     });
     await page.goto(origin);
-    check(await page.getByRole('button',{name:'New voyage',exact:true}).count()===1,`${label}: empty view has more than one New voyage action`);
-    check(await page.locator('.composer').count()===0,`${label}: empty view shows a disabled composer`);
+    await page.getByRole('option',{name:/Fixture profile/}).waitFor({state:'attached'});
+    check(await page.getByRole('form',{name:'New voyage composer'}).isVisible(),`${label}: new voyage composer is missing`);
+    check(await page.getByRole('textbox',{name:'Message'}).isVisible(),`${label}: new voyage message is missing`);
+    check(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),`${label}: empty draft permits sending`);
     await page.screenshot({path:`${output}/${label}-empty.png`});
     if(label==='mobile'){
         await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();

@@ -37,9 +37,12 @@ exact command identities across the cutover. Browser viewing, account enrollment
 advanced voyage actions and the reviewed updater use explicitly disposed adapters.
 No unknown command is automatically replayed. Provider credentials remain on Vessels.
 
-Create voyage explicitly prepares an independent voyage before its first message.
-Unsent text and pictures live in page memory and survive switching conversations,
-but not reloading. Profile setup carries over the archived console’s compact
+The new-voyage screen opens with a message draft and Vessel, workspace, profile and
+access controls. Sending creates an independent voyage, confirms its selected
+access mode, then submits the first message. An uncertain creation keeps the draft
+and requires exact receipt review; recovery never sends the message. Users can also
+create a voyage without a first message. Unsent text and pictures live in page
+memory and survive switching conversations, but not reloading. Profile setup carries over the archived console’s compact
 overview, separate searchable pickers, back navigation, fixed actions, deletion
 confirmation and expired-sign-in refresh. React owns the screens and draft state;
 no Flux console code is loaded. Reasoning/service and account usage have dedicated

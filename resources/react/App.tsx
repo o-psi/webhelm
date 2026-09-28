@@ -3,7 +3,7 @@ import {NativeSelect} from './components/ui/native-select';
 import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';
 import {Button} from './components/ui/button';
-import {Card,CardContent,CardDescription,CardHeader,CardTitle} from './components/ui/card';
+import {Card} from './components/ui/card';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
@@ -16,6 +16,8 @@ import {Connections} from './Connections';
 import {ImagePart,Output} from './MessageParts';
 import {VoyageActions} from './VoyageActions';
 import {Settings} from './Settings';
+import {NewVoyage,type NewVoyageMessage} from './NewVoyage';
+import {completeNewVoyage} from './new-voyage-delivery';
 import {Decisions} from './Decisions';
 import {VesselFleet} from '../js/vessel-fleet.js';
 import {voyageList, filterVoyages, activityLabel, cardStatus} from './presentation';
@@ -170,7 +172,9 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     const selectVoyage = (vessel: string, session: string, title: string) => {
         const path = voyagePath(vessel, session);
         if (window.location.pathname !== path) window.history.pushState(null, '', path + window.location.search + window.location.hash);
-        setRoute({vessel, session}); setActive(workspace.open(vessel, session, title)); setMobile(false);
+        const key=workspace.open(vessel, session, title);
+        setRoute({vessel, session}); setActive(key); setMobile(false);
+        return key;
     };
     useEffect(() => {
         const changed = () => setRoute(voyageLocation(window.location.pathname));
@@ -183,6 +187,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     }, [runtime]);
     const [manage,setManage] = useState(()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('manage-vessels'));
     const [settings,setSettings] = useState<{tab?:Tab}|null>(null);
+    const [newDraftReset,setNewDraftReset]=useState(0),[profileReload,setProfileReload]=useState(0);
     const [mobile,setMobile] = useState(false);
     const [mobilePortal,setMobilePortal] = useState<HTMLElement|null>(null);
     const [appearance,setAppearance] = useState(() => {try{return localStorage.getItem('flux.appearance') || 'system';}catch{return 'system';}});
@@ -204,8 +209,17 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         else setActive(null); // Never open an unlisted voyage or borrow another Vessel's session.
     }, [route?.vessel, route?.session, fleet.connections.get(route?.vessel || '')?.voyages.some((item: any) => item.session_id === route?.session), runtime]);
     const selected=active && route && active === JSON.stringify([route.vessel, route.session]) ? workspace.tabs.get(active) : null;
+    const startNew=()=>{
+        if(window.location.pathname!=='/')window.history.pushState(null,'','/'+window.location.search+window.location.hash);
+        setRoute(null);setActive(null);setMobile(false);
+    };
+    const deliverNewVoyage=async(vessel:string,process:any,message:NewVoyageMessage)=>{
+        const key=selectVoyage(vessel,process.session_id,process.name||'New voyage');
+        setNewDraftReset(value=>value+1);
+        await completeNewVoyage(workspace,key,message);
+    };
     const sidebar=<aside className={`sidebar ${mobile?'mobile-open':''}`} aria-label="Voyages">
-            <header className="sidebar-heading"><h2>Voyages <span>{voyages.length}{voyages.length!==allVoyages.length?` of ${allVoyages.length}`:''}</span></h2>{(route||mobile)&&<Button variant="default" size="icon" onClick={()=>{setMobile(false);setSettings({});}} aria-label="New voyage" title="New voyage"><PlusIcon aria-hidden="true"/></Button>}<Button variant="ghost" size="icon" className="mobile-close lg:hidden" aria-label="Close voyage navigation" onClick={()=>setMobile(false)}><XIcon aria-hidden="true"/></Button></header>
+            <header className="sidebar-heading"><h2>Voyages <span>{voyages.length}{voyages.length!==allVoyages.length?` of ${allVoyages.length}`:''}</span></h2>{(route||mobile)&&<Button variant="default" size="icon" onClick={startNew} aria-label="New voyage" title="New voyage"><PlusIcon aria-hidden="true"/></Button>}<Button variant="ghost" size="icon" className="mobile-close lg:hidden" aria-label="Close voyage navigation" onClick={()=>setMobile(false)}><XIcon aria-hidden="true"/></Button></header>
             <div className="search"><SearchIcon aria-hidden="true"/><Input aria-label="Find a voyage or Vessel" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search voyages…" className="pl-9"/></div>
             <div className="grid grid-cols-2 gap-2"><label className="sr-only" htmlFor="voyage-vessel-filter">Filter by Vessel</label><NativeSelect id="voyage-vessel-filter" value={vesselFilter} onChange={event=>setVesselFilter(event.target.value)}><option value="all">All Vessels</option>{connections.map(connection=><option key={connection.id} value={connection.id}>{connection.name}</option>)}</NativeSelect><label className="sr-only" htmlFor="voyage-state-filter">Filter by status</label><NativeSelect id="voyage-state-filter" value={stateFilter} onChange={event=>setStateFilter(event.target.value)}><option value="current">Current</option><option value="active">Active</option><option value="available">Not active</option><option value="archived">Archived</option><option value="all">All states</option></NativeSelect></div>
             <nav className="voyage-list" aria-label="Voyages">{voyages.map((voyage:any)=>{
@@ -235,13 +249,13 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
             <SheetContent ref={setMobilePortal} side="left" showCloseButton={false} className="mobile-navigation"><SheetTitle className="sr-only">Voyages</SheetTitle><SheetDescription className="sr-only">Choose a voyage or manage Vessel connections.</SheetDescription>{mobile&&sidebar}</SheetContent>
         </Sheet>
         {!mobile&&sidebar}
-        <main className="voyage-workspace" aria-label="Conversation">{!route && <section className="conversation"><div className="transcript"><Card className="mx-auto max-w-md"><CardHeader><CardTitle>Welcome to Helm</CardTitle><CardDescription>Choose a voyage from the sidebar or start a new one.</CardDescription></CardHeader><CardContent><Button onClick={()=>setSettings({})}>New voyage</Button></CardContent></Card></div></section>}
+        <main className="voyage-workspace" aria-label="Conversation"><NewVoyage fleet={fleet} tenant={bootstrap.tenantId} hidden={Boolean(route)} resetToken={newDraftReset} reloadToken={profileReload} onCreated={deliverNewVoyage} onAdvanced={()=>setSettings({})}/>
             {route && !selected && <p className="empty" role="status">Waiting for this voyage on its Vessel. If it does not appear, check your connection or access.</p>}
             {selected && <HostBrowser key={selected.key} tab={selected} client={fleet.connections.get(selected.vessel)?.client}/> }
             {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})} connection={fleet.connections.get(tab.vessel)} voyage={fleet.connections.get(tab.vessel)?.voyages.find((item:any)=>item.session_id===tab.session)}/>)}
         </main>
         {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} connections={fleet.connections} tenant={bootstrap.tenantId} onReconnect={()=>fleet.reconnect()} onClose={()=>setManage(false)}/>}
-        {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} tenant={bootstrap.tenantId} onClose={()=>setSettings(null)} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}
+        {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} profileOnly={!settings.tab} tenant={bootstrap.tenantId} onClose={()=>{setSettings(null);setProfileReload(value=>value+1);}} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}
         <Dialog open={logoutReview} onOpenChange={setLogoutReview}><DialogContent><DialogHeader><DialogTitle>Sign out with unsent work?</DialogTitle><DialogDescription>Unsent message drafts and prepared pictures in this browser will be lost. Your voyages continue on their Vessels.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" type="button" onClick={()=>setLogoutReview(false)}>Keep working</Button><Button variant="destructive" type="button" onClick={()=>logoutForm.current?.requestSubmit()}>Sign out</Button></DialogFooter></DialogContent></Dialog>
     </div>;
 }
