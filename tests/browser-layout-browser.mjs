@@ -47,6 +47,7 @@ try {
         // controls and event handling are the unmodified production bundle.
         const binding={incarnation:'i',browser_id:'fixture-browser',attachment_id:'fixture-attachment',capture_epoch:1,controller_epoch:1};
         let mode='agent';
+        let updateRecord={phase:'idle'};
         class Socket extends EventTarget {
             readyState=0;protocol='voyage.vessel.v1';
             constructor(){super();queueMicrotask(()=>{this.readyState=1;this.dispatchEvent(new Event('open'));});}
@@ -55,6 +56,8 @@ try {
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
                 if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'fixture-version',features:['execution_profiles'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
+                else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,release_id:'a'.repeat(64),version:'fixture-next-version',description:'Verified development build from fixture source',services:['vessel.service']};
+                else if(c.op==='update_status')result=updateRecord;
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
@@ -76,6 +79,7 @@ try {
     check(await page.getByRole('textbox',{name:'Message'}).isVisible(),`${label}: new voyage message is missing`);
     check(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),`${label}: empty draft permits sending`);
     await page.screenshot({path:`${output}/${label}-empty.png`});
+    if(label==='desktop') await page.locator('.voyage-card').click();
     if(label==='mobile'){
         await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
         check(await page.locator('[data-slot="sheet-content"]').isVisible(),'mobile: shadcn navigation sheet did not open');
@@ -91,12 +95,34 @@ try {
     await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
     await page.locator('.connections-dialog').getByRole('button',{name:'View details'}).click();
-    await page.locator('.connections-maintenance #update-current').getByText('Installed Vessel version: fixture-version').waitFor();
+    await page.locator('.connections-maintenance #update-current').getByText('fixture-version').waitFor();
     check(await page.locator('.connections-maintenance').isVisible(),`${label}: Vessel maintenance is missing from Manage Vessels`);
+    check(await page.locator('.connections-dialog #update-check').isVisible(),`${label}: update action is not visible`);
+    check(await page.locator('.connections-dialog').getByRole('button',{name:'Remove from Helm Web…'}).count()===0,`${label}: removal action is exposed before opening its disclosure`);
     check(await page.locator('.connections-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Vessel manager overflows horizontally`);
     await page.screenshot({path:`${output}/${label}-vessel-maintenance.png`});
+    await page.locator('#update-check').click();
+    await page.locator('#update-approve').waitFor({state:'visible'});
+    check(await page.locator('#update-status').textContent().then(text=>text.includes('Build prepared for review')),`${label}: prepared update shows idle status`);
+    check(await page.locator('#update-source').isHidden(),`${label}: prepared update still shows a second preparation action`);
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='update_apply').length===0),`${label}: preparation applied without approval`);
+    await page.locator('#update-review').scrollIntoViewIfNeeded();
+    await page.screenshot({path:`${output}/${label}-vessel-review.png`});
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
+    await page.getByRole('button',{name:'Account and appearance'}).click();
+    await page.getByRole('menuitemradio',{name:'dark'}).click();
+    check(await page.locator('html.dark').count()===1,`${label}: dark appearance did not apply to Vessel maintenance`);
+    await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
+    await page.locator('.connections-dialog').getByRole('button',{name:'View details'}).click();
+    await page.locator('#update-review').waitFor({state:'visible'});
+    await page.locator('#update-review').scrollIntoViewIfNeeded();
+    await page.screenshot({path:`${output}/${label}-vessel-review-dark.png`});
+    await page.getByRole('button',{name:'Close Vessel connections'}).click();
+    if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
+    await page.getByRole('button',{name:'Account and appearance'}).click();
+    await page.getByRole('menuitemradio',{name:'light'}).click();
     await page.locator('.voyage-card').click();
     const conversation=page.locator('.conversation:not([hidden])');
     const draft=conversation.locator('textarea').first();

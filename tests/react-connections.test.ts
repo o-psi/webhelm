@@ -45,12 +45,16 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.match(query('.connections-card')!.textContent!, /vessel.example/);
         assert.match(query('.connections-pending')!.textContent!, /Laptop/);
         await click('View details');
-        assert.ok(query('.connections-detail-card .connections-status.is-connected'));
-        assert.match(query('.connections-maintenance')!.textContent!, /Vessel maintenance/);
-        assert.equal(query('#update-current')!.textContent, 'Installed Vessel version: 1.0.2');
+        assert.ok(query('.connections-details .connections-status.is-connected'));
+        assert.match(query('.connections-maintenance')!.textContent!, /Software updates/);
+        assert.equal(query('#update-current')!.textContent, '1.0.2');
         assert.ok(query('#update-check'), 'the selected Vessel has update controls');
         assert.deepEqual(commands, ['capabilities']);
+        assert.equal(query('.connections-details dd'),null,'technical identifiers start collapsed');
+        await click('Connection details');
+        assert.match(query('.connections-details dl')!.textContent!, /vessel.example/);
         assert.equal(query('.connections-confirm'), null);
+        await click('Remove connection');
         await click('Remove from Helm Web');
         assert.ok(query('.connections-confirm'));
         assert.equal(requests, 0);
@@ -126,7 +130,7 @@ test('maintenance handles old, offline and reconnected Vessels without crossing 
 
         reconnecting.client = {async exchange() {return {protocol:1,outcome_unknown:false,error:null,result:{vessel_id:'offline-id',version:'current',scope:'owner',remote_updates:true,features:['execution_profiles']}};}};
         await render();
-        assert.equal(dom.window.document.querySelector('#update-current')!.textContent,'Installed Vessel version: current');
+        assert.equal(dom.window.document.querySelector('#update-current')!.textContent,'current');
         assert.ok(dom.window.document.querySelector('#update-check'));
     } finally {
         await React.act(async()=>root.unmount());

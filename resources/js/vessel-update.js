@@ -15,13 +15,23 @@ export function vesselUpdate(root, {show, resume}) {
     const text = (id, value) => { $(id).textContent = String(value ?? ''); };
     const active = (c, n) => context?.c === c && generation === n;
     const mayPrepare = record => !record || ['idle','discarded','complete','failed'].includes(record.phase);
+    const phaseMessage = {
+        idle: 'No update checked yet. Preparing a build will not install it.',
+        preparing: 'Preparing a build on the Vessel. Nothing has been installed.',
+        ready: 'Build prepared for review. Nothing has been installed.',
+        applying: 'Installing the approved build. Checking the Vessel connection…',
+        observing: 'Checking the saved update. Approval will not be repeated.',
+        discarded: 'Prepared build discarded. No update was installed.',
+        failed: 'The update did not complete. Check its status before trying again.',
+        unconfirmed: 'Update outcome is uncertain. Check its status before another action.',
+    };
     function remember(record) {
         pending = record;
         if (record?.operation_id) localStorage.setItem(storageKey(context.c), JSON.stringify({operation_id:record.operation_id}));
     }
     function render(record) {
         const phase = record?.phase || 'idle';
-        text('update-status', record?.message || 'Check for a verified update. Nothing is installed until you approve the prepared build.');
+        text('update-status', record?.message || phaseMessage[phase] || 'Check the current update status.');
         $('update-source').hidden = !mayPrepare(record);
         $('update-review').hidden = phase !== 'ready';
         $('update-refresh').hidden = ['idle','discarded'].includes(phase);
@@ -53,7 +63,7 @@ export function vesselUpdate(root, {show, resume}) {
                 if (!active(c,n)) return;
                 if (capabilities.vessel_id !== c.vessel_id) throw Error('Vessel identity changed. Reconnect before reviewing updates.');
                 verified = capabilities.running_release === record.release_id && capabilities.features?.includes('execution_profiles');
-                text('update-current',`Installed Vessel version: ${capabilities.version || 'unknown'}`);
+                text('update-current',capabilities.version || 'unknown');
             }
             remember(record); render(record);
             if (record.phase === 'complete') {
@@ -100,7 +110,7 @@ export function vesselUpdate(root, {show, resume}) {
             ++generation; clearTimeout(timer); busy=false; pending=null; context=c && caps ? {c,caps}:null;
             $('setup-update-open').hidden = !context;
             if (!context) return;
-            text('update-vessel-name',`Update ${c.name}`); text('update-current',`Installed Vessel version: ${caps.version || 'unknown'}`);
+            text('update-vessel-name',`Update ${c.name}`); text('update-current',caps.version || 'unknown');
             try { pending=JSON.parse(localStorage.getItem(storageKey(c)) || 'null'); } catch { pending=null; }
             if (pending?.operation_id) pending={operation_id:pending.operation_id,phase:'observing',message:'Checking the saved update. Approval will not be repeated.'};
             render(pending);

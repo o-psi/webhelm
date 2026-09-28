@@ -30,10 +30,11 @@ test('prepare requires a separate exact approval and lost apply reply is only ob
  assert.equal(seen.filter(c=>c.op==='update_prepare').length,1);
  assert.equal(seen.some(c=>c.op==='update_apply'),false);
  assert.equal($('update-review').hidden,false);
+ assert.match($('update-status').textContent,/Build prepared for review/);
  loseApply=true;$('update-approve').click();$('update-approve').click();await settle();
  assert.equal(seen.filter(c=>c.op==='update_apply').length,1);
  assert.equal($('update-continue').hidden,false);
- assert.equal($('update-current').textContent,'Installed Vessel version: next');
+ assert.equal($('update-current').textContent,'next');
  assert.match($('update-status').textContent,/Reconnected to the verified Vessel version/);
  controller.bind(c,{remote_updates:true,scope:'owner'});$('setup-update-open').click();await settle();
  assert.equal(seen.filter(c=>c.op==='update_apply').length,1,'reopening observes the receipt without reapplying');
@@ -52,6 +53,7 @@ test('reload observes the saved operation before allowing another preparation',a
  resolve(reply({operation_id:'saved-operation',phase:'ready',release_id:'a'.repeat(64),version:'next'}));await settle();
  assert.equal($('update-review').hidden,false);
  assert.equal($('update-source').hidden,true);
+ assert.match($('update-status').textContent,/Build prepared for review/);
  assert.equal(seen.some(command=>command.op==='update_apply'),false);
 });
 test('a historical completed update does not block a fresh review or falsely verify another release',async t=>{
