@@ -61,7 +61,9 @@ $http->response=['token'=>str_repeat('b',64),'expires_at_ms'=>now()->getTimestam
 $mint=$gateway->call('browser-credentials',['connection'=>$connection]);
 check($mint['url']==='wss://vessel.example/v1/vessel/browser-socket','socket URL');
 check(end($http->calls)['body']===['origin'=>'https://helm.example'],'trusted configured origin');
-foreach ([now()->getTimestampMs()-1,now()->getTimestampMs()+121000,'123'] as $expiry) {
+$http->response['expires_at_ms']=now()->getTimestampMs()+124000;
+check($gateway->call('browser-credentials',['connection'=>$connection])['vessel_id']===$vessel,'bounded Vessel clock lead');
+foreach ([now()->getTimestampMs()-1,now()->getTimestampMs()+126000,'123'] as $expiry) {
     $http->response['expires_at_ms']=$expiry; refuses(fn()=>$gateway->call('browser-credentials',['connection'=>$connection]),'bad lifetime');
 }
 foreach (glob(__DIR__.'/../database/migrations/*.php') as $file) (require $file)->up();

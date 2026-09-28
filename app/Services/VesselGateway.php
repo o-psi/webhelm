@@ -23,10 +23,13 @@ final class VesselGateway {
                 $headers = ['Authorization'=>'Bearer '.$v['token'], 'x-voyage-grant'=>$v['grant_id'], 'x-voyage-vessel'=>$v['vessel_id']];
                 if ($operation === 'browser-credentials') {
                     $response = $this->http->post($origin, '/v1/vessel/browser-credentials', ['origin'=>self::endpoint(config('app.url'))], $headers);
+                    // Vessel enforces the 120-second lifetime with its monotonic clock.
+                    // Allow five seconds of wall-clock skew here, as the browser does.
+                    $now = now()->getTimestampMs();
                     if (array_diff(array_keys($response), ['token','expires_at_ms','vessel_id']) || count($response)!==3
                         || !is_string($response['token'] ?? null) || !preg_match('/^[a-f0-9]{64}$/D', $response['token'])
                         || ($response['vessel_id'] ?? null) !== $v['vessel_id'] || !is_int($response['expires_at_ms'] ?? null)
-                        || $response['expires_at_ms'] <= now()->getTimestampMs() || $response['expires_at_ms'] > now()->getTimestampMs()+120000) throw new RuntimeException();
+                        || $response['expires_at_ms'] <= $now || $response['expires_at_ms'] > $now+125000) throw new RuntimeException();
                     return $response + ['url'=>preg_replace('/^https:/', 'wss:', $origin).'/v1/vessel/browser-socket'];
                 }
                 if ($operation !== 'probe') throw new RuntimeException();
