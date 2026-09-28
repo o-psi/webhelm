@@ -55,26 +55,14 @@
 .connections-dialog .connections-body{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain;padding:20px;scrollbar-gutter:stable}
 .connections-dialog .connections-footer{justify-content:flex-end;border-top:1px solid var(--line)}
 .connections-dialog .connections-notice{margin:12px 20px 0;font-size:14px;line-height:1.45;display:flex;justify-content:space-between;align-items:center;gap:10px;overflow-wrap:anywhere}
-.connections-dialog .connections-intro{margin:0 0 18px}
-.connections-dialog .connections-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.connections-dialog .connections-intro{margin:0 0 12px}
+.connections-dialog .connections-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.connections-dialog .connections-grid[data-single=true]{grid-template-columns:1fr}
 .connections-dialog .connections-card{min-width:0}
-.connections-dialog .connections-card{display:flex;flex-direction:column;min-height:162px}
-.connections-dialog .connections-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.connections-dialog .connections-server{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:var(--hover);color:var(--helm-muted)}.connections-dialog .connections-server svg{width:18px;height:18px}
+.connections-dialog .connections-server{display:grid;place-items:center;width:30px;height:30px;flex-shrink:0;border-radius:8px;background:var(--hover);color:var(--helm-muted)}.connections-dialog .connections-server svg{width:16px;height:16px}
 .connections-dialog .connections-status{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .connections-dialog .connections-status i{width:8px;height:8px;border-radius:50%;background:var(--status-warning);flex-shrink:0}
 .connections-dialog .connections-status.is-connected i{background:var(--status-success)}
-.connections-dialog .connections-card h3{font-size:16px;line-height:1.4;margin:14px 0 3px;overflow-wrap:anywhere}
-.connections-dialog .connections-card p{margin:0 0 12px;overflow-wrap:anywhere}
-.connections-dialog .connections-card-action{margin-top:auto}
-.connections-dialog .connections-pending{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:18px;background:var(--side)}
-.connections-dialog .connections-pending h3{font-size:14px;margin:0 0 10px}
-.connections-dialog .connections-pending-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px}
-.connections-dialog .connections-pending-row + .connections-pending-row{border-top:1px solid var(--line);margin-top:12px}
-.connections-dialog .connections-pending-row div{min-width:0;display:grid;gap:3px}
-.connections-dialog .connections-pending-row strong{overflow-wrap:anywhere}
-.connections-dialog .connections-pending-row small{font-size:12px;color:var(--helm-muted);line-height:1.4}
-.connections-dialog .connections-pending-row button{flex-shrink:0}
 .connections-dialog .connections-empty{text-align:center;padding:36px 16px;border:1px dashed var(--line);border-radius:12px;grid-column:1/-1}
 .connections-dialog .connections-empty>span{display:inline-grid;color:var(--helm-muted)}.connections-dialog .connections-empty>span svg{width:28px;height:28px}
 .connections-dialog .connections-empty h3{margin:8px 0}
@@ -88,7 +76,7 @@
 .connections-dialog .connections-guide li{margin-bottom:10px}
 .connections-dialog .connections-guide pre{background:var(--side);border:1px solid var(--line);border-radius:10px;padding:14px;max-height:none;white-space:pre;overflow:auto;font:12px/1.5 ui-monospace,monospace}
 .connections-dialog .connections-guide a{display:inline-flex;align-items:center;gap:4px;font-size:14px;text-decoration:underline}.connections-dialog .connections-guide a svg{width:14px;height:14px}
-@media(max-width:620px){.settings-dialog.connections-dialog[data-state=open]{width:calc(100vw - 16px);max-width:calc(100vw - 16px);max-height:92dvh}.connections-dialog .connections-header,.connections-dialog .connections-footer{padding:12px 16px}.connections-dialog .connections-body{padding:16px}.connections-dialog .connections-grid{grid-template-columns:1fr}.connections-dialog .connections-card{min-height:0;padding:12px}.connections-dialog .connections-card h3{margin-top:8px}.connections-dialog .connections-card p{margin-bottom:8px}.connections-dialog .connections-add{white-space:nowrap;font-size:12px}.connections-dialog .connections-pending-row{align-items:flex-start;flex-direction:column}.connections-dialog .connections-notice{margin:10px 16px 0;align-items:flex-start;flex-direction:column}}
+@media(max-width:620px){.settings-dialog.connections-dialog[data-state=open]{width:calc(100vw - 16px);max-width:calc(100vw - 16px);max-height:92dvh}.connections-dialog .connections-header,.connections-dialog .connections-footer{padding:12px 16px}.connections-dialog .connections-body{padding:16px}.connections-dialog .connections-grid{grid-template-columns:1fr}.connections-dialog .connections-add{white-space:nowrap;font-size:12px}.connections-dialog .connections-notice{margin:10px 16px 0;align-items:flex-start;flex-direction:column}}
 
 .composer-feedback{margin:4px 0 8px;color:var(--helm-muted);font-size:12px;overflow-wrap:anywhere}.composer .pictures{margin-bottom:8px}.composer .pictures figure{flex:none;max-width:160px}.composer .pictures figcaption{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}.composer .pictures button{z-index:1;min-width:24px;min-height:24px}
 }

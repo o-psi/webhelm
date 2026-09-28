@@ -14,7 +14,7 @@ const {chromium} = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE || `
 const build = `${root}/public/build`;
 const manifest = JSON.parse(await readFile(`${build}/manifest.json`, 'utf8'));
 const entry = manifest['resources/react/main.tsx'];
-const bootstrap = {tenantId:'layout-fixture',vessels:[{id:'11111111-1111-4111-8111-111111111111',vessel_id:'v',name:'Fixture Vessel'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
+const bootstrap = {tenantId:'layout-fixture',vessels:[{id:'11111111-1111-4111-8111-111111111111',vessel_id:'v',name:'Fixture Vessel'}],pairings:[{id:'pending-fixture',name:'Hidden pending pairing'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
 const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="fixture">${entry.css.map(css=>`<link rel="stylesheet" href="/build/${css}">`).join('')}</head><body><div id="helm-react" data-bootstrap='${JSON.stringify(bootstrap)}'></div><script type="module" src="/build/${entry.file}"></script></body></html>`;
 const server = createServer(async (req,res)=>{
     try {
@@ -94,7 +94,13 @@ try {
     }
     await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
-    await page.locator('.connections-dialog').getByRole('button',{name:'View details'}).click();
+    const vesselCard=page.locator('.connections-card');
+    await vesselCard.getByText('Version fixture-version').waitFor();
+    check((await vesselCard.boundingBox()).height<100,`${label}: overview card is not compact`);
+    check(await page.getByText('Needs confirmation').count()===0,`${label}: pending pairing panel is still shown`);
+    await page.waitForTimeout(180);
+    await page.screenshot({path:`${output}/${label}-vessel-overview.png`});
+    await vesselCard.getByRole('button',{name:'View details for Fixture Vessel'}).click();
     await page.locator('.connections-maintenance #update-current').getByText('fixture-version').waitFor();
     check(await page.locator('.connections-maintenance').isVisible(),`${label}: Vessel maintenance is missing from Manage Vessels`);
     check(await page.locator('.connections-dialog #update-check').isVisible(),`${label}: update action is not visible`);
@@ -115,7 +121,10 @@ try {
     check(await page.locator('html.dark').count()===1,`${label}: dark appearance did not apply to Vessel maintenance`);
     await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
-    await page.locator('.connections-dialog').getByRole('button',{name:'View details'}).click();
+    await page.locator('.connections-card').getByText('Version fixture-version').waitFor();
+    await page.waitForTimeout(180);
+    await page.screenshot({path:`${output}/${label}-vessel-overview-dark.png`});
+    await page.locator('.connections-dialog').getByRole('button',{name:'View details for Fixture Vessel'}).click();
     await page.locator('#update-review').waitFor({state:'visible'});
     await page.locator('#update-review').scrollIntoViewIfNeeded();
     await page.screenshot({path:`${output}/${label}-vessel-review-dark.png`});

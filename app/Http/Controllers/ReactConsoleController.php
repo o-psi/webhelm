@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\VesselConnection;
-use App\Models\VesselPairing;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 
@@ -20,10 +19,9 @@ class ReactConsoleController extends Controller
             'bootstrap' => [
                 'connectionStatus' => $request->session()->get('status'),
                 'connectionForm' => $request->session()->get('vessel_form'),
-                'connectionError' => $request->session()->has('errors') ? 'Connection not confirmed. Check pending pairings and supplied fields before trying again.' : null,
+                'connectionError' => $request->session()->has('errors') ? 'Connection not confirmed. Check your saved Vessels before trying a new invitation.' : null,
                 'tenantId' => $request->user()->tenant_id,
                 'principalId' => $request->user()->tenant->principal_id,
-                'pairings' => VesselPairing::where('tenant_id', $request->user()->tenant_id)->where('status', 'pending')->get(['id', 'name'])->toArray(),
                 'vessels' => VesselConnection::where('tenant_id', $request->user()->tenant_id)
                     ->get(['id', 'name', 'vessel_id', 'endpoint'])->toArray(),
                 'ticketUrl' => route('console.ticket', absolute: false),

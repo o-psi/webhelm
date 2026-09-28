@@ -49,17 +49,11 @@ class VesselConnectionController extends Controller {
             abort_unless(($invitation['expires_at_ms'] ?? 0) > now()->getTimestampMs(),422);
             $payload = ['endpoint'=>VesselGateway::endpoint($invitation['endpoint'] ?? ''), 'principal_id'=>$invitation['principal_id'],
                 'invitation_id'=>$invitation['invitation_id'], 'vessel_id'=>$invitation['vessel_id'], 'code'=>$invitation['code'], 'command_id'=>(string) Str::uuid()];
+            VesselPairing::where('tenant_id',$request->user()->tenant_id)->where('status','pending')->where('created_at','<',now()->subMinutes(10))->delete();
             abort_if(VesselPairing::where('tenant_id',$request->user()->tenant_id)->where('status','pending')->count() >= 16,422);
             $pairing = VesselPairing::create(['tenant_id'=>$request->user()->tenant_id,'name'=>$data['name'],'request'=>$payload]);
             return $this->completePair($request,$gateway,$pairing);
-        } catch (\Throwable) { return $this->consoleRedirect($request)->withErrors(['connection'=>'We couldn’t confirm this connection. If it appears in your list, use “Check connection” before trying a new invitation.']); }
-    }
-    public function retry(Request $request, VesselGateway $gateway, string $id) {
-        $request->session()->flash('manage_vessels', true);
-        $pairing = VesselPairing::where('tenant_id',$request->user()->tenant_id)->findOrFail($id);
-        abort_unless($pairing->status === 'pending',409);
-        try { return $this->completePair($request,$gateway,$pairing); }
-        catch (\Throwable) { return $this->consoleRedirect($request)->withErrors(['connection'=>'Still waiting for confirmation. You can check this connection again later.']); }
+        } catch (\Throwable) { return $this->consoleRedirect($request)->withErrors(['connection'=>'We couldn’t confirm this connection. Check your saved Vessels before trying a new invitation.']); }
     }
     private function completePair(Request $request,VesselGateway $gateway,VesselPairing $pairing) {
         $response = $gateway->call('pair',$pairing->request);

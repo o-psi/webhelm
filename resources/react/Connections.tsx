@@ -9,12 +9,11 @@ import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui
 import {VesselUpdate} from './VesselUpdate';
 import {vesselRead} from './settings';
 import React, {useEffect, useRef, useState} from 'react';
-import {ArrowLeftIcon,ArrowRightIcon,ChevronDownIcon,ExternalLinkIcon,PlusIcon,RefreshCwIcon,ServerIcon,XIcon} from 'lucide-react';
+import {ArrowLeftIcon,ArrowRightIcon,ChevronDownIcon,ChevronRightIcon,ExternalLinkIcon,PlusIcon,RefreshCwIcon,ServerIcon,XIcon} from 'lucide-react';
 
 type Vessel = {id: string; name: string; vessel_id: string; endpoint?: string};
-type Pending = {id: string; name: string};
 type Bootstrap = {
-    vessels: Vessel[]; pairings?: Pending[]; principalId?: string;
+    vessels: Vessel[]; principalId?: string;
     connectionStatus?: string | null; connectionError?: string | null;
     connectionForm?: string | null;
 };
@@ -35,10 +34,34 @@ function bootstrapFrom(html: string): Bootstrap {
     const value = page.querySelector<HTMLElement>('#helm-react')?.dataset.bootstrap;
     if (!value) throw new Error('Connection status could not be read. Reload to inspect it before trying again.');
     const data = JSON.parse(value) as Bootstrap;
-    if (!Array.isArray(data.vessels) || !Array.isArray(data.pairings)) {
+    if (!Array.isArray(data.vessels)) {
         throw new Error('Connection status was incomplete. Reload before trying again.');
     }
     return data;
+}
+
+function VesselOverviewCard({vessel, connection, status, onView}: {vessel:Vessel; connection:any; status:string; onView:()=>void}) {
+    const [version, setVersion] = useState<string | null | undefined>(undefined);
+    const connected = Boolean(connection?.client && connection.vessel_id === vessel.vessel_id);
+    useEffect(() => {
+        let alive = true;
+        setVersion(connected ? undefined : null);
+        if (connected) {
+            vesselRead(connection, 'capabilities').then(value => {
+                if (!alive) return;
+                setVersion(value?.vessel_id === vessel.vessel_id && typeof value.version === 'string' && value.version.trim() ? value.version : null);
+            }).catch(() => { if (alive) setVersion(null); });
+        }
+        return () => { alive = false; };
+    }, [connection, connection?.client, vessel.vessel_id, connected]);
+    const versionLabel = version === undefined ? 'Checking version…' : version ? `Version ${version}` : 'Version unavailable';
+    const host = endpointHost(vessel.endpoint);
+    return <Card role="article" className="connections-card overflow-hidden p-0">
+        <button type="button" className="group flex w-full flex-col gap-2 rounded-xl p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring" aria-label={`View details for ${vessel.name}`} onClick={onView}>
+            <span className="flex w-full min-w-0 items-center gap-2"><span className="connections-server" aria-hidden="true"><ServerIcon/></span><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{vessel.name}</h3><Badge variant="outline" className={`connections-status ${connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{status}</Badge></span>
+            <span className="flex w-full min-w-0 items-center gap-2 pl-10 text-xs text-muted-foreground"><span className="max-w-[60%] shrink-0 truncate font-medium text-foreground" title={versionLabel}>{versionLabel}</span><span aria-hidden="true">·</span><span className="min-w-0 flex-1 truncate" title={host}>{host}</span><ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true"/></span>
+        </button>
+    </Card>;
 }
 
 function VesselMaintenance({connection, tenant, onReconnect}: {connection:any; tenant:string; onReconnect?:()=>void}) {
@@ -157,13 +180,12 @@ export function Connections({bootstrap, states = {}, connections, tenant, onReco
             const updated = bootstrapFrom(await response.text());
             setData(updated); setUncertain(false);
             const found = updated.vessels.some(vessel => vessel.name === name);
-            const pending = updated.pairings?.some(pairing => pairing.name === name);
-            if (screen === 'add' && (found || pending)) {
-                setScreen('list'); setNotice(found ? 'A saved connection has this name. Review its details before another attempt.' : 'A pairing has this name. Check it before another attempt.');
+            if (screen === 'add' && found) {
+                setScreen('list'); setNotice('A saved connection has this name. Review its details before another attempt.');
                 setError(false);
                 return;
             }
-            setNotice('No matching connection was found. Review the fields and pending pairings before another attempt.');
+            setNotice('No saved connection was found. Review the invitation and try again if it is still valid.');
             setError(false);
         } catch {
             setNotice('Status could not be checked. Keep this window open and try Check status again.');
@@ -191,14 +213,7 @@ export function Connections({bootstrap, states = {}, connections, tenant, onReco
         <div className="connections-body">
             {screen === 'list' && <>
                 <p className="connections-intro">These computers run your voyages. Provider credentials stay on each Vessel.</p>
-                {(data.pairings || []).length > 0 && <section className="connections-pending" aria-label="Pending pairings"><h3>Needs confirmation</h3>
-                    {(data.pairings || []).map(pairing => <div key={pairing.id} className="connections-pending-row"><div><strong>{pairing.name}</strong><small>The original pairing is still pending. Retry that pairing only after reviewing its status.</small></div><Button variant="outline" type="button" disabled={busy || uncertain} onClick={()=>void send(`/connections/pair/${encodeURIComponent(pairing.id)}/retry`, {})}>Retry original pairing</Button></div>)}
-                </section>}
-                {count ? <div className="connections-grid">{data.vessels.map(vessel => <Card role="article" className="connections-card px-4" key={vessel.id}>
-                    <div className="connections-card-top"><span className="connections-server" aria-hidden="true"><ServerIcon/></span><Badge variant="outline" className={`connections-status ${states[vessel.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(vessel.id)}</Badge></div>
-                    <h3>{vessel.name}</h3><p>{endpointHost(vessel.endpoint)}</p>
-                    <Button variant="outline" size="sm" type="button" className="connections-card-action self-start" onClick={()=>viewDetails(vessel.id)}>View details<ArrowRightIcon aria-hidden="true"/></Button>
-                </Card>)}</div> : <div className="connections-empty"><span aria-hidden="true"><ServerIcon/></span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><Button variant="default" type="button" onClick={openAdd}>Add your first Vessel</Button></div>}
+                {count ? <div className="connections-grid" data-single={count===1 || undefined}>{data.vessels.map(vessel => <VesselOverviewCard key={vessel.id} vessel={vessel} connection={connections.get(vessel.id)} status={statusLabel(vessel.id)} onView={()=>viewDetails(vessel.id)}/>)}</div> : <div className="connections-empty"><span aria-hidden="true"><ServerIcon/></span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><Button variant="default" type="button" onClick={openAdd}>Add your first Vessel</Button></div>}
                 {count >= 64 && <p>Connection limit reached. Remove a Vessel before adding another.</p>}
             </>}
             {screen === 'add' && <>

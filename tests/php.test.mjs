@@ -4,7 +4,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,randomUUID} from 'node:crypto';
 import net from 'node:net';
 const cwd=resolve(import.meta.dirname,'..');
 async function port(){const s=net.createServer();await new Promise(r=>s.listen(0,'127.0.0.1',r));const p=s.address().port;await new Promise(r=>s.close(r));return p;}
@@ -22,10 +22,10 @@ test('personal tenants: HTTP session, connection isolation, direct browser crede
   $tenant=App\\Models\\Tenant::create(['id'=>(string)Illuminate\\Support\\Str::uuid(),'principal_id'=>(string)Illuminate\\Support\\Str::uuid(),'name'=>$name]);
   $user=App\\Models\\User::create(['name'=>$name,'email'=>$name.'@example.test','tenant_id'=>$tenant->id,'password'=>null]);
   $connection=App\\Models\\VesselConnection::create(['tenant_id'=>$tenant->id,'name'=>$name.' vessel','endpoint'=>'https://'.$name.'.example.com','vessel_id'=>(string)Illuminate\\Support\\Str::uuid(),'credential'=>['token'=>str_repeat('a',64),'grant_id'=>(string)Illuminate\\Support\\Str::uuid()]]);
-  App\\Models\\VesselPairing::create(['tenant_id'=>$tenant->id,'name'=>$name.' pending pairing','request'=>['code'=>'${pairingSecret}']]);
+  $pairing=App\\Models\\VesselPairing::create(['tenant_id'=>$tenant->id,'name'=>$name.' pending pairing','request'=>['code'=>'${pairingSecret}']]);
   $session=$app->make('session')->driver();$session->flush();$session->regenerate();Illuminate\\Support\\Facades\\Auth::login($user);$session->put('helm_operator_until',time()+3600);$session->save();
   $cookie=encrypt(Illuminate\\Cookie\\CookieValuePrefix::create('helm_tenant_test',$app['encrypter']->getKey()).$session->getId(),false);
-  $out[$name]=['cookie'=>$cookie,'connection'=>$connection->id,'tenant'=>$tenant->id,'vessel_id'=>$connection->vessel_id];
+  $out[$name]=['cookie'=>$cookie,'connection'=>$connection->id,'pairing'=>$pairing->id,'tenant'=>$tenant->id,'vessel_id'=>$connection->vessel_id];
  }
  echo json_encode($out);
  `));
@@ -84,10 +84,16 @@ test('personal tenants: HTTP session, connection isolation, direct browser crede
   const post=(path,body,who='alice',token=csrf)=>call(path,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-TOKEN':token,Origin:'https://helm.example'},body:JSON.stringify(body)},who);
   assert.equal((await post('/console/ticket',{vessel:seed.bob.connection})).status,404);
   assert.equal((await call('/connections/'+seed.bob.connection,{method:'DELETE',headers:{Accept:'application/json','X-CSRF-TOKEN':csrf}},'alice')).status,404);
-  const connections=await call('/connections',{},'alice');assert.equal(connections.status,302);assert.match(connections.headers.get('location'),/manage-vessels=1/);const list=await (await call('/?manage-vessels=1',{},'alice')).text();assert.match(list,/alice vessel/);assert.ok(!list.includes('bob vessel'));assert.match(list,/id="helm-react"/);assert.doesNotMatch(list,/livewire(?:\.min)?\.js|flux(?:\.min)?\.js|data-flux-modal/);assert.ok(!list.includes('a'.repeat(64)));assert.match(list,/alice pending pairing/);assert.ok(!list.includes('bob pending pairing'));assert.ok(!list.includes(pairingSecret));
+  const connections=await call('/connections',{},'alice');assert.equal(connections.status,302);assert.match(connections.headers.get('location'),/manage-vessels=1/);const list=await (await call('/?manage-vessels=1',{},'alice')).text();assert.match(list,/alice vessel/);assert.ok(!list.includes('bob vessel'));assert.match(list,/id="helm-react"/);assert.doesNotMatch(list,/livewire(?:\.min)?\.js|flux(?:\.min)?\.js|data-flux-modal/);assert.ok(!list.includes('a'.repeat(64)));assert.ok(!list.includes('alice pending pairing'));assert.ok(!list.includes('bob pending pairing'));assert.ok(!list.includes(pairingSecret));
+  assert.equal((await post(`/connections/pair/${seed.alice.pairing}/retry`,{})).status,404);
   const reactInvalid=await call('/connections/pair',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':csrf,'X-Helm-Client':'react'},body:JSON.stringify({name:'React invalid',invitation:'invalid-private-fixture'})},'alice');
   assert.equal(reactInvalid.status,302);assert.equal(new URL(reactInvalid.headers.get('location')).pathname,'/');assert.equal(new URL(reactInvalid.headers.get('location')).search,'?manage-vessels=1');
   const reactError=await (await call('/?manage-vessels=1',{},'alice')).text();assert.match(reactError,/Connection not confirmed/);assert.match(reactError,/&quot;connectionForm&quot;:&quot;pair&quot;/);assert.ok(!reactError.includes('invalid-private-fixture'));
+  php(`App\\Models\\VesselPairing::where('tenant_id','${seed.alice.tenant}')->update(['created_at'=>now()->subMinutes(11)]);`);
+  const principal=php(`echo App\\Models\\Tenant::find('${seed.alice.tenant}')->principal_id;`).trim();
+  const expiredRetry=await post('/connections/pair',{name:'Fresh invitation',invitation:JSON.stringify({endpoint:'https://alice.example.com',principal_id:principal,invitation_id:randomUUID(),vessel_id:seed.alice.vessel_id,code:'fixture-code',expires_at_ms:Date.now()+60000})});
+  assert.equal(expiredRetry.status,302);
+  assert.equal(php(`echo App\\Models\\VesselPairing::where('tenant_id','${seed.alice.tenant}')->count();`).trim(),'1','expired hidden pairing no longer consumes the pending limit');
   const invalidPair=await call('/connections/pair',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-TOKEN':csrf,Referer:`http://127.0.0.1:${p}/`},body:new URLSearchParams({name:'',invitation:pairingSecret})},'alice');
   assert.equal(invalidPair.status,302);
   const failedPage=await (await call('/',{},'alice')).text();assert.match(failedPage,/Connection not confirmed/);assert.ok(!failedPage.includes(pairingSecret));

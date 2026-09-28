@@ -43,13 +43,16 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         })));
         assert.match(query('.connections-card')!.textContent!, /Connected/);
         assert.match(query('.connections-card')!.textContent!, /vessel.example/);
-        assert.match(query('.connections-pending')!.textContent!, /Laptop/);
-        await click('View details');
+        assert.match(query('.connections-card')!.textContent!, /Version 1\.0\.2/);
+        assert.equal(query('.connections-pending'), null);
+        assert.doesNotMatch(query('.connections-dialog')!.textContent!, /Laptop|Needs confirmation/);
+        assert.deepEqual(commands, ['capabilities']);
+        await click('View details for Workstation');
         assert.ok(query('.connections-details .connections-status.is-connected'));
         assert.match(query('.connections-maintenance')!.textContent!, /Software updates/);
         assert.equal(query('#update-current')!.textContent, '1.0.2');
         assert.ok(query('#update-check'), 'the selected Vessel has update controls');
-        assert.deepEqual(commands, ['capabilities']);
+        assert.deepEqual(commands, ['capabilities', 'capabilities']);
         assert.equal(query('.connections-details dd'),null,'technical identifiers start collapsed');
         await click('Connection details');
         assert.match(query('.connections-details dl')!.textContent!, /vessel.example/);
@@ -107,13 +110,16 @@ test('maintenance handles old, offline and reconnected Vessels without crossing 
     const props = {bootstrap:{vessels:[{id:'old', name:'Old Vessel', vessel_id:'old-id'}, {id:'offline', name:'Offline Vessel', vessel_id:'offline-id'}], pairings:[]},
         states:{old:{connected:true,status:'Connected'},offline:{connected:false,status:'Unavailable'}}, connections, tenant:'test', onClose() {}};
     const render = () => React.act(async()=>root.render(React.createElement(Connections,props)));
+    const card = (name:string) => [...dom.window.document.querySelectorAll('.connections-card')].find(node=>node.querySelector('h3')?.textContent===name);
     const select = async (name:string) => React.act(async()=>{
-        const card=[...dom.window.document.querySelectorAll('.connections-card')].find(node=>node.querySelector('h3')?.textContent===name);
-        assert.ok(card,name);card.querySelector<HTMLButtonElement>('button')!.click();
+        const selected=card(name);
+        assert.ok(selected,name);selected.querySelector<HTMLButtonElement>('button')!.click();
     });
     const back = () => React.act(async()=>dom.window.document.querySelector<HTMLButtonElement>('.connections-back')!.click());
     try {
         await render();
+        assert.match(card('Old Vessel')!.textContent!, /Version 1\.0\.0/);
+        assert.match(card('Offline Vessel')!.textContent!, /Version unavailable/);
         await select('Old Vessel');
         assert.match(dom.window.document.querySelector('.connections-maintenance')!.textContent!, /one-time remote administrator installation/);
         assert.equal(dom.window.document.querySelector<HTMLElement>('#update-source')!.hidden,true);
@@ -127,6 +133,9 @@ test('maintenance handles old, offline and reconnected Vessels without crossing 
         await render();
         assert.match(dom.window.document.querySelector('.connections-maintenance')!.textContent!, /Vessel identity changed/);
         assert.equal(dom.window.document.querySelector('#update-check'),null);
+        await back();
+        assert.match(card('Offline Vessel')!.textContent!, /Version unavailable/);
+        await select('Offline Vessel');
 
         reconnecting.client = {async exchange() {return {protocol:1,outcome_unknown:false,error:null,result:{vessel_id:'offline-id',version:'current',scope:'owner',remote_updates:true,features:['execution_profiles']}};}};
         await render();

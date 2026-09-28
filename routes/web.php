@@ -27,6 +27,5 @@ Route::middleware([ConsoleOperator::class,ConsoleHeaders::class])->group(functio
     Route::get('/connections',[VesselConnectionController::class,'index'])->name('connections');
     Route::post('/connections',[VesselConnectionController::class,'store'])->name('connections.store')->middleware('throttle:10,1');
     Route::post('/connections/pair',[VesselConnectionController::class,'pair'])->name('connections.pair')->middleware('throttle:10,1');
-    Route::post('/connections/pair/{id}/retry',[VesselConnectionController::class,'retry'])->name('connections.retry')->middleware('throttle:10,1');
     Route::delete('/connections/{id}',[VesselConnectionController::class,'destroy'])->name('connections.destroy');
 });
