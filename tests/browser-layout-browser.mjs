@@ -15,6 +15,9 @@ const build = `${root}/public/build`;
 const manifest = JSON.parse(await readFile(`${build}/manifest.json`, 'utf8'));
 const entry = manifest['resources/react/main.tsx'];
 const bootstrap = {tenantId:'layout-fixture',vessels:[{id:'11111111-1111-4111-8111-111111111111',vessel_id:'v',name:'Fixture Vessel'}],pairings:[{id:'pending-fixture',name:'Hidden pending pairing'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
+const releaseAssets=version=>[{name:`voyage-${version}-x86_64-unknown-linux-gnu.tar.gz`,size:100},{name:`voyage-${version}-x86_64-unknown-linux-gnu.tar.gz.sha256`,size:100}];
+const stableRelease={tag_name:'v1.0.2',draft:false,prerelease:false,assets:releaseAssets('v1.0.2')};
+const nightlyReleases=[{tag_name:'nightly-1.0.3-nightly.20260928.1.1',draft:false,prerelease:true,target_commitish:'a'.repeat(40),assets:releaseAssets('1.0.3-nightly.20260928.1.1')}];
 const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="fixture">${entry.css.map(css=>`<link rel="stylesheet" href="/build/${css}">`).join('')}</head><body><div id="helm-react" data-bootstrap='${JSON.stringify(bootstrap)}'></div><script type="module" src="/build/${entry.file}"></script></body></html>`;
 const server = createServer(async (req,res)=>{
     try {
@@ -39,6 +42,8 @@ try {
     await page.route('**/*',route=>{
         const url=route.request().url();
         if(url===origin+'/console/ticket')return route.fulfill({json:{url:'wss://fixture.invalid/v1/vessel/browser-socket',vessel_id:'v',token:'a'.repeat(64),expires_at_ms:Date.now()+120000}});
+        if(url==='https://api.github.com/repos/o-psi/helm.vessel.voyage/releases/latest')return route.fulfill({json:stableRelease});
+        if(url==='https://api.github.com/repos/o-psi/helm.vessel.voyage/releases?per_page=100')return route.fulfill({json:nightlyReleases});
         return url.startsWith(origin+'/')?route.continue():route.abort();
     });
     await page.addInitScript(()=>{
@@ -55,7 +60,7 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
-                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'fixture-version',features:['execution_profiles'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
+                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,release_id:'a'.repeat(64),version:'fixture-next-version',description:'Verified development build from fixture source',services:['vessel.service']};
                 else if(c.op==='update_status')result=updateRecord;
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
@@ -103,13 +108,18 @@ try {
     await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
     const vesselCard=page.locator('.connections-card');
-    await vesselCard.getByText('Version fixture-version').waitFor();
+    await vesselCard.getByText('Version 1.0.2').waitFor();
+    await page.getByText('Stable: v1.0.2').waitFor();
+    await page.getByText('Development: 1.0.3-nightly.20260928.1.1').waitFor();
+    check(await vesselCard.getByText('New release').isVisible(),`${label}: newer published build is not shown`);
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='update_prepare').length===0),`${label}: release lookup prepared a build without consent`);
     check((await vesselCard.boundingBox()).height<100,`${label}: overview card is not compact`);
     check(await page.getByText('Needs confirmation').count()===0,`${label}: pending pairing panel is still shown`);
     await page.waitForTimeout(180);
     await page.screenshot({path:`${output}/${label}-vessel-overview.png`});
     await vesselCard.getByRole('button',{name:'View details for Fixture Vessel'}).click();
-    await page.locator('.connections-maintenance #update-current').getByText('fixture-version').waitFor();
+    await page.locator('.connections-maintenance #update-current').getByText('1.0.2').waitFor();
+    check(await page.locator('.connections-maintenance').getByText('Newer release published').isVisible(),`${label}: channel comparison is missing`);
     check(await page.locator('.connections-maintenance').isVisible(),`${label}: Vessel maintenance is missing from Manage Vessels`);
     check(await page.locator('.connections-dialog #update-check').isVisible(),`${label}: update action is not visible`);
     check(await page.locator('.connections-dialog').getByRole('button',{name:'Remove from Helm Web…'}).count()===0,`${label}: removal action is exposed before opening its disclosure`);
@@ -129,7 +139,7 @@ try {
     check(await page.locator('html.dark').count()===1,`${label}: dark appearance did not apply to Vessel maintenance`);
     await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
-    await page.locator('.connections-card').getByText('Version fixture-version').waitFor();
+    await page.locator('.connections-card').getByText('Version 1.0.2').waitFor();
     await page.waitForTimeout(180);
     await page.screenshot({path:`${output}/${label}-vessel-overview-dark.png`});
     await page.locator('.connections-dialog').getByRole('button',{name:'View details for Fixture Vessel'}).click();

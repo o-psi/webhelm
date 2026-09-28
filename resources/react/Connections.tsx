@@ -6,8 +6,9 @@ import {Badge} from './components/ui/badge';
 import {Dialog, DialogContent, DialogTitle} from './components/ui/dialog';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
-import {VesselUpdate} from './VesselUpdate';
+import {VesselUpdate,type Releases} from './VesselUpdate';
 import {vesselRead} from './settings';
+import {checkReleaseChannel,compareReleaseVersions} from '../js/release-channels.js';
 import React, {useEffect, useRef, useState} from 'react';
 import {ArrowLeftIcon,ArrowRightIcon,ChevronDownIcon,ChevronRightIcon,ExternalLinkIcon,PlusIcon,RefreshCwIcon,ServerIcon,XIcon} from 'lucide-react';
 
@@ -40,7 +41,33 @@ function bootstrapFrom(html: string): Bootstrap {
     return data;
 }
 
-function VesselOverviewCard({vessel, connection, status, onView}: {vessel:Vessel; connection:any; status:string; onView:()=>void}) {
+function usePublishedReleases(): Releases {
+    const [releases,setReleases] = useState<Releases>({stable:{phase:'checking'},nightly:{phase:'checking'}});
+    useEffect(()=>{
+        let mounted=true;
+        const pending: {controller:AbortController; timer:ReturnType<typeof setTimeout>}[]=[];
+        for(const channel of ['stable','nightly'] as const) {
+            const controller=new AbortController();
+            const timer=setTimeout(()=>{
+                controller.abort();
+                if(mounted)setReleases(current=>({...current,[channel]:{phase:'error'}}));
+            },10000);
+            pending.push({controller,timer});
+            checkReleaseChannel(channel,controller.signal)
+                .then(version=>{if(mounted&&!controller.signal.aborted)setReleases(current=>({...current,[channel]:version?{phase:'published',version}:{phase:'none'}}));})
+                .catch(()=>{if(mounted)setReleases(current=>({...current,[channel]:{phase:'error'}}));})
+                .finally(()=>clearTimeout(timer));
+        }
+        return()=>{mounted=false;pending.forEach(({controller,timer})=>{clearTimeout(timer);controller.abort();});};
+    },[]);
+    return releases;
+}
+
+function releaseSummary(release:Releases['stable']) {
+    return release.phase==='checking'?'Checking…':release.phase==='published'?release.version:release.phase==='none'?'No published build':'Check unavailable';
+}
+
+function VesselOverviewCard({vessel, connection, status, releases, onView}: {vessel:Vessel; connection:any; status:string; releases:Releases; onView:()=>void}) {
     const [version, setVersion] = useState<string | null | undefined>(undefined);
     const connected = Boolean(connection?.client && connection.vessel_id === vessel.vessel_id);
     useEffect(() => {
@@ -55,16 +82,17 @@ function VesselOverviewCard({vessel, connection, status, onView}: {vessel:Vessel
         return () => { alive = false; };
     }, [connection, connection?.client, vessel.vessel_id, connected]);
     const versionLabel = version === undefined ? 'Checking version…' : version ? `Version ${version}` : 'Version unavailable';
+    const newer = version ? (['stable','nightly'] as const).filter(channel=>releases[channel].version && compareReleaseVersions(releases[channel].version,version)===1) : [];
     const host = endpointHost(vessel.endpoint);
     return <Card role="article" className="connections-card overflow-hidden p-0">
         <button type="button" className="group flex w-full flex-col gap-2 rounded-xl p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring" aria-label={`View details for ${vessel.name}`} onClick={onView}>
             <span className="flex w-full min-w-0 items-center gap-2"><span className="connections-server" aria-hidden="true"><ServerIcon/></span><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{vessel.name}</h3><Badge variant="outline" className={`connections-status ${connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{status}</Badge></span>
-            <span className="flex w-full min-w-0 items-center gap-2 pl-10 text-xs text-muted-foreground"><span className="max-w-[60%] shrink-0 truncate font-medium text-foreground" title={versionLabel}>{versionLabel}</span><span aria-hidden="true">·</span><span className="min-w-0 flex-1 truncate" title={host}>{host}</span><ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true"/></span>
+            <span className="flex w-full min-w-0 items-center gap-2 pl-10 text-xs text-muted-foreground"><span className="max-w-[60%] shrink-0 truncate font-medium text-foreground" title={versionLabel}>{versionLabel}</span>{newer.length>0 && <Badge variant="secondary" title={`Newer published ${newer.join(' and ')} release; the Vessel verifies it on Prepare`}>New release</Badge>}<span aria-hidden="true">·</span><span className="min-w-0 flex-1 truncate" title={host}>{host}</span><ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true"/></span>
         </button>
     </Card>;
 }
 
-function VesselMaintenance({connection, tenant, onReconnect}: {connection:any; tenant:string; onReconnect?:()=>void}) {
+function VesselMaintenance({connection, releases, tenant, onReconnect}: {connection:any; releases:Releases; tenant:string; onReconnect?:()=>void}) {
     const [caps, setCaps] = useState<any>(null);
     const [notice, setNotice] = useState('');
     const [failed, setFailed] = useState(false);
@@ -92,7 +120,7 @@ function VesselMaintenance({connection, tenant, onReconnect}: {connection:any; t
         <CardHeader><div className="flex items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><RefreshCwIcon className="size-4" aria-hidden="true"/></span><div className="space-y-1"><CardTitle><h3>Software updates</h3></CardTitle><CardDescription>Review a verified build before choosing to install it.</CardDescription></div></div></CardHeader>
         <CardContent className="space-y-4">
             {notice && <Alert role="status"><AlertDescription>{notice}</AlertDescription></Alert>}
-            {caps && <VesselUpdate connection={connection} caps={caps} tenant={tenant} onRefresh={()=>setReload(value=>value+1)}/>}
+            {caps && <VesselUpdate connection={connection} caps={caps} releases={releases} tenant={tenant} onRefresh={()=>setReload(value=>value+1)}/>}
             {!connection?.client && onReconnect && <Button variant="outline" type="button" onClick={onReconnect}>Reconnect Vessels</Button>}
             {connection?.client && failed && <Button variant="outline" type="button" onClick={()=>setReload(value=>value+1)}>Check again</Button>}
         </CardContent>
@@ -104,6 +132,7 @@ export function Connections({bootstrap, states = {}, connections, tenant, onReco
     connections: Map<string, any>; tenant: string;
     onReconnect?: () => void; onClose: () => void;
 }) {
+    const releases=usePublishedReleases();
     const initialMethod = bootstrap.connectionForm === 'import' ? 'credential' : 'invitation';
     const initialScreen = bootstrap.connectionError && ['pair', 'import'].includes(bootstrap.connectionForm || '') ? 'add' : 'list';
     const [data, setData] = useState<Bootstrap>(bootstrap);
@@ -213,7 +242,8 @@ export function Connections({bootstrap, states = {}, connections, tenant, onReco
         <div className="connections-body">
             {screen === 'list' && <>
                 <p className="connections-intro">These computers run your voyages. Provider credentials stay on each Vessel.</p>
-                {count ? <div className="connections-grid" data-single={count===1 || undefined}>{data.vessels.map(vessel => <VesselOverviewCard key={vessel.id} vessel={vessel} connection={connections.get(vessel.id)} status={statusLabel(vessel.id)} onView={()=>viewDetails(vessel.id)}/>)}</div> : <div className="connections-empty"><span aria-hidden="true"><ServerIcon/></span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><Button variant="default" type="button" onClick={openAdd}>Add your first Vessel</Button></div>}
+                <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" role="status" aria-label="Published release checks"><span>Stable: {releaseSummary(releases.stable)}</span><span>Development: {releaseSummary(releases.nightly)}</span></div>
+                {count ? <div className="connections-grid" data-single={count===1 || undefined}>{data.vessels.map(vessel => <VesselOverviewCard key={vessel.id} vessel={vessel} connection={connections.get(vessel.id)} status={statusLabel(vessel.id)} releases={releases} onView={()=>viewDetails(vessel.id)}/>)}</div> : <div className="connections-empty"><span aria-hidden="true"><ServerIcon/></span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><Button variant="default" type="button" onClick={openAdd}>Add your first Vessel</Button></div>}
                 {count >= 64 && <p>Connection limit reached. Remove a Vessel before adding another.</p>}
             </>}
             {screen === 'add' && <>
@@ -233,7 +263,7 @@ export function Connections({bootstrap, states = {}, connections, tenant, onReco
             {screen === 'details' && selected && <div className="connections-details grid gap-4">
                 <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3"><div className="flex min-w-0 items-center gap-3"><ServerIcon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true"/><div className="min-w-0"><p className="text-xs text-muted-foreground">Connection</p><p className="truncate text-sm font-medium">{endpointHost(selected.endpoint)}</p></div></div><Badge variant="outline" className={`connections-status ${states[selected.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(selected.id)}</Badge></div>
                 {connections.get(selected.id)?.vessel_id === selected.vessel_id
-                    ? <VesselMaintenance connection={connections.get(selected.id)} tenant={tenant} onReconnect={onReconnect}/>
+                    ? <VesselMaintenance connection={connections.get(selected.id)} releases={releases} tenant={tenant} onReconnect={onReconnect}/>
                     : <p role="status">Vessel connection changed. Reload Manage Vessels before reviewing maintenance.</p>}
                 <Collapsible className="group rounded-xl border" ><CollapsibleTrigger asChild><Button variant="ghost" type="button" className="h-auto w-full justify-between px-4 py-3">Connection details<ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" aria-hidden="true"/></Button></CollapsibleTrigger><CollapsibleContent><dl className="grid gap-3 border-t p-4 text-sm sm:grid-cols-2"><div><dt className="text-xs text-muted-foreground">Address</dt><dd className="mt-1 break-all font-mono text-xs">{selected.endpoint || 'Not available'}</dd></div><div><dt className="text-xs text-muted-foreground">Vessel ID</dt><dd className="mt-1 break-all font-mono text-xs">{selected.vessel_id}</dd></div></dl></CollapsibleContent></Collapsible>
                 <Collapsible className="connections-danger group rounded-xl border" open={removeOpen} onOpenChange={open=>{setRemoveOpen(open);if(!open)setConfirmRemove(false);}}><CollapsibleTrigger asChild><Button variant="ghost" type="button" className="h-auto w-full justify-between px-4 py-3 text-muted-foreground">Remove connection<ChevronDownIcon className="size-4 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true"/></Button></CollapsibleTrigger><CollapsibleContent><div className="space-y-3 border-t p-4"><p className="text-sm text-muted-foreground">This stops new access through this Web account. Existing voyages keep running; grants used by other clients remain valid.</p>

@@ -16,7 +16,7 @@ export function vesselUpdate(root, {show, resume}) {
     const active = (c, n) => context?.c === c && generation === n;
     const mayPrepare = record => !record || ['idle','discarded','complete','failed'].includes(record.phase);
     const phaseMessage = {
-        idle: 'No update checked yet. Preparing a build will not install it.',
+        idle: 'Choose a channel to prepare a verified build. Nothing installs until you approve it.',
         preparing: 'Preparing a build on the Vessel. Nothing has been installed.',
         ready: 'Build prepared for review. Nothing has been installed.',
         applying: 'Installing the approved build. Checking the Vessel connection…',

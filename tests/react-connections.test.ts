@@ -20,7 +20,13 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         commands.push(command.op);
         return {protocol: 1, outcome_unknown: false, error: null, result: {vessel_id: 'v', version: '1.0.2', scope: 'owner', remote_updates: true, features: ['execution_profiles']}};
     }}};
-    globalThis.fetch = async () => { requests++; throw Error('network lost'); };
+    const assets=(version:string)=>[{name:`voyage-${version}-x86_64-unknown-linux-gnu.tar.gz`,size:100},{name:`voyage-${version}-x86_64-unknown-linux-gnu.tar.gz.sha256`,size:100}];
+    globalThis.fetch = async input => {
+        const url=String(input);
+        if(url.endsWith('/releases/latest'))return new Response(JSON.stringify({tag_name:'v1.0.2',draft:false,prerelease:false,assets:assets('v1.0.2')}));
+        if(url.includes('/releases?'))return new Response(JSON.stringify([{tag_name:'nightly-1.0.3-nightly.20260928.1.1',draft:false,prerelease:true,target_commitish:'a'.repeat(40),assets:assets('1.0.3-nightly.20260928.1.1')}]));
+        requests++;throw Error('network lost');
+    };
     const {createRoot} = await import('react-dom/client');
     const {Connections} = await import('../resources/react/Connections.tsx');
     const root = createRoot(dom.window.document.querySelector('#mount')!);
@@ -44,6 +50,9 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.match(query('.connections-card')!.textContent!, /Connected/);
         assert.match(query('.connections-card')!.textContent!, /vessel.example/);
         assert.match(query('.connections-card')!.textContent!, /Version 1\.0\.2/);
+        assert.match(query('.connections-dialog')!.textContent!, /Stable: v1\.0\.2/);
+        assert.match(query('.connections-dialog')!.textContent!, /Development: 1\.0\.3-nightly/);
+        assert.match(query('.connections-card')!.textContent!, /New release/);
         assert.equal(query('.connections-pending'), null);
         assert.doesNotMatch(query('.connections-dialog')!.textContent!, /Laptop|Needs confirmation/);
         assert.deepEqual(commands, ['capabilities']);
@@ -52,6 +61,8 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.match(query('.connections-maintenance')!.textContent!, /Software updates/);
         assert.equal(query('#update-current')!.textContent, '1.0.2');
         assert.ok(query('#update-check'), 'the selected Vessel has update controls');
+        assert.match(query('.connections-maintenance')!.textContent!, /Newer release published/);
+        assert.equal(commands.includes('update_prepare'),false,'opening maintenance does not download a build');
         assert.deepEqual(commands, ['capabilities', 'capabilities']);
         assert.equal(query('.connections-details dd'),null,'technical identifiers start collapsed');
         await click('Connection details');
@@ -101,6 +112,8 @@ test('maintenance handles old, offline and reconnected Vessels without crossing 
         (globalThis as any)[key] = key === 'getComputedStyle' ? dom.window.getComputedStyle.bind(dom.window) : key === 'requestAnimationFrame' ? (callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0) : key === 'cancelAnimationFrame' ? clearTimeout : (dom.window as any)[key];
     }
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    const oldFetch=globalThis.fetch;
+    globalThis.fetch=async()=>{throw Error('Release metadata unavailable');};
     const {createRoot} = await import('react-dom/client');
     const {Connections} = await import('../resources/react/Connections.tsx');
     const root = createRoot(dom.window.document.querySelector('#mount')!);
@@ -143,6 +156,7 @@ test('maintenance handles old, offline and reconnected Vessels without crossing 
         assert.ok(dom.window.document.querySelector('#update-check'));
     } finally {
         await React.act(async()=>root.unmount());
+        globalThis.fetch=oldFetch;
         delete saved.Event;delete saved.CustomEvent;
         Object.assign(globalThis,saved);
         dom.window.close();
