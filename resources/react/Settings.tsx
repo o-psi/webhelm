@@ -133,6 +133,7 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
                     {caps?.scope==='owner'&&<SetupRow label="Vessel maintenance" detail="Updates and recovery" disabled={busy} onClick={()=>navigate('maintenance')}/>}
                     {profile&&<p className="setup-summary">{profile.reasoning_effort||'Provider default reasoning'} · {profile.service_tier||'Default service tier'}<br/>{profileAccount?.label||'Account unavailable'}</p>}
                     {profileAccount&&!profileAccount.ready&&<div className="setup-warning"><p>This profile’s account is {profileAccount.availability?.replaceAll('_',' ')||'unavailable'}.</p>{refreshButton(profileAccount)}</div>}
+                    {!tab&&<p>Creating a voyage does not send a message. The Vessel sets its initial access mode; review it before your first message.</p>}
                 </>}
                 {screen==='location'&&<>
                     <label>Vessel<NativeSelect disabled={!!tab||busy} value={vessel} onChange={event=>setVessel(event.target.value)}>{[...fleet.connections.values()].map((item:any)=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</NativeSelect></label>
@@ -165,6 +166,7 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
                 </>}
                 {screen==='models'&&<>
                     <label className="setup-search">Search models<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
+                    <p>Choosing a different model resets reasoning and service to provider defaults. Review them before saving this profile.</p>
                     <div className="setup-choices">{models.filter(item=>matches(`${item.display_name||''} ${item.id}`)).map(item=><Button variant={model===item.id?'secondary':'outline'} type="button" key={item.id} className="setup-choice" disabled={busy} aria-pressed={model===item.id} onClick={()=>{if(model!==item.id){setModel(item.id);setReasoning('');setService('');}back();}}><strong>{item.display_name||item.id}</strong><small>{item.id}{item.is_default?' · Default':''}</small></Button>)}</div>
                     {!models.some(item=>matches(`${item.display_name||''} ${item.id}`))&&<p>No models found.</p>}
                 </>}
