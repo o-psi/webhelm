@@ -3,24 +3,24 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {JSDOM} from 'jsdom';
-import {App} from '../resources/react/App.tsx';
 
-test('React shell renders safely without Livewire and uses the production console', () => {
+test('React shell renders safely without Livewire and uses the production console', async () => {
     const dom = new JSDOM('<meta name="csrf-token" content="fixture-token">');
     const previous = globalThis.document;
     globalThis.document = dom.window.document;
     try {
+        const {App}=await import('../resources/react/App.tsx');
         const html = renderToStaticMarkup(React.createElement(App, {bootstrap: {tenantId: 'tenant', vessels: [{id: 'v', name: '<img src=x onerror=alert(1)>', vessel_id: 'owner'}], ticketUrl: '/console/ticket', connectionsUrl: '/connections', logoutUrl: '/console/logout'}}));
         const output = new JSDOM(html).window.document;
         assert.equal(output.querySelectorAll('img,script').length, 0);
-        assert.match(output.body.textContent!, /<img src=x onerror=alert\(1\)>/);
+        assert.ok(output.querySelector('[aria-label="Vessel connections"]'));
         assert.doesNotMatch(output.body.textContent!, /React preview|existing console/i);
         assert.equal(output.querySelector('.tabs'), null);
         assert.equal(output.querySelector('.welcome'), null);
         assert.equal(output.querySelector('textarea')?.getAttribute('placeholder'), 'Ask anything…');
         assert.ok(output.querySelector('[aria-label="New voyage"]'));
         assert.ok(output.querySelector('[aria-label="Open voyage navigation"]'));
-        assert.equal(output.querySelectorAll('.appearance button').length, 3);
+        assert.ok(output.querySelector('[aria-label="Profile menu"]'));
         assert.equal(output.querySelector('form')?.getAttribute('method'), 'post');
         assert.equal(output.querySelector<HTMLInputElement>('[name="_token"]')?.value, 'fixture-token');
         assert.equal(output.querySelector('nav')?.getAttribute('aria-label'), 'Voyages');
@@ -69,15 +69,19 @@ test('React enrollment island mounts and scrubs private state on unmount',async(
 });
 
 test('React voyage action island opens audited details and cleans up',async()=>{
- const {VoyageActions}=await import('../resources/react/VoyageActions.tsx');const {createRoot}=await import('react-dom/client');const {act}=React;
+ const {createRoot}=await import('react-dom/client');const {act}=React;
  const dom=new JSDOM('<div id="mount"></div>',{url:'https://helm.test'});
  dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
- const saved={window:globalThis.window,document:globalThis.document};Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true});
+ (dom.window.HTMLElement.prototype as any).attachEvent=()=>{};(dom.window.HTMLElement.prototype as any).detachEvent=()=>{};
+ const saved={window:globalThis.window,document:globalThis.document};Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),MutationObserver:dom.window.MutationObserver,NodeFilter:dom.window.NodeFilter,Node:dom.window.Node,Element:dom.window.Element,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,ShadowRoot:dom.window.ShadowRoot,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent});
+ const {VoyageActions}=await import('../resources/react/VoyageActions.tsx');
  const commands:string[]=[];const connection:any={id:'c',vessel_id:'v',name:'Vessel',journal:{entries:()=>[]},client:{async exchange({command}:any){commands.push(command.op);const result=command.op==='capabilities'?{scope:'owner',vessel_id:'v'}:command.op==='inspect'?{session_id:'s',incarnation:'i',state:'live'}:{session_id:'s',incarnation:'i',result:{session_id:'s',revision:1,run:{state:'idle'}}};return {protocol:1,outcome_unknown:false,result};}}};
  const root=createRoot(dom.window.document.querySelector('#mount')!);
  try{await act(async()=>root.render(React.createElement(VoyageActions,{connection,voyage:{session_id:'s',name:'Voyage'},onChanged:()=>{}})));
+ await act(async()=>{dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Voyage actions"]')!.dispatchEvent(new dom.window.MouseEvent('pointerdown',{bubbles:true,button:0}));});
  await act(async()=>{[...dom.window.document.querySelectorAll<HTMLButtonElement>('[data-actions] button')].find(button=>button.textContent==='Details')!.click();});
- assert.equal(dom.window.document.querySelector('dialog')?.open,true);assert.match(dom.window.document.querySelector('#sidebar-action-details')!.textContent!,/"revision": 1/);assert.deepEqual(commands,['capabilities','inspect','snapshot']);
- await act(async()=>root.unmount());assert.equal(dom.window.document.querySelector('dialog'),null);
+ await act(async()=>{await new Promise(resolve=>setTimeout(resolve,20));});
+ assert.equal(dom.window.document.querySelector('[data-slot=dialog-content]')?.getAttribute('data-state'),'open');assert.match(dom.window.document.querySelector('#sidebar-action-details')!.textContent!,/"revision": 1/);assert.deepEqual(commands,['capabilities','inspect','snapshot']);
+ await act(async()=>root.unmount());assert.equal(dom.window.document.querySelector('[data-slot=dialog-content]'),null);
  }finally{Object.assign(globalThis,saved);dom.window.close();}
 });

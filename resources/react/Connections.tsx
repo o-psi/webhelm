@@ -1,3 +1,10 @@
+import {Input} from './components/ui/input';
+import {Textarea} from './components/ui/textarea';
+import {Button} from './components/ui/button';
+import {Card} from './components/ui/card';
+import {Badge} from './components/ui/badge';
+import {Dialog, DialogContent, DialogTitle} from './components/ui/dialog';
+import {Alert,AlertDescription} from './components/ui/alert';
 import React, {useEffect, useRef, useState} from 'react';
 
 type Vessel = {id: string; name: string; vessel_id: string; endpoint?: string};
@@ -48,7 +55,6 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
     const [busy, setBusy] = useState(false);
     const [uncertain, setUncertain] = useState(false);
     const [confirmRemove, setConfirmRemove] = useState(false);
-    const dialog = useRef<HTMLDialogElement>(null);
     const heading = useRef<HTMLHeadingElement>(null);
     const nameField = useRef<HTMLInputElement>(null);
     const selected = data.vessels.find(vessel => vessel.id === selectedId);
@@ -56,7 +62,6 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
     const online = data.vessels.filter(vessel => states[vessel.id]?.connected).length;
     const secret = method === 'invitation' ? invitation : credential;
 
-    useEffect(() => { dialog.current?.showModal(); return () => dialog.current?.close(); }, []);
     useEffect(() => {
         if (screen === 'add') nameField.current?.focus();
         else heading.current?.focus();
@@ -71,7 +76,7 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
         setNotice(''); setError(false); setUncertain(false);
         setScreen('add');
     }
-    function onCancel(event: React.SyntheticEvent) {
+    function onCancel(event: Event) {
         event.preventDefault();
         if (busy) return;
         if (confirmRemove) setConfirmRemove(false);
@@ -131,36 +136,36 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
     const title = screen === 'list' ? 'Your Vessels' : screen === 'add' ? 'Add a Vessel' : screen === 'guide' ? 'Get an invitation' : selected?.name || 'Vessel details';
     const command = `STATE="/path/to/vessel/state"\nENDPOINT="https://vessel.example.com"\nINVITE_DIR=$(mktemp -d)\nvessel pair-invite --directory "$STATE" \\\n  --endpoint "$ENDPOINT" \\\n  --principal ${data.principalId || 'YOUR_PRINCIPAL_ID'} \\\n  --full-access \\\n  --output "$INVITE_DIR/invitation.json" &&\ncat "$INVITE_DIR/invitation.json"`;
 
-    return <dialog className="settings-dialog connections-dialog" ref={dialog} onCancel={onCancel} aria-labelledby="vessel-manager-title">
+    return <Dialog open onOpenChange={open=>{if(!open)close();}}><DialogContent showCloseButton={false} className="settings-dialog connections-dialog" onInteractOutside={event=>event.preventDefault()} onEscapeKeyDown={event=>onCancel(event)} aria-labelledby="vessel-manager-title">
         <header className="connections-header">
-            {screen !== 'list' && <button type="button" className="connections-back" disabled={busy} onClick={back} aria-label="Back">←</button>}
-            <div className="connections-title"><h2 id="vessel-manager-title" ref={heading} tabIndex={-1}>{title}</h2>
+            {screen !== 'list' && <Button variant="ghost" type="button" className="connections-back" disabled={busy} onClick={back} aria-label="Back">←</Button>}
+            <div className="connections-title"><DialogTitle asChild><h2 id="vessel-manager-title" ref={heading} tabIndex={-1}>{title}</h2></DialogTitle>
                 <p>{screen === 'list' ? `${count} saved · ${online} connected` : screen === 'add' ? 'Connect a computer where your voyages will run.' : screen === 'guide' ? 'Create a private invitation on the Vessel host.' : 'Connection details and access'}</p></div>
-            {screen === 'list' && <button type="button" className="connections-add" onClick={openAdd} disabled={busy || count >= 64}>+ Add Vessel</button>}
-            <button type="button" className="connections-close" aria-label="Close Vessel connections" disabled={busy} onClick={close}>×</button>
+            {screen === 'list' && <Button variant="default" type="button" className="connections-add" onClick={openAdd} disabled={busy || count >= 64}>+ Add Vessel</Button>}
+            <Button variant="ghost" type="button" className="connections-close" aria-label="Close Vessel connections" disabled={busy} onClick={close}>×</Button>
         </header>
-        {notice && <div className={`connections-notice ${error ? 'is-error' : ''}`} role={error ? 'alert' : 'status'}>{notice}
-            {uncertain && <button type="button" onClick={()=>void checkStatus()} disabled={busy}>Check status</button>}</div>}
+        {notice && <Alert className={`connections-notice ${error ? 'is-error' : ''}`} variant={error?'destructive':'default'} role={error ? 'alert' : 'status'}><AlertDescription>{notice}</AlertDescription>
+            {uncertain && <Button variant="ghost" type="button" onClick={()=>void checkStatus()} disabled={busy}>Check status</Button>}</Alert>}
         <div className="connections-body">
             {screen === 'list' && <>
                 <p className="connections-intro">These computers run your voyages. Provider credentials stay on each Vessel.</p>
                 {(data.pairings || []).length > 0 && <section className="connections-pending" aria-label="Pending pairings"><h3>Needs confirmation</h3>
-                    {(data.pairings || []).map(pairing => <div key={pairing.id} className="connections-pending-row"><div><strong>{pairing.name}</strong><small>The original pairing is still pending. Check it before adding another.</small></div><button type="button" disabled={busy || uncertain} onClick={()=>void send(`/connections/pair/${encodeURIComponent(pairing.id)}/retry`, {})}>Check connection</button></div>)}
+                    {(data.pairings || []).map(pairing => <div key={pairing.id} className="connections-pending-row"><div><strong>{pairing.name}</strong><small>The original pairing is still pending. Check it before adding another.</small></div><Button variant="ghost" type="button" disabled={busy || uncertain} onClick={()=>void send(`/connections/pair/${encodeURIComponent(pairing.id)}/retry`, {})}>Check connection</Button></div>)}
                 </section>}
-                {count ? <div className="connections-grid">{data.vessels.map(vessel => <article className="connections-card" key={vessel.id}>
-                    <div className="connections-card-top"><span className="connections-server" aria-hidden="true">▣</span><span className={`connections-status ${states[vessel.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(vessel.id)}</span></div>
+                {count ? <div className="connections-grid">{data.vessels.map(vessel => <Card role="article" className="connections-card" key={vessel.id}>
+                    <div className="connections-card-top"><span className="connections-server" aria-hidden="true">▣</span><Badge variant="outline" className={`connections-status ${states[vessel.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(vessel.id)}</Badge></div>
                     <h3>{vessel.name}</h3><p>{endpointHost(vessel.endpoint)}</p>
-                    <button type="button" className="connections-card-action" onClick={()=>viewDetails(vessel.id)}>View details <span aria-hidden="true">→</span></button>
-                </article>)}</div> : <div className="connections-empty"><span aria-hidden="true">▣</span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><button type="button" onClick={openAdd}>Add your first Vessel</button></div>}
+                    <Button variant="ghost" type="button" className="connections-card-action" onClick={()=>viewDetails(vessel.id)}>View details <span aria-hidden="true">→</span></Button>
+                </Card>)}</div> : <div className="connections-empty"><span aria-hidden="true">▣</span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><Button variant="default" type="button" onClick={openAdd}>Add your first Vessel</Button></div>}
                 {count >= 64 && <p>Connection limit reached. Remove a Vessel before adding another.</p>}
             </>}
             {screen === 'add' && <>
-                <div className="connections-method" aria-label="Connection method"><button type="button" aria-pressed={method === 'invitation'} disabled={busy} onClick={()=>setMethod('invitation')}>New invitation</button><button type="button" aria-pressed={method === 'credential'} disabled={busy} onClick={()=>setMethod('credential')}>Existing credential</button></div>
+                <div className="connections-method" aria-label="Connection method"><Button variant="ghost" type="button" aria-pressed={method === 'invitation'} disabled={busy} onClick={()=>setMethod('invitation')}>New invitation</Button><Button variant="ghost" type="button" aria-pressed={method === 'credential'} disabled={busy} onClick={()=>setMethod('credential')}>Existing credential</Button></div>
                 <form id="vessel-add-form" onSubmit={event=>{event.preventDefault();void send(method === 'invitation' ? '/connections/pair' : '/connections', {name, [method]: secret});}}>
-                    <label>Name<input ref={nameField} required maxLength={100} value={name} onChange={event=>setName(event.target.value)} placeholder="e.g. My workstation" disabled={busy} autoComplete="off"/></label>
-                    <label>{method === 'invitation' ? 'Invitation JSON' : 'Connection credential JSON'}<textarea required maxLength={16384} rows={5} value={secret} onChange={event=>method === 'invitation' ? setInvitation(event.target.value) : setCredential(event.target.value)} placeholder={method === 'invitation' ? 'Paste the private invitation from your Vessel' : 'Paste an existing Vessel connection credential'} disabled={busy} autoComplete="off" spellCheck={false}/></label>
+                    <label>Name<Input ref={nameField} required maxLength={100} value={name} onChange={event=>setName(event.target.value)} placeholder="e.g. My workstation" disabled={busy} autoComplete="off"/></label>
+                    <label>{method === 'invitation' ? 'Invitation JSON' : 'Connection credential JSON'}<Textarea required maxLength={16384} rows={5} value={secret} onChange={event=>method === 'invitation' ? setInvitation(event.target.value) : setCredential(event.target.value)} placeholder={method === 'invitation' ? 'Paste the private invitation from your Vessel' : 'Paste an existing Vessel connection credential'} disabled={busy} autoComplete="off" spellCheck={false}/></label>
                     <p className="connections-private">This private value goes to Helm Web for pairing and is never placed in a voyage message. {method === 'invitation' ? 'Invitations expire after 10 minutes.' : 'Importing the same Vessel replaces this tenant’s saved connection.'}</p>
-                    {method === 'invitation' && <button type="button" className="connections-help-link" onClick={()=>setScreen('guide')}>How do I get an invitation? →</button>}
+                    {method === 'invitation' && <Button variant="ghost" type="button" className="connections-help-link" onClick={()=>setScreen('guide')}>How do I get an invitation? →</Button>}
                 </form>
             </>}
             {screen === 'guide' && <div className="connections-guide">
@@ -169,14 +174,14 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
                 <a href={guideUrl} target="_blank" rel="noopener noreferrer">Full first-time setup guide ↗</a>
             </div>}
             {screen === 'details' && selected && <div className="connections-details"><div className="connections-detail-card"><span className={`connections-status ${states[selected.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(selected.id)}</span><dl><div><dt>Address</dt><dd>{selected.endpoint || 'Not available'}</dd></div><div><dt>Vessel ID</dt><dd>{selected.vessel_id}</dd></div></dl></div>
-                {!states[selected.id]?.connected && onReconnect && <button type="button" onClick={onReconnect}>Reconnect Vessels</button>}
+                {!states[selected.id]?.connected && onReconnect && <Button variant="ghost" type="button" onClick={onReconnect}>Reconnect Vessels</Button>}
                 <section className="connections-danger"><h3>Remove from Helm Web</h3><p>Removing this connection stops new browser access through this Web account. It does not stop voyages or revoke the underlying Vessel grant used by other clients.</p>
-                    {!confirmRemove ? <button type="button" onClick={()=>setConfirmRemove(true)}>Remove connection…</button> : <div className="connections-confirm" role="group" aria-label={`Confirm removing ${selected.name}`}><p>Remove <strong>{selected.name}</strong> from this Web account?</p><button type="button" disabled={busy} onClick={()=>setConfirmRemove(false)}>Keep connection</button><button type="button" className="connections-remove" disabled={busy || uncertain} onClick={()=>void send(`/connections/${encodeURIComponent(selected.id)}`, {confirm_disconnect: 1}, 'DELETE')}>Remove {selected.name}</button></div>}
+                    {!confirmRemove ? <Button variant="ghost" type="button" onClick={()=>setConfirmRemove(true)}>Remove connection…</Button> : <div className="connections-confirm" role="group" aria-label={`Confirm removing ${selected.name}`}><p>Remove <strong>{selected.name}</strong> from this Web account?</p><Button variant="ghost" type="button" disabled={busy} onClick={()=>setConfirmRemove(false)}>Keep connection</Button><Button variant="destructive" type="button" className="connections-remove" disabled={busy || uncertain} onClick={()=>void send(`/connections/${encodeURIComponent(selected.id)}`, {confirm_disconnect: 1}, 'DELETE')}>Remove {selected.name}</Button></div>}
                 </section>
             </div>}
         </div>
         <footer className="connections-footer">
-            {screen === 'list' ? <button type="button" onClick={close}>Done</button> : screen === 'add' ? <><button type="button" onClick={back} disabled={busy}>Back</button><button className="connections-primary" type="submit" form="vessel-add-form" disabled={busy || uncertain || !name.trim() || !secret.trim()}>{busy ? 'Connecting…' : 'Connect Vessel'}</button></> : <button type="button" onClick={back} disabled={busy}>{screen === 'guide' ? 'Back to adding' : 'Back to Vessels'}</button>}
+            {screen === 'list' ? <Button variant="ghost" type="button" onClick={close}>Done</Button> : screen === 'add' ? <><Button variant="ghost" type="button" onClick={back} disabled={busy}>Back</Button><Button variant="default" className="connections-primary" type="submit" form="vessel-add-form" disabled={busy || uncertain || !name.trim() || !secret.trim()}>{busy ? 'Connecting…' : 'Connect Vessel'}</Button></> : <Button variant="ghost" type="button" onClick={back} disabled={busy}>{screen === 'guide' ? 'Back to adding' : 'Back to Vessels'}</Button>}
         </footer>
-    </dialog>;
+    </DialogContent></Dialog>;
 }

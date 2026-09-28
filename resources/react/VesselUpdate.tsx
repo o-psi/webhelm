@@ -1,3 +1,6 @@
+import {NativeSelect} from './components/ui/native-select';
+import {Button} from './components/ui/button';
+import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import React, {useEffect, useRef} from 'react';
 import {vesselUpdate} from '../js/vessel-update.js';
 
@@ -5,26 +8,26 @@ import {vesselUpdate} from '../js/vessel-update.js';
 // subtree, including its polling lifetime; React owns mounting and disposal.
 export function VesselUpdateMarkup() {
     return <>
-        <button type="button" id="setup-update-open" hidden>Vessel updates</button>
+        <Button variant="ghost" type="button" id="setup-update-open" hidden>Vessel updates</Button>
         <h3 id="update-vessel-name">Vessel update</h3>
         <p id="update-current"/>
         <p id="update-status" role="status"/>
         <div id="update-source">
-            <label>Update source<select id="update-channel" defaultValue="stable">
+            <label>Update source<NativeSelect id="update-channel" defaultValue="stable">
                 <option value="stable">Latest stable release</option>
                 <option value="nightly">Latest completed development build</option>
-            </select></label>
+            </NativeSelect></label>
             <p>Development builds contain recent GitHub changes and may have unfinished features. The Vessel uses its own download access.</p>
-            <button type="button" id="update-check">Check and prepare update</button>
+            <Button variant="ghost" type="button" id="update-check">Check and prepare update</Button>
         </div>
         <div id="update-review" hidden>
             <strong id="update-version"/><p id="update-description"/><p id="update-services"/>
             <p>Install this exact build on this Vessel? Its connection will briefly restart. Accounts and existing voyages are retained.</p>
-            <button type="button" id="update-approve">Update this Vessel</button>
-            <button type="button" id="update-discard">Not now</button>
+            <Button variant="ghost" type="button" id="update-approve">Update this Vessel</Button>
+            <Button variant="ghost" type="button" id="update-discard">Not now</Button>
         </div>
-        <button type="button" id="update-refresh" hidden>Check update status</button>
-        <button type="button" id="update-continue" hidden>Continue setup</button>
+        <Button variant="ghost" type="button" id="update-refresh" hidden>Check update status</Button>
+        <Button variant="ghost" type="button" id="update-continue" hidden>Continue setup</Button>
     </>;
 }
 
@@ -37,8 +40,8 @@ export function VesselUpdate({connection, caps, tenant, onResume}: {connection:a
         root.current!.querySelector<HTMLElement>('#setup-update-open')!.hidden=true;
         return ()=>controller.dispose();
     },[connection,connection?.client,caps,tenant]);
-    return <details open={!caps.features?.includes('execution_profiles')}>
-        <summary>Vessel updates</summary>
-        <div ref={root} data-tenant-id={tenant}><VesselUpdateMarkup/></div>
-    </details>;
+    return <Collapsible defaultOpen={!caps.features?.includes('execution_profiles')}>
+        <CollapsibleTrigger asChild><Button variant="ghost" type="button">Vessel updates</Button></CollapsibleTrigger>
+        <CollapsibleContent forceMount><div ref={root} data-tenant-id={tenant}><VesselUpdateMarkup/></div></CollapsibleContent>
+    </Collapsible>;
 }

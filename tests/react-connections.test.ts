@@ -8,9 +8,9 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
     dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
     const saved: Record<string, unknown> = {};
-    for (const key of ['window', 'document', 'location', 'Event']) {
+    for (const key of ['window', 'document', 'location', 'Event', 'CustomEvent', 'MutationObserver', 'HTMLElement', 'Node', 'NodeFilter', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'Element', 'ShadowRoot', 'getComputedStyle']) {
         saved[key] = (globalThis as any)[key];
-        (globalThis as any)[key] = (dom.window as any)[key];
+        (globalThis as any)[key] = key === 'getComputedStyle' ? dom.window.getComputedStyle.bind(dom.window) : (dom.window as any)[key];
     }
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     const oldFetch = globalThis.fetch;
@@ -68,6 +68,9 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     } finally {
         await React.act(async () => root.unmount());
         globalThis.fetch = oldFetch;
+        // Radix may dispatch its deferred teardown event after React unmounts.
+        delete saved.Event;
+        delete saved.CustomEvent;
         Object.assign(globalThis, saved);
         dom.window.close();
     }

@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {Settings} from '../resources/react/Settings';
 
 const binding={account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 async function mount({availability='available',usageReply,modelReply,existing=false,canManage=true,empty=false,failProfilesOnce=false}: {availability?:string;failProfilesOnce?:boolean;canManage?:boolean;empty?:boolean;usageReply?:(command:any)=>Promise<any>;modelReply?:(command:any)=>Promise<any>;existing?:boolean}={}){
     const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test'});
-    Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true});
+    Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),requestAnimationFrame:(callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0),cancelAnimationFrame:clearTimeout,MutationObserver:dom.window.MutationObserver,ResizeObserver:class {observe(){} unobserve(){} disconnect(){}},HTMLElement:dom.window.HTMLElement,Node:dom.window.Node,NodeFilter:dom.window.NodeFilter,HTMLFormElement:dom.window.HTMLFormElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Element:dom.window.Element,ShadowRoot:dom.window.ShadowRoot,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent});
     dom.window.HTMLDialogElement.prototype.showModal=function(){};dom.window.HTMLDialogElement.prototype.close=function(){};
     const {createRoot}=await import('react-dom/client');
+    const {Settings}=await import('../resources/react/Settings');
     const commands:any[]=[],actions:any[]=[];let closed=0;
     const catalogue={revision:1,can_manage:canManage,default_profile_id:'first',profiles:[{id:'first',name:'Everyday',account:{...binding},model:'m',reasoning_effort:'high',service_tier:'flex'}]};
     if(empty)catalogue.profiles=[];
@@ -31,7 +31,7 @@ async function mount({availability='available',usageReply,modelReply,existing=fa
     const props={fleet:{connections:new Map([['c',connection]])},workspace:{async act(...args:any[]){actions.push(args);return true;}} as any,tenant:'test',tab:existing?{key:'k',vessel:'c',session:'s',incarnation:'i',snapshot:{revision:4,run:{state:'idle'},workspace:'/work',inference:catalogue.profiles[0]}} as any:undefined,onClose(){closed++;},onCreated(){assert.fail('No creation expected');}};
     await act(async()=>root.render(React.createElement(Settings,props)));
     function button(label:string){const match=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>(item.getAttribute('aria-label')||item.textContent||'')===label||(item.classList.contains('setup-row')&&item.querySelector('strong')?.textContent===label));assert.ok(match,label);return match;}
-    async function click(label:string){await act(async()=>button(label).click());}
+    async function click(label:string){await act(async()=>{const target=button(label);if(label.startsWith('Actions for '))target.dispatchEvent(new dom.window.MouseEvent('pointerdown',{bubbles:true,button:0}));else target.click();});}
     async function fill(label:string,value:string){const input=[...document.querySelectorAll('label')].find(item=>item.textContent?.startsWith(label))?.querySelector('input');assert.ok(input,label);await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});}
     return {commands,actions,button,click,fill,async renew(profilesChanged=false){if(profilesChanged)catalogue.revision++;connection.client={...connection.client};await act(async()=>root.render(React.createElement(Settings,{...props})));},closed:()=>closed,text:()=>document.body.textContent!,async dispose(){await act(async()=>root.unmount());dom.window.close();}};
 }
@@ -48,7 +48,7 @@ test('profile navigation preserves unsaved name/model and keeps the current step
         assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'My draft');
         assert.match(view.text(),/Other model/);
         await view.click('Reasoning & service');
-        assert.equal(document.querySelector<HTMLInputElement>('input[type=range]')!.max,'1','reasoning follows selected model support');
+        assert.equal(document.querySelector('[data-slot=slider-thumb]')!.getAttribute('aria-valuemax'),'1','reasoning follows selected model support');
         await view.click('Done');await view.click('Save profile');
         const saved=view.commands.find(command=>command.op==='save_profile');
         assert.equal(saved.profile.name,'My draft');assert.equal(saved.profile.model,'other');assert.equal(saved.profile.reasoning_effort,null);assert.equal(saved.profile.service_tier,null);

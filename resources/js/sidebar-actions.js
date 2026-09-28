@@ -57,7 +57,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
     const $ = id => root.querySelector(`#sidebar-${id}`);
     let epoch = 0, current = null, sending = false;
     const status = text => { $('action-status').textContent = text; };
-    function invalidate() { epoch++; current = null; $('submit').disabled = true; }
+    function invalidate() { epoch++; current = null; if ($('submit')) $('submit').disabled = true; }
     function bind(node, connection, item) {
         const row = node.querySelector('[data-voyage-row]'), menu = node.querySelector('[data-flux-menu]');
         let loaded = null, ticket = 0;
@@ -92,12 +92,17 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
         return (nextConnection, nextItem) => { connection = nextConnection; item = nextItem; };
     }
     async function open(connection,item,action) {
-        const mine = ++epoch; current = null; $('submit').disabled=true;
+        const mine = ++epoch; current = null;
+        await modal('sidebar-action').show();
+        if (mine !== epoch) return;
+        bindListeners();
+        if (!$('submit')) throw new Error('Action dialog unavailable.');
+        $('submit').disabled=true;
         $('action-title').textContent=({access:'Access modes',archive:'Archive / Restore',cancel:'Cancel run'})[action] || action[0].toUpperCase()+action.slice(1);
         $('action-target').textContent=`${item.name || item.session_id} · ${connection.name} · ${item.session_id}`;
         for (const name of ['name','access','branch','retain','confirm']) $(`${name}-field`).hidden=true;
         $('action-details').hidden=true; $('confirm').value=''; $('reconcile').hidden=false;
-        status('Loading fresh voyage state…'); modal('sidebar-action').show();
+        status('Loading fresh voyage state…');
         try {
             const view = await inspect(connection,item.session_id);
             if (mine !== epoch) return;
@@ -216,9 +221,16 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
         } catch(error) { if(mine===epoch) status(`Outcome still uncertain: ${error.message}`); }
         finally {sending=false;}
     }
-    $('branch-more').addEventListener('click',()=>loadBranchPoints().catch(error=>{status(error.message); $('submit').disabled=true;}));
-    $('action-form').addEventListener('submit',execute);
-    $('reconcile').addEventListener('click',reconcile);
-    $('dismiss').addEventListener('click',()=>{invalidate();modal('sidebar-action').close();});
+    let boundForm = null;
+    function bindListeners() {
+        const form = $('action-form');
+        if (!form || form === boundForm) return;
+        boundForm = form;
+        $('branch-more').addEventListener('click',()=>loadBranchPoints().catch(error=>{status(error.message); $('submit').disabled=true;}));
+        form.addEventListener('submit',execute);
+        $('reconcile').addEventListener('click',reconcile);
+        $('dismiss').addEventListener('click',()=>{invalidate();modal('sidebar-action').close();});
+    }
+    bindListeners();
     return {bind,open,invalidate,reconcile};
 }

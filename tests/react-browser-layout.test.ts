@@ -4,15 +4,16 @@ import {readFileSync} from 'node:fs';
 import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {JSDOM} from 'jsdom';
-import {HostBrowser} from '../resources/react/HostBrowser.tsx';
 import type {Tab} from '../resources/react/workspace.ts';
 
 test('mobile viewer traps focus, Escape restores action and conversation DOM survives', async () => {
     const dom = new JSDOM('<main id="app" class="voyage-workspace"></main>');
-    const saved = ['window','document','IS_REACT_ACT_ENVIRONMENT'].map(name => [name,Object.getOwnPropertyDescriptor(globalThis,name)] as const);
-    Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true});
+    const names=['window','document','IS_REACT_ACT_ENVIRONMENT','getComputedStyle','MutationObserver','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','Node','NodeFilter','Element','ShadowRoot','Event','CustomEvent','requestAnimationFrame','cancelAnimationFrame'];
+    const saved = names.map(name => [name,Object.getOwnPropertyDescriptor(globalThis,name)] as const);
+    Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),MutationObserver:dom.window.MutationObserver,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Node:dom.window.Node,NodeFilter:dom.window.NodeFilter,Element:dom.window.Element,ShadowRoot:dom.window.ShadowRoot,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent,requestAnimationFrame:(callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0),cancelAnimationFrame:clearTimeout});
     dom.window.HTMLElement.prototype.getClientRects=function(){return [{width:40,height:40}] as any;};
-    Object.defineProperty(dom.window,'matchMedia',{value:()=>({matches:true})});
+    Object.defineProperty(dom.window,'matchMedia',{value:()=>({matches:true,addEventListener(){},removeEventListener(){}})});
+    const {HostBrowser}=await import('../resources/react/HostBrowser.tsx');
     const root = createRoot(dom.window.document.getElementById('app')!);
     const tab = {key:'one',session:'one',title:'Research trip',stale:true,snapshot:{messages:[{role:'tool',name:'host_browser'}]}} as Tab;
     try {
@@ -25,14 +26,15 @@ test('mobile viewer traps focus, Escape restores action and conversation DOM sur
         assert.equal(action.textContent,'Browser');
         assert.match(dom.window.document.getElementById(action.getAttribute('aria-describedby')!)!.textContent!,/activity/);
         await act(async()=>action.click());
-        const panel = dom.window.document.querySelector('aside')!;
+        const panel = dom.window.document.querySelector<HTMLElement>('[data-slot="sheet-content"]')!;
         assert.equal(dom.window.document.getElementById(panel.getAttribute('aria-labelledby')!)!.textContent,'Browser');
         assert.match(panel.textContent!,/Research trip/);
-        assert.equal(dom.window.document.activeElement,panel);
+        assert.equal(panel.getAttribute('role'),'dialog');
+        assert.equal(panel.contains(dom.window.document.activeElement),true);
         dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
-        assert.equal(dom.window.document.activeElement?.getAttribute('aria-label'),'Close browser viewer');
+        assert.equal(panel.contains(dom.window.document.activeElement),true);
         await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
-        assert.equal(dom.window.document.querySelector('aside'),null);
+        assert.equal(dom.window.document.querySelector('[data-slot="sheet-content"]'),null);
         assert.equal(dom.window.document.activeElement,action);
         assert.equal(dom.window.document.querySelector('textarea'),draft);
         assert.equal(draft.value,'Unsent draft');
@@ -49,5 +51,5 @@ test('desktop split and mobile overlay CSS contracts for the production console'
     const react = readFileSync(new URL('../resources/react/style.css',import.meta.url),'utf8');
     assert.match(react,/grid-template-columns:minmax\(300px,32%\) minmax\(0,1fr\)/);
     assert.match(react,/\.task-browser-panel\.expanded/);
-    assert.match(react,/@media\(max-width:1000px\)[\s\S]*\.task-browser-panel\{position:fixed;inset:0/);
+    assert.match(react,/\.mobile-browser-sheet\[data-slot="sheet-content"\]\{inset:0;width:100vw/);
 });

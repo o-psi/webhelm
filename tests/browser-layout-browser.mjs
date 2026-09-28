@@ -1,5 +1,5 @@
 // Render the built production React shell, never a real session or external site.
-// Run with Node 24: node web/tests/browser-layout-browser.mjs
+// Run with Node 24: node tests/browser-layout-browser.mjs
 // Requires an existing Vite build, playwright-core and Chromium; installs nothing.
 // Overrides: PLAYWRIGHT_MODULE, CHROMIUM_PATH, LAYOUT_OUTPUT.
 import {createServer} from 'node:http';
@@ -14,7 +14,7 @@ const {chromium} = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE || `
 const build = `${root}/public/build`;
 const manifest = JSON.parse(await readFile(`${build}/manifest.json`, 'utf8'));
 const entry = manifest['resources/react/main.tsx'];
-const bootstrap = {tenantId:'layout-fixture',vessels:[{id:'c',vessel_id:'v',name:'Fixture Vessel'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
+const bootstrap = {tenantId:'layout-fixture',vessels:[{id:'11111111-1111-4111-8111-111111111111',vessel_id:'v',name:'Fixture Vessel'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
 const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="fixture">${entry.css.map(css=>`<link rel="stylesheet" href="/build/${css}">`).join('')}</head><body><div id="helm-react" data-bootstrap='${JSON.stringify(bootstrap)}'></div><script type="module" src="/build/${entry.file}"></script></body></html>`;
 const server = createServer(async (req,res)=>{
     try {
@@ -55,12 +55,12 @@ try {
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
                 if(c.op==='capabilities')result={scope:'owner',vessel_id:'v'};
-                else if(c.op==='catalogue')result=[{session_id:'a',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
-                else if(c.op==='snapshot')result={session_id:'a',incarnation:'i',result:{session_id:'a',name:'Browser layout fixture',revision:1,observation_cursor:5,messages:Array.from({length:40},(_,i)=>({role:'assistant',content:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
-                else if(c.op==='decisions')result={session_id:'a',incarnation:'i',result:[]};
+                else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
+                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',revision:1,observation_cursor:5,messages:Array.from({length:40},(_,i)=>({role:'assistant',content:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
+                else if(c.op==='decisions')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:[]};
                 else if(c.op==='host_browser'){
                     if(c.operation.action==='control'){mode=c.operation.mode;binding.controller_epoch++;}
-                    result={session_id:'a',incarnation:'i',result:{status:{available:!window.fixtureUnavailable,running:!window.fixtureUnavailable,mode:window.fixtureUnavailable?null:mode,binding:window.fixtureUnavailable?null:{...binding},controller:mode==='private'?binding.attachment_id:null,input_sequence:0,page:{url:'https://fixture.invalid/',title:'Synthetic fixture'},tabs:[]},value:null}};
+                    result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{status:{available:!window.fixtureUnavailable,running:!window.fixtureUnavailable,mode:window.fixtureUnavailable?null:mode,binding:window.fixtureUnavailable?null:{...binding},controller:mode==='private'?binding.attachment_id:null,input_sequence:0,page:{url:'https://fixture.invalid/',title:'Synthetic fixture'},tabs:[]},value:null}};
                 } else throw Error(`Unexpected fixture operation ${c.op}`);
                 emit({type:'reply',request_id:f.request_id,response:{protocol:1,outcome_unknown:false,result}});
             }
@@ -69,7 +69,18 @@ try {
         window.WebSocket=Socket;
     });
     await page.goto(origin);
-    if(label==='mobile')await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
+    if(label==='mobile'){
+        await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
+        check(await page.locator('[data-slot="sheet-content"]').isVisible(),'mobile: shadcn navigation sheet did not open');
+        await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
+        check(await page.getByRole('menuitem',{name:'Manage Vessels'}).isVisible(),'mobile: Vessel menu did not open inside the sheet');
+        await page.keyboard.press('Escape');
+        await page.getByRole('button',{name:'Profile menu'}).click();
+        await page.getByRole('menuitemradio',{name:'dark'}).click();
+        check(await page.locator('html.dark').count()===1,'mobile: dark appearance did not apply');
+        await page.getByRole('button',{name:'Profile menu'}).click();
+        await page.getByRole('menuitemradio',{name:'light'}).click();
+    }
     await page.locator('.voyage-card').click();
     const conversation=page.locator('.conversation:not([hidden])');
     const draft=conversation.locator('textarea').first();

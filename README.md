@@ -18,6 +18,17 @@ From this repository root, use `npm ci`, `npm run typecheck`, `npm test`, and `n
 The supported Node range is in `package.json`. Production assets contain the
 React console plus shared public/login assets; a build alone does not deploy them.
 
+The React console uses source-owned shadcn/ui components in
+`resources/react/components/ui`, configured by `components.json`. Add components
+from this repository root with `npx shadcn@latest add COMPONENT`, then review the generated
+source and lockfile. Its Tailwind 4 theme lives in `resources/react/style.css`;
+`resources/css/app.css` remains the separate Flux stylesheet for public/login
+pages. The console keeps Helm's existing light/dark palette and layout. Buttons,
+fields, menus, dialogs, mobile navigation, disclosures, alerts, progress and
+sliders use shadcn primitives. The receipt-driven voyage action, enrollment,
+updater and browser adapters retain their focused behavior; these components
+do not own execution or transport state.
+
 React owns voyage navigation, drafts, history, run status, settings, decisions,
 attachments and connection management. Shared transport/intent journals retain
 exact command identities across the cutover. Browser viewing, account enrollment,
