@@ -57,9 +57,32 @@ export function activeVoyage(voyage: any, snapshot?: any) {
 
 export function voyageList(connections: any[], query = '', snapshotFor: (connection: any, voyage: any) => any = () => null) {
     const search = query.trim().toLocaleLowerCase();
-    return [...connections].flatMap(connection => connection.voyages.map((voyage: any) => ({
-        ...voyage, connection, activity: voyageActivity(voyage), active: activeVoyage(voyage, snapshotFor(connection, voyage)),
-    }))).filter(v => `${v.name || ''} ${v.session_id} ${v.connection.name}`.toLocaleLowerCase().includes(search))
+    return [...connections].flatMap(connection => connection.voyages.map((voyage: any) => {
+        const observed=snapshotFor(connection,voyage);
+        return {...voyage, connection, observed, activity: voyageActivity(voyage), active: activeVoyage(voyage, observed)};
+    })).filter(v => `${v.name || ''} ${v.session_id} ${v.connection.name}`.toLocaleLowerCase().includes(search))
         .sort((a, b) => Number(b.active) - Number(a.active) || (b.activity?.ms ?? -Infinity) - (a.activity?.ms ?? -Infinity)
             || a.connection.id.localeCompare(b.connection.id) || a.session_id.localeCompare(b.session_id));
+}
+
+// Attention is only a display grouping. A catalogue summary can be stale and
+// never authorizes a command; the open voyage uses its fresh snapshot instead.
+export function voyageGroup(voyage:any, decisions=0, pendingReceipts=0):'attention'|'working'|'settled' {
+    const summary=voyage.catalogue?.summary, snapshot=voyage.observed;
+    const run=snapshot?.run?.state??summary?.run_state;
+    if(decisions||pendingReceipts||snapshot?.recovery_pending||snapshot?.pending_cleanup_run||voyage.state==='cleanup_unconfirmed'||['awaiting_decision','waiting','blocked','failed','interrupted'].includes(run))return 'attention';
+    if(voyage.active||['starting','running','cancelling','cancel_requested'].includes(run)&&!['suspended','stopped','unavailable','relinquished'].includes(voyage.state))return 'working';
+    return 'settled';
+}
+
+export function sidebarGroups(voyages:any[],selectedKey:string|null,context:(voyage:any)=>{decisions:number;pendingReceipts:number}=()=>({decisions:0,pendingReceipts:0}),recentLimit=6){
+    const groups:{attention:any[];working:any[];recent:any[];settled:any[]}={attention:[],working:[],recent:[],settled:[]};
+    for(const voyage of voyages){
+        const {decisions,pendingReceipts}=context(voyage);
+        const group=voyageGroup(voyage,decisions,pendingReceipts);
+        if(group!=='settled'){groups[group].push(voyage);continue;}
+        const key=JSON.stringify([voyage.connection.id,voyage.session_id]);
+        (groups.recent.length<recentLimit||key===selectedKey?groups.recent:groups.settled).push(voyage);
+    }
+    return groups;
 }

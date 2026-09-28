@@ -73,3 +73,25 @@ test('OS picture selection shows a named preview in the composer', async () => {
         assert.equal(dom.window.document.querySelector<HTMLButtonElement>('.composer [aria-label="Send"]')?.disabled,false);
     } finally {await React.act(async()=>root.unmount());Object.assign(globalThis,saved);dom.window.close();}
 });
+
+test('uncertain receipt has one plain-language composer notice and optional exact details', async () => {
+    const dom = new JSDOM('<div id="mount"></div>', {pretendToBeVisual:true});
+    const saved = {window:globalThis.window, document:globalThis.document, requestAnimationFrame:globalThis.requestAnimationFrame};
+    Object.assign(globalThis, {window:dom.window, document:dom.window.document, requestAnimationFrame:(fn:FrameRequestCallback)=>fn(0), IS_REACT_ACT_ENVIRONMENT:true});
+    const root=createRoot(dom.window.document.querySelector('#mount')!);
+    const id='a0c1465a-f47c-47aa-8a17-04c786833419';
+    const tab:any={key:'t',title:'Voyage',snapshot:{messages:[]},decisions:[],pictures:[],draft:'Retained',notice:'We can’t confirm whether your message went through. Check the conversation and receipt before trying again.',busy:false};
+    let checks=0;
+    const workspace:any={actionable:()=>false,permitted:()=>false,pending:()=>[{op:'submit',command_id:id}],reconcile:async()=>{checks++;}};
+    try{
+        await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:true,onSettings:()=>{},connection:{client:{}},voyage:{}})));
+        const feedback=dom.window.document.querySelector('.composer-feedback')!;
+        assert.match(feedback.querySelector('p')!.textContent!,/can’t confirm whether your message went through/);
+        assert.doesNotMatch(feedback.querySelector('p')!.textContent!,new RegExp(id));
+        assert.equal(dom.window.document.querySelectorAll('.composer-feedback').length,1);
+        assert.equal(feedback.querySelector('details')!.open,false);
+        assert.match(feedback.querySelector('code')!.textContent!,new RegExp(id));
+        await React.act(async()=>dom.window.document.querySelector<HTMLButtonElement>('.composer-feedback button')!.click());
+        assert.equal(checks,1);
+    }finally{await React.act(async()=>root.unmount());Object.assign(globalThis,saved);dom.window.close();}
+});

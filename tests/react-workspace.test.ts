@@ -48,6 +48,7 @@ test('uncertain command is journaled once and reconciled without replay', async 
     const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
     f.workspace.draft(key, 'Retain me'); f.mode('unknown'); await f.workspace.act(key, 'submit');
     assert.equal(f.commands.filter(c => c.op === 'submit').length, 1);
+    assert.match(f.workspace.tabs.get(key)?.notice||'', /can’t confirm whether your message went through/);
     assert.equal(f.workspace.tabs.get(key)?.draft, 'Retain me');
     assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!), false);
     assert.equal([...f.storage.data.values()].some(value => value.includes('Retain me')), false);
@@ -56,6 +57,8 @@ test('uncertain command is journaled once and reconciled without replay', async 
     assert.equal(f.storage.length, 0);
     const receipt = f.commands.find(c => c.op === 'receipt');
     assert.equal(receipt.command_id, f.commands.find(c => c.op === 'submit').command_id);
+    assert.match(f.workspace.tabs.get(key)?.notice||'', /message was accepted/);
+    assert.doesNotMatch(f.workspace.tabs.get(key)?.notice||'', new RegExp(receipt.command_id));
     assert.equal(f.commands.filter(c => c.op === 'submit').length, 1);
     f.workspace.close();
 });
@@ -73,6 +76,8 @@ test('unknown-after-restart receipt remains blocking and never replays', async (
     f.workspace.draft(key, 'Hello'); f.mode('unknown'); await f.workspace.act(key, 'submit');
     f.mode('unknown_after_restart'); await f.workspace.reconcile(key);
     assert.equal(f.storage.length, 1); assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!), false);
+    assert.match(f.workspace.tabs.get(key)?.notice||'', /can’t confirm whether your message went through/);
+    assert.doesNotMatch(f.workspace.tabs.get(key)?.notice||'', /Receipt [a-f0-9-]+/);
     f.workspace.close();
 });
 test('automatic receipt observation stops after three exact reads without replay', async () => {

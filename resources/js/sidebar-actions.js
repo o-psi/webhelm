@@ -3,6 +3,9 @@ import {request, voyageResult, mutation, uuid} from './vessel-client.js';
 const activeRun = s => ['starting','running','cancelling'].includes(s?.run?.state);
 const archived = v => Boolean(v.process.archive || v.snapshot?.lifecycle?.archived);
 const terminal = new Set(['applied','accepted','requested','already_terminal','deleted','not_applied']);
+const actionLabel = op => ({set_access:'access change',rename:'rename',archive:'archive change',branch:'branch creation',cancel:'stop request',clear:'conversation clear',compact:'context compaction',delete:'deletion',restart:'restart'})[op] || 'action';
+const uncertainAction = op => `We can’t confirm whether the ${actionLabel(op)} went through. Check the voyage and its receipt before trying again.`;
+const observedAction = (op,status) => status==='unknown_after_restart'?uncertainAction(op):status==='not_applied'?`The ${actionLabel(op)} was not applied. Reopen for a fresh review.`:`The ${actionLabel(op)} was ${['accepted','requested'].includes(status)?'accepted':'recorded'}. Reopen to check the current voyage state.`;
 const descriptions = {
     access:'Change execution policy on the owning Vessel. Configured roots and server limits still apply.',
     rename:'Rename this voyage.', archive:'Archive an idle voyage, or restore an archived voyage.',
@@ -69,7 +72,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             await reconcile();
             if(mine!==epoch || !current || !pendingFor(current.connection,current.item)) return;
             if(remaining>1) observeReceipts(mine,remaining-1);
-            else status('Receipt remains unresolved. Check pending receipt later; the command was not replayed.');
+            else status(uncertainAction(current.connection.journal.entries().find(entry=>entry.session_id===current.item.session_id&&entry.sidebar_action)?.op));
         },1500);
     }
     function invalidate() { stopReceiptObservation(); epoch++; current = null; if ($('submit')) $('submit').disabled = true; }
@@ -220,7 +223,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
                 const envelope=voyageResult(response,item.session_id,base.process.incarnation);
                 if(envelope.result?.command_id!==commandId || !terminal.has(envelope.result.status)) throw new Error('Outcome unconfirmed. Check pending receipt.');
                 connection.journal.settle(commandId);
-                if(['not_applied','unknown_after_restart'].includes(envelope.result.status)) throw new Error(`Command ${envelope.result.status}; inspect before any new action.`);
+                if(['not_applied','unknown_after_restart'].includes(envelope.result.status)) throw new Error(observedAction(op,envelope.result.status));
             }
             if(mine===epoch) {status(action==='branch'?`Branch created: ${fields.branch_id}`:action==='cancel'?'Cancellation requested; cleanup may still be pending.':'Action confirmed by Vessel.'); current=null;}
             changed();
@@ -237,7 +240,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
                 if(entry.op==='restart') {
                     const process=await read(connection.client,'inspect',{session_id:item.session_id});
                     if(process.incarnation!==entry.incarnation && ['live','suspended'].includes(process.state)) {connection.journal.settle(entry.command_id);if(mine===epoch) status('A restarted process is observed. Reopen Restore to finish; no command was replayed.');}
-                    else if(mine===epoch) status('Restart remains uncertain. No automatic replay.');
+                    else if(mine===epoch) status(uncertainAction('restart'));
                     continue;
                 }
                 const reply=await read(connection.client,'receipt',{session_id:item.session_id,command_id:entry.command_id});
@@ -247,12 +250,12 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
                     if(receipt.branch_id!==entry.branch_id) throw new Error('Branch receipt identity mismatch.');
                     const child=await read(connection.client,'inspect',{session_id:entry.branch_id});
                     if(child.session_id!==entry.branch_id || !child.incarnation) throw new Error('Source frozen; branch start is still uncertain.');
-                    connection.journal.settle(entry.command_id); if(mine===epoch) status(`Branch observed: ${entry.branch_id}. No command was replayed.`);
-                } else if(entry.op==='branch' && !['not_applied','unknown_after_restart'].includes(receipt.status)) { if(mine===epoch) status('Branch outcome remains uncertain; source receipt is not proof of child creation.'); } else if(terminal.has(receipt.status)) {connection.journal.settle(entry.command_id);if(mine===epoch) status(`Receipt: ${receipt.status}. Reopen for fresh review. This is not a claim of completed execution.`);}
-                else if(mine===epoch) status(`Receipt: ${receipt.status || 'unknown'}. Still pending; no replay.`);
+                    connection.journal.settle(entry.command_id); if(mine===epoch) status('Branch created. Reopen to review the new voyage.');
+                } else if(entry.op==='branch' && !['not_applied','unknown_after_restart'].includes(receipt.status)) { if(mine===epoch) status(uncertainAction(entry.op)); } else if(terminal.has(receipt.status)) {connection.journal.settle(entry.command_id);if(mine===epoch) status(observedAction(entry.op,receipt.status));}
+                else if(mine===epoch) status(uncertainAction(entry.op));
             }
             changed();
-        } catch(error) { if(mine===epoch) status(`Outcome still uncertain: ${error.message}`); }
+        } catch { if(mine===epoch) status('We couldn’t verify this action. Check the current voyage and try the receipt review again when connected.'); }
         finally {sending=false; if(mine===epoch) $('reconcile').hidden=!pendingFor(connection,item);}
     }
     let boundForm = null;

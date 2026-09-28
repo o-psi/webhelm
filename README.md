@@ -50,6 +50,19 @@ steps. Vessel maintenance in Manage Vessels exposes exact prepare/review/apply/s
 hosts. Voyage setup directs owners of older Vessels there. Existing private keys, tenants, connections and conversation journals need
 no migration for this interface cutover.
 
+The sidebar keeps attention and active voyages above recent work, with older
+settled voyages available through search or filters. The composer exposes direct
+model and reasoning choices for the current voyage; the new-voyage composer can
+override those choices without editing the saved profile. Tool activity stays
+compact until expanded. The right dock switches between the shared Vessel-hosted
+browser and Changes. Changes offers bounded, explicit read requests to the
+executing Voyage’s advertised file or shell tools and shows recorded file-edit
+requests from loaded conversation history. Recorded edits are historical requests,
+not a current filesystem diff. Read requests are admitted as one exact operator
+run; the dock waits for that run’s canonical result and never repeats an uncertain
+request. Uncertain command notices explain the affected action in the composer;
+exact command IDs remain in expandable receipt details for inspection.
+
 helm.vessel.voyage. Foleybridge.Software presents Helm, Vessel, and Voyage
 as a product suite for running coding agents across machines the user controls.
 Product copy presents Helm Web and the Linux terminal client as two interfaces

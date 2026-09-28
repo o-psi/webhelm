@@ -5,7 +5,6 @@ import {Textarea} from './components/ui/textarea';
 import {Button} from './components/ui/button';
 import {Card} from './components/ui/card';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
-import {Alert,AlertDescription} from './components/ui/alert';
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from './components/ui/dialog';
 import {ArrowDownIcon,ArrowUpIcon,ChevronDownIcon,ChevronRightIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
@@ -16,11 +15,12 @@ import {Connections} from './Connections';
 import {ImagePart,Output} from './MessageParts';
 import {VoyageActions} from './VoyageActions';
 import {Settings} from './Settings';
+import {InferenceControls} from './InferenceControls';
 import {NewVoyage,type NewVoyageMessage} from './NewVoyage';
 import {completeNewVoyage} from './new-voyage-delivery';
 import {Decisions} from './Decisions';
 import {VesselFleet} from '../js/vessel-fleet.js';
-import {voyageList, filterVoyages, activityLabel, cardStatus} from './presentation';
+import {voyageList, filterVoyages, activityLabel, cardStatus, sidebarGroups} from './presentation';
 import {marked} from 'marked';
 import DOMPurify from 'dompurify';
 import {Workspace, type Tab} from './workspace';
@@ -52,12 +52,14 @@ function Composer({tab, workspace, onSettings, connection, voyage}: {tab?: Tab; 
     const enabled = tab && !stopping && workspace.actionable(tab) && workspace.permitted(tab,sendOp);
     const canStop = tab && activeRun && workspace.actionable(tab) && workspace.permitted(tab,'cancel');
     const send = () => { if (tab && enabled) void workspace.act(tab.key, sendOp); };
+    const pendingEntries=(()=>{try{return tab?workspace.pending(tab):[];}catch{return [];}})();
     return <form className="composer" aria-label="Message composer" onPaste={event=>{if(tab&&event.clipboardData.files.length){event.preventDefault();void pickFiles([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(tab&&event.dataTransfer.files.length){event.preventDefault();void pickFiles([...event.dataTransfer.files]);}}} onSubmit={event => {event.preventDefault(); send();}}>
-        <Card className="composer-box gap-2 p-3" size="sm"><Input ref={fileInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{tab?.notice && <p className="composer-feedback" role="status">{tab.notice}</p>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="outline" size="icon-xs" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}><XIcon aria-hidden="true"/></Button></figure>)}</div>}<Textarea aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
+        <Card className="composer-box gap-2 p-3" size="sm"><Input ref={fileInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{(tab?.notice||pendingEntries.length>0)&&<div className="composer-feedback" role="status"><p>{tab?.notice||'A previous action needs confirmation. Check the receipt before trying again.'}</p>{pendingEntries.length>0&&<><Button variant="ghost" size="sm" type="button" disabled={tab?.busy||!connection?.client} onClick={() => tab && void workspace.reconcile(tab.key)}>Check receipt{pendingEntries.length>1?'s':''}</Button><details><summary>Receipt details</summary><ul>{pendingEntries.map((entry:any)=><li key={entry.command_id}><code>{entry.op} · {entry.command_id}</code></li>)}</ul></details></>}</div>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="outline" size="icon-xs" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}><XIcon aria-hidden="true"/></Button></figure>)}</div>}<Textarea aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
         <div className="composer-toolbar"><div className="composer-options">
             <Button variant="ghost" type="button" onClick={onSettings} title="Voyage settings"><Settings2Icon aria-hidden="true"/><span>Voyage settings</span><ChevronDownIcon aria-hidden="true"/></Button>
             <Button variant="ghost" type="button" disabled={!tab||tab.busy||attaching} aria-label="Attach pictures" title="Attach pictures" onClick={()=>fileInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button>
-            <small className="composer-summary" title={[tab?.snapshot?.workspace,tab?.snapshot?.inference?.model,tab?.snapshot?.inference?.reasoning_effort,tab?.snapshot?.inference?.service_tier].filter(Boolean).join(' · ')}>{[tab?.snapshot?.workspace,tab?.snapshot?.inference?.model,tab?.snapshot?.inference?.reasoning_effort,tab?.snapshot?.inference?.service_tier].filter(Boolean).join(' · ')}</small>
+            {tab&&connection&&tab.snapshot?.inference&&<InferenceControls tab={tab} workspace={workspace} connection={connection}/>}
+            <small className="composer-summary" title={tab?.snapshot?.workspace||''}>{tab?.snapshot?.workspace}</small>
             {connection&&voyage&&<VoyageActions connection={connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} accessTrigger triggerLabel={`Access: ${{'read-only':'Read only',approval:'Approval',unrestricted:'Full access'}[tab?.snapshot?.access as 'read-only'|'approval'|'unrestricted']||'Unknown'}`}/>}
         </div>{running && <Button variant="outline" type="button" aria-label="Stop run" disabled={!canStop} onClick={() => tab && void workspace.act(tab.key,'cancel')}><SquareIcon aria-hidden="true"/>{stopping?'Stopping…':'Stop run'}</Button>}<Button variant="default" aria-label={sendOp === 'steer' ? 'Send to current run' : 'Send'} disabled={!enabled || (!tab?.draft.trim() && !tab?.pictures.length)}><ArrowUpIcon aria-hidden="true"/>{sendOp === 'steer' ? 'Send to current run' : 'Send'}</Button></div><small className="composer-hint">Enter to send · Shift+Enter for a new line</small></Card>
     </form>;
@@ -102,7 +104,6 @@ export function RunStatus({tab}: {tab: Tab}) {
 
 export function Conversation({tab, workspace, active, onSettings, connection, voyage}: {tab: Tab; workspace: Workspace; active: boolean; onSettings:()=>void; connection?:any; voyage?:any}) {
     const run = tab.snapshot?.run, scroll = useRef<HTMLDivElement>(null), following = useRef(true);
-    const pendingReceipts=(()=>{try{return workspace.pending(tab).length>0;}catch{return false;}})();
     const loadingHistory = useRef(false), retryHistoryAt = useRef(0);
     const [showJump,setShowJump] = useState(false);
     useEffect(() => {if(active && following.current && scroll.current) scroll.current.scrollTop=scroll.current.scrollHeight;},[active,tab.snapshot]);
@@ -139,7 +140,6 @@ export function Conversation({tab, workspace, active, onSettings, connection, vo
     const location=[connection?.name,tab.snapshot?.workspace].filter(Boolean).join(' · ');
     return <section className="conversation" hidden={!active} aria-label={tab.title}>
         <header className="conversation-header"><div className="conversation-title"><h1 title={tab.title}>{tab.title}</h1>{location&&<p title={location}>{location}</p>}</div>{headerStatus&&<span className="status-label" data-status-tone={headerStatus.tone} data-animated={headerStatus.animated||undefined}><i aria-hidden="true"/>{headerStatus.label}</span>}</header>
-        {tab.notice && <Alert className="notice" role="status"><AlertDescription>{tab.notice}</AlertDescription>{pendingReceipts&&<Button variant="ghost" onClick={() => void workspace.reconcile(tab.key)}>Check receipts</Button>}</Alert>}
         <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {const el=scroll.current!;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;setShowJump(!following.current);loadNearTop();}}><div className="thread">
             {!tab.snapshot && <p className="empty">Waiting for a current Vessel snapshot…</p>}
             {threadRows(tab.snapshot?.messages||[]).map(row=>row.entries?<ToolGroup key={row.key} entries={row.entries} running={['running','starting','cancelling'].includes(run?.state)} messageStart={run?.message_start} decisions={tab.decisions.length>0} renderMessage={renderMessage}/>:<React.Fragment key={row.key}>{renderMessage(row.message)}</React.Fragment>)}
@@ -167,7 +167,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     const {fleet, workspace} = runtime;
     useSyncExternalStore(workspace.subscribe, workspace.getVersion, workspace.getVersion);
     const [active, setActive] = useState<string | null>(null), [query, setQuery] = useState('');
-    const [vesselFilter,setVesselFilter] = useState('all'), [stateFilter,setStateFilter] = useState('current');
+    const [vesselFilter,setVesselFilter] = useState('all'), [stateFilter,setStateFilter] = useState('current'),[settledOpen,setSettledOpen]=useState(false);
     const [route, setRoute] = useState(() => typeof window === 'undefined' ? null : voyageLocation(window.location.pathname));
     const selectVoyage = (vessel: string, session: string, title: string) => {
         const path = voyagePath(vessel, session);
@@ -209,6 +209,12 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         else setActive(null); // Never open an unlisted voyage or borrow another Vessel's session.
     }, [route?.vessel, route?.session, fleet.connections.get(route?.vessel || '')?.voyages.some((item: any) => item.session_id === route?.session), runtime]);
     const selected=active && route && active === JSON.stringify([route.vessel, route.session]) ? workspace.tabs.get(active) : null;
+    const grouped=sidebarGroups(voyages,selected?.key||null,voyage=>{
+        const tab=workspace.tabs.get(JSON.stringify([voyage.connection.id,voyage.session_id]));
+        let pendingReceipts=0;try{if(tab)pendingReceipts=workspace.pending(tab).length;}catch{/* Unavailable journal state is shown in the open voyage. */}
+        return {decisions:tab&&!tab.stale?tab.decisions.length:0,pendingReceipts};
+    });
+    const groupedView=!query.trim()&&vesselFilter==='all'&&stateFilter==='current';
     const startNew=()=>{
         if(window.location.pathname!=='/')window.history.pushState(null,'','/'+window.location.search+window.location.hash);
         setRoute(null);setActive(null);setMobile(false);
@@ -218,17 +224,21 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         setNewDraftReset(value=>value+1);
         await completeNewVoyage(workspace,key,message);
     };
+    const row=(voyage:any)=>{
+        const key=JSON.stringify([voyage.connection.id,voyage.session_id]),tab=workspace.tabs.get(key);
+        const status=cardStatus(voyage,Boolean(voyage.connection.client),tab&&!tab.stale ? tab.snapshot : null);
+        return <div className="voyage-row" key={key}><button type="button" className="voyage-card py-2" data-status-tone={status.tone} data-animated={status.animated || undefined} aria-current={selected?.key===key} onClick={()=>selectVoyage(voyage.connection.id,voyage.session_id,voyage.name||voyage.session_id)}>
+            <span className="card-title" title={voyage.name||voyage.session_id}>{voyage.name||voyage.session_id}{tab?.draft && <span className="card-draft" title="Unsent draft"> •</span>}</span><span className="card-meta"><span title={voyage.connection.name}>{voyage.connection.name}</span><time title={voyage.activity?.iso}>{activityLabel(voyage.activity)}</time></span><span className="card-status status-label"><i aria-hidden="true"/>{status.label}{status.detail&&<span className="card-detail">{status.detail}</span>}</span>
+        </button><VoyageActions connection={voyage.connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} portalContainer={mobilePortal}/></div>;
+    };
     const sidebar=<aside className={`sidebar ${mobile?'mobile-open':''}`} aria-label="Voyages">
-            <header className="sidebar-heading"><h2>Voyages <span>{voyages.length}{voyages.length!==allVoyages.length?` of ${allVoyages.length}`:''}</span></h2>{(route||mobile)&&<Button variant="default" size="icon" onClick={startNew} aria-label="New voyage" title="New voyage"><PlusIcon aria-hidden="true"/></Button>}<Button variant="ghost" size="icon" className="mobile-close lg:hidden" aria-label="Close voyage navigation" onClick={()=>setMobile(false)}><XIcon aria-hidden="true"/></Button></header>
+            <header className="sidebar-heading"><h2>Voyages <span>{voyages.length}{voyages.length!==allVoyages.length?` of ${allVoyages.length}`:''}</span></h2><Button variant="default" size="icon" onClick={startNew} aria-label="New voyage" title="New voyage"><PlusIcon aria-hidden="true"/></Button><Button variant="ghost" size="icon" className="mobile-close lg:hidden" aria-label="Close voyage navigation" onClick={()=>setMobile(false)}><XIcon aria-hidden="true"/></Button></header>
             <div className="search"><SearchIcon aria-hidden="true"/><Input aria-label="Find a voyage or Vessel" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search voyages…" className="pl-9"/></div>
             <div className="grid grid-cols-2 gap-2"><label className="sr-only" htmlFor="voyage-vessel-filter">Filter by Vessel</label><NativeSelect id="voyage-vessel-filter" value={vesselFilter} onChange={event=>setVesselFilter(event.target.value)}><option value="all">All Vessels</option>{connections.map(connection=><option key={connection.id} value={connection.id}>{connection.name}</option>)}</NativeSelect><label className="sr-only" htmlFor="voyage-state-filter">Filter by status</label><NativeSelect id="voyage-state-filter" value={stateFilter} onChange={event=>setStateFilter(event.target.value)}><option value="current">Current</option><option value="active">Active</option><option value="available">Not active</option><option value="archived">Archived</option><option value="all">All states</option></NativeSelect></div>
-            <nav className="voyage-list" aria-label="Voyages">{voyages.map((voyage:any)=>{
-                const key=JSON.stringify([voyage.connection.id,voyage.session_id]),tab=workspace.tabs.get(key);
-                const status=cardStatus(voyage,Boolean(voyage.connection.client),tab&&!tab.stale ? tab.snapshot : null);
-                return <div className="voyage-row" key={key}><button type="button" className="voyage-card" data-status-tone={status.tone} data-animated={status.animated || undefined} aria-current={selected?.key===key} onClick={()=>selectVoyage(voyage.connection.id,voyage.session_id,voyage.name||voyage.session_id)}>
-                    <span className="card-title" title={voyage.name||voyage.session_id}>{voyage.name||voyage.session_id}{tab?.draft && <span className="card-draft" title="Unsent draft"> •</span>}</span><span className="card-meta"><span title={voyage.connection.name}>{voyage.connection.name}</span><time title={voyage.activity?.iso}>{activityLabel(voyage.activity)}</time></span><span className="card-status status-label"><i aria-hidden="true"/>{status.label}{status.detail&&<span className="card-detail">{status.detail}</span>}</span>
-                </button><VoyageActions connection={voyage.connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} portalContainer={mobilePortal}/></div>;
-            })}{!voyages.length && <div className="grid gap-2 p-2"><p className="empty">{query||vesselFilter!=='all'||stateFilter!=='current'?'No voyages match these filters.':'No current voyages.'}</p>{(query||vesselFilter!=='all'||stateFilter!=='current')&&<Button variant="outline" type="button" onClick={()=>{setQuery('');setVesselFilter('all');setStateFilter('current');}}>Clear filters</Button>}</div>}</nav>
+            <nav className="voyage-list" aria-label="Voyages">{groupedView?<>
+                {([['attention','Needs you'],['working','Working'],['recent','Recent']] as const).map(([kind,title])=>grouped[kind].length>0&&<div key={kind} className="grid gap-0.5"><h3 className="px-2 pt-3 pb-1 text-xs font-medium text-muted-foreground">{title} · {grouped[kind].length}</h3>{grouped[kind].map(row)}</div>)}
+                {grouped.settled.length>0&&<div className="grid gap-0.5"><Button variant="ghost" type="button" className="mt-2 w-full justify-start text-xs text-muted-foreground" aria-expanded={settledOpen} onClick={()=>setSettledOpen(value=>!value)}><ChevronRightIcon className={settledOpen?'rotate-90':''} aria-hidden="true"/>Settled · {grouped.settled.length}</Button>{settledOpen&&grouped.settled.map(row)}</div>}
+            </>:voyages.map(row)}{!voyages.length && <div className="grid gap-2 p-2"><p className="empty">{query||vesselFilter!=='all'||stateFilter!=='current'?'No voyages match these filters.':'No current voyages.'}</p>{(query||vesselFilter!=='all'||stateFilter!=='current')&&<Button variant="outline" type="button" onClick={()=>{setQuery('');setVesselFilter('all');setStateFilter('current');}}>Clear filters</Button>}</div>}</nav>
             <footer className="sidebar-footer"><p className="connection-state" role="status">{selected ? selected.stale?'Reconnecting…':`Connected · ${selected.snapshot?.run?.state||'idle'}` : connections.some((c:any)=>c.client)?'Ready':connections.length?'Connecting…':'No Vessels connected'}</p>
                 <div className="footer-controls">
                     <div className="connections"><DropdownMenu>
@@ -251,7 +261,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         {!mobile&&sidebar}
         <main className="voyage-workspace" aria-label="Conversation"><NewVoyage fleet={fleet} tenant={bootstrap.tenantId} hidden={Boolean(route)} resetToken={newDraftReset} reloadToken={profileReload} onCreated={deliverNewVoyage} onAdvanced={()=>setSettings({})}/>
             {route && !selected && <p className="empty" role="status">Waiting for this voyage on its Vessel. If it does not appear, check your connection or access.</p>}
-            {selected && <HostBrowser key={selected.key} tab={selected} client={fleet.connections.get(selected.vessel)?.client}/> }
+            {selected && <HostBrowser key={selected.key} tab={selected} client={fleet.connections.get(selected.vessel)?.client} workspace={workspace}/> }
             {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})} connection={fleet.connections.get(tab.vessel)} voyage={fleet.connections.get(tab.vessel)?.voyages.find((item:any)=>item.session_id===tab.session)}/>)}
         </main>
         {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} connections={fleet.connections} tenant={bootstrap.tenantId} onReconnect={()=>fleet.reconnect()} onClose={()=>setManage(false)}/>}

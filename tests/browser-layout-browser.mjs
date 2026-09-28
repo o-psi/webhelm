@@ -60,8 +60,9 @@ try {
                 else if(c.op==='update_status')result=updateRecord;
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
+                else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
-                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',revision:1,observation_cursor:5,messages:Array.from({length:40},(_,i)=>({role:'assistant',content:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
+                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1,observation_cursor:5,messages:[...Array.from({length:40},(_,i)=>({role:'assistant',content:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
                 else if(c.op==='decisions')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:[]};
                 else if(c.op==='host_browser'){
                     if(c.operation.action==='control'){mode=c.operation.mode;binding.controller_epoch++;}
@@ -89,6 +90,13 @@ try {
         await page.getByRole('button',{name:'Account and appearance'}).click();
         await page.getByRole('menuitemradio',{name:'dark'}).click();
         check(await page.locator('html.dark').count()===1,'mobile: dark appearance did not apply');
+        await page.keyboard.press('Escape');
+        await page.locator('.sidebar').click({position:{x:150,y:400}});
+        await page.waitForTimeout(300);
+        const selectTheme=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='var(--foreground)';document.body.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {expected,actual:getComputedStyle(document.querySelector('.sidebar [data-slot="native-select"]')).color};});
+        const lightness=value=>Number(value.match(/\(([\d.]+)/)?.[1]);
+        check(Math.abs(lightness(selectTheme.actual)-lightness(selectTheme.expected))<0.02,`mobile: native select foreground ${JSON.stringify(selectTheme)}`);
+        await page.screenshot({path:`${output}/${label}-dark-empty.png`});
         await page.getByRole('button',{name:'Account and appearance'}).click();
         await page.getByRole('menuitemradio',{name:'light'}).click();
     }
@@ -134,6 +142,10 @@ try {
     await page.getByRole('menuitemradio',{name:'light'}).click();
     await page.locator('.voyage-card').click();
     const conversation=page.locator('.conversation:not([hidden])');
+    await page.getByRole('button',{name:'Choose model'}).click();
+    check(await page.getByRole('menuitem',{name:'Fixture model'}).isVisible(),`${label}: direct model choices did not load`);
+    await page.keyboard.press('Escape');
+    check(await page.locator('button[aria-label="Choose reasoning"]').isVisible(),`${label}: direct reasoning control is missing`);
     const draft=conversation.locator('textarea').first();
     await draft.fill('Retained synthetic draft');
     if(label==='desktop'){
@@ -153,6 +165,17 @@ try {
     });
     const before=await geometry();
     await page.screenshot({path:`${output}/${label}-closed.png`});
+    await page.getByRole('button',{name:'Changes',exact:true}).click();
+    check(await page.getByLabel('Recorded changes').isVisible(),`${label}: recorded changes dock did not open`);
+    check(await page.getByLabel('Executing-host inspection').isVisible(),`${label}: executing-host inspection is missing`);
+    await page.screenshot({path:`${output}/${label}-workspace.png`});
+    await page.getByRole('button',{name:'Recorded edits',exact:true}).click();
+    check(await page.getByText('src/fixture.ts').first().isVisible(),`${label}: recorded patch path is missing`);
+    await page.waitForTimeout(180);
+    if(label==='mobile')check(await page.locator('.task-browser-panel').evaluate(el=>Math.abs(el.getBoundingClientRect().width-innerWidth)<1),`${label}: review dock does not fill the viewport`);
+    await page.screenshot({path:`${output}/${label}-changes.png`});
+    await page.getByRole('button',{name:'Close panel',exact:true}).click();
+    await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.getByRole('button',{name:'Browser',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('.host-browser-viewer')?.querySelector('.browser-next-mirror'));
     await page.waitForTimeout(150);

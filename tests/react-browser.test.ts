@@ -24,15 +24,15 @@ test('selected React browser uses shared controls, live revision fences and deta
     }});
     let tab = {key:'one',vessel:'vessel-one',session:'session-one',title:'Selected task',incarnation:'owner-one',stale:false,snapshot:{revision:7}} as Tab;
     let client: any = socket('first');
-    const render = () => act(async () => {root.render(React.createElement(HostBrowser,{key:tab.key,tab,client})); await tick();});
+    const render = () => act(async () => {root.render(React.createElement(HostBrowser,{key:tab.key,tab,client,workspace:{} as any})); await tick();});
     const click = async (label: string) => act(async () => {
-        const button = [...dom.window.document.querySelectorAll('button')].find(node=>node.textContent===label);
+        const button = label==='Browser'?dom.window.document.querySelector<HTMLButtonElement>('.task-browser-action'):[...dom.window.document.querySelectorAll('button')].find(node=>node.textContent===label);
         assert.ok(button, label); button.click(); await tick();
     });
     try {
         await render(); assert.equal(sent.length,0);
         await click('Browser');
-        assert.equal(dom.window.document.querySelector('[aria-expanded]')?.getAttribute('aria-expanded'),'true');
+        assert.equal(dom.window.document.querySelector('.task-browser-action')?.getAttribute('aria-expanded'),'true');
         assert.ok(dom.window.document.querySelector('.browser-next-mirror'));
         assert.equal(dom.window.document.querySelector('video'),null);
         assert.ok(sent.some(item=>item.operation.action==='start'), 'one click opens and connects the viewer');

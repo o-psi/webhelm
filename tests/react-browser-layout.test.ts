@@ -18,11 +18,11 @@ test('mobile viewer traps focus, Escape restores action and conversation DOM sur
     const tab = {key:'one',session:'one',title:'Research trip',stale:true,snapshot:{messages:[{role:'tool',name:'host_browser'}]}} as Tab;
     try {
         await act(async()=>root.render(React.createElement(React.Fragment,null,
-            React.createElement(HostBrowser,{tab,client:null}),
+            React.createElement(HostBrowser,{tab,client:null,workspace:{} as any}),
             React.createElement('section',{className:'conversation'},React.createElement('div',{className:'transcript'}),React.createElement('textarea',{defaultValue:'Unsent draft'})))));
         const draft = dom.window.document.querySelector('textarea')!, transcript = dom.window.document.querySelector('.transcript')!;
         transcript.scrollTop = 321;
-        const action = dom.window.document.querySelector('button')!;
+        const action = dom.window.document.querySelector<HTMLButtonElement>('.task-browser-action')!;
         assert.equal(action.textContent,'Browser');
         assert.match(dom.window.document.getElementById(action.getAttribute('aria-describedby')!)!.textContent!,/activity/);
         await act(async()=>action.click());
@@ -49,7 +49,7 @@ test('mobile viewer traps focus, Escape restores action and conversation DOM sur
 test('desktop split and mobile overlay CSS contracts for the production console', () => {
     // JSDOM does not implement viewport layout: actual screenshots are a separate integration check.
     const react = readFileSync(new URL('../resources/react/style.css',import.meta.url),'utf8');
-    assert.match(react,/grid-template-columns:minmax\(300px,32%\) minmax\(0,1fr\)/);
+    assert.match(react,/grid-template-columns:minmax\(300px,40%\) minmax\(0,1fr\)/);
     assert.match(react,/\.task-browser-panel\.expanded/);
     assert.match(react,/\.mobile-browser-sheet\[data-slot="sheet-content"\]\{inset:0;width:100vw/);
 });

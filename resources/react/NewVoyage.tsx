@@ -17,11 +17,18 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,onCreated,
     const connection=fleet.connections.get(vessel);
     const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(''),[catalogue,setCatalogue]=useState<any>(null),[accounts,setAccounts]=useState<any[]>([]),[profileId,setProfileId]=useState('');
     const [choicesFor,setChoicesFor]=useState<{vessel:string;path:string;client:any;reloadToken:number}|null>(null);
+    const [modelOptions,setModelOptions]=useState<any[]>([]),[modelChoicesFor,setModelChoicesFor]=useState<string|null>(null);
+    const [modelChoice,setModelChoice]=useState<string|null>(null),[reasoningChoice,setReasoningChoice]=useState<string|null>(null);
     const [text,setText]=useState(''),[pictures,setPictures]=useState<File[]>([]),[access,setAccess]=useState<NewVoyageMessage['access']>('approval');
     const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[preparing,setPreparing]=useState(false);
-    const input=useRef<HTMLTextAreaElement>(null),pictureInput=useRef<HTMLInputElement>(null),creation=useRef<Creation|null>(null),capsGeneration=useRef(0),profilesGeneration=useRef(0);
+    const input=useRef<HTMLTextAreaElement>(null),pictureInput=useRef<HTMLInputElement>(null),creation=useRef<Creation|null>(null),capsGeneration=useRef(0),profilesGeneration=useRef(0),modelsGeneration=useRef(0);
     const profile=catalogue?.profiles?.find((item:any)=>item.id===profileId);
     const profileAccount=accounts.find(item=>sameAccount(item.binding,profile?.account));
+    const selectedModel=modelChoice||profile?.model||'';
+    const selectedReasoning=reasoningChoice===null?(modelChoice?'':profile?.reasoning_effort||''):reasoningChoice;
+    const modelContext=profile&&profileAccount?.ready?JSON.stringify([vessel,path,profile.id,profileAccount.binding,connection?.client===choicesFor?.client?choicesFor?.reloadToken:null]):null;
+    const modelsReady=modelContext!==null&&modelChoicesFor===modelContext;
+    const currentModel=modelOptions.find(item=>item.id===selectedModel);
     useEffect(()=>{if(!hidden)input.current?.focus();},[hidden]);
     useEffect(()=>{setText('');setPictures([]);setNotice('');},[resetToken]);
     useEffect(()=>{
@@ -52,8 +59,19 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,onCreated,
         },180);
         return()=>{window.clearTimeout(timer);profilesGeneration.current++;};
     },[caps,path,vessel,connection?.client,reloadToken]);
+    useEffect(()=>{setModelChoice(null);setReasoningChoice(null);},[profileId,path,vessel]);
+    useEffect(()=>{
+        const epoch=++modelsGeneration.current;setModelOptions([]);setModelChoicesFor(null);
+        if(!profile||!profileAccount?.ready||!connection?.client||!modelContext)return;
+        void vesselRead(connection,'account_models',{workspace:path,account:profileAccount.binding}).then(value=>{
+            if(epoch!==modelsGeneration.current||connection.client!==fleet.connections.get(vessel)?.client||!sameAccount(value.account,profileAccount.binding))return;
+            setModelOptions(value.models||[]);setModelChoicesFor(modelContext);
+        }).catch(()=>{/* Saved profiles can still be used when model discovery is unavailable. */});
+        return()=>{modelsGeneration.current++;};
+    },[modelContext,connection?.client]);
     const pending=(()=>{try{creation.current??=new Creation(localStorage,tenant);return {records:creation.current.pending(),error:false};}catch{return {records:[],error:true};}})();
-    const canCreate=Boolean(!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready);
+    const validOverride=!modelChoice&&!reasoningChoice||modelsReady&&Boolean(currentModel)&&(!selectedReasoning||currentModel.reasoning_efforts?.includes(selectedReasoning));
+    const canCreate=Boolean(!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready&&validOverride);
     const canSend=canCreate&&(caps.scope==='owner'||caps.rights?.includes('execute'));
     const hasMessage=Boolean(text.trim()||pictures.length);
     async function addPictures(files:File[]){
@@ -85,8 +103,17 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,onCreated,
             const currentProfile=latestCatalogue.profiles?.find((item:any)=>item.id===selected.id);
             if(latestCatalogue.revision!==selectedRevision||!currentProfile||JSON.stringify(profileSettings(currentProfile))!==JSON.stringify(profileSettings(selected)))throw new Error('Saved profiles changed. Review the selected profile before sending.');
             if(!accountChoices(latestAccounts).some((item:any)=>item.ready&&sameAccount(item.binding,currentProfile.account)))throw new Error('The selected account is unavailable. Choose another profile.');
+            const settings=profileSettings(currentProfile);
+            if(modelChoice!==null||reasoningChoice!==null){
+                const latestModels=await vesselRead(connection,'account_models',{workspace:path,account:settings.account});
+                if(!sameAccount(latestModels.account,settings.account))throw new Error('Account identity changed. Review model choices.');
+                const chosen=latestModels.models?.find((item:any)=>item.id===selectedModel);
+                if(!chosen||selectedReasoning&&!chosen.reasoning_efforts?.includes(selectedReasoning))throw new Error('Model or reasoning choices changed. Review them before sending.');
+                settings.model=selectedModel;settings.reasoning_effort=selectedReasoning||null;
+                if(modelChoice!==null)settings.service_tier=null;
+            }
             creation.current??=new Creation(localStorage,tenant);
-            const process=await creation.current.start(connection,path,profileSettings(currentProfile));
+            const process=await creation.current.start(connection,path,settings);
             await onCreated(vessel,process,{text,pictures:[...pictures],access,send,applyAccess:true});
         }catch(error){setNotice(error instanceof Error?error.message:'Creation unavailable.');}
         finally{setBusy(false);}
@@ -116,8 +143,10 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,onCreated,
                         <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Workspace{caps?.scope==='owner'?<Input value={path} disabled={busy} onChange={event=>setPath(event.target.value)} placeholder="Absolute folder"/>:<NativeSelect value={path} disabled={busy||!caps} onChange={event=>setPath(event.target.value)}>{(caps?.workspaces||[]).map((item:any)=><option key={item.path} value={item.path}>{item.name} · {item.path}</option>)}</NativeSelect>}</label>
                         <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Profile<NativeSelect value={profileId} disabled={busy||!catalogue} onChange={event=>setProfileId(event.target.value)}>{!catalogue&&<option value="">Loading profiles…</option>}{(catalogue?.profiles||[]).map((item:any)=><option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}</NativeSelect></label>
                         <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Access<NativeSelect value={access} disabled={busy} onChange={event=>setAccess(event.target.value as NewVoyageMessage['access'])}><option value="read-only">Read only</option><option value="approval">Approval</option><option value="unrestricted">Full access</option></NativeSelect></label>
+                        <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Model<NativeSelect value={selectedModel} disabled={busy||!modelsReady} onChange={event=>{setModelChoice(event.target.value);setReasoningChoice('');}}>{!modelsReady&&<option value={selectedModel}>{selectedModel||'Loading models…'}</option>}{modelsReady&&modelOptions.map((item:any)=><option key={item.id} value={item.id}>{item.display_name||item.id}</option>)}</NativeSelect></label>
+                        <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Reasoning<NativeSelect value={selectedReasoning} disabled={busy||!modelsReady||!currentModel} onChange={event=>setReasoningChoice(event.target.value)}><option value="">Provider default</option>{[...new Set<string>([...(currentModel?.reasoning_efforts||[]),...(selectedReasoning?[selectedReasoning]:[])])].map(value=><option key={value} value={value}>{value}</option>)}</NativeSelect></label>
                     </div>
-                    {profile&&<small className="min-w-0 truncate text-muted-foreground" title={profileSummary(profile,accounts)}>{profileSummary(profile,accounts)}</small>}
+                    {profile&&<small className="min-w-0 truncate text-muted-foreground" title={profileSummary(profile,accounts)}>{profileAccount?.label||'Account unavailable'} · {modelChoice?'Model override for this voyage':'Saved profile'}{modelChoice&&' · service tier resets to provider default'}</small>}
                     <div className="new-voyage-actions flex flex-wrap items-center justify-end gap-2"><Button variant="ghost" type="button" onClick={onAdvanced}><Settings2Icon aria-hidden="true"/>Manage profiles</Button><Button variant="ghost" type="button" aria-label="Attach pictures" disabled={busy||preparing} onClick={()=>pictureInput.current?.click()}><PaperclipIcon aria-hidden="true"/>Attach</Button><Button variant="outline" type="button" disabled={!canCreate} onClick={()=>void create(false)}>Create without message</Button><Button type="submit" disabled={!canSend||!hasMessage}><ArrowUpIcon aria-hidden="true"/>{busy?'Working…':'Send'}</Button></div>
                     <small className="composer-hint">The voyage is created on Send. Access is applied and confirmed before your message starts a run.</small>
                 </Card>

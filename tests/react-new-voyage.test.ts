@@ -20,6 +20,7 @@ async function mount({uncertain=false}:{uncertain?:boolean}={}){
             case 'capabilities':result={vessel_id:'v',scope:'owner',features:['execution_profiles'],workspaces:[{path:'/work',name:'Work'}]};break;
             case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
             case 'accounts':result={accounts:[{id:'account',connection_id:'provider',identity_generation:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
+            case 'account_models':result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low']}]};break;
             case 'start_account':if(uncertain)return {protocol:1,outcome_unknown:true,result:null};result={session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'};break;
             case 'resolve_start_account':result={command_id:command.command_id,session_id:command.session_id,status:'created',process:{session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'}};break;
             default:throw new Error(command.op);
@@ -63,6 +64,23 @@ test('uncertain creation is never replayed and recovery transfers an unsent draf
         assert.equal(view.created[0].message.text,'Keep this draft');
         assert.equal(view.created[0].message.send,false);
         assert.equal(view.created[0].message.applyAccess,false);
+    }finally{await view.dispose();}
+});
+
+test('direct model and reasoning choices create one voyage without editing the saved profile',async()=>{
+    const view=await mount();
+    try{
+        const selects=[...document.querySelectorAll<HTMLSelectElement>('select')];
+        const model=selects.find(select=>select.closest('label')?.textContent?.startsWith('Model'))!;
+        const reasoning=selects.find(select=>select.closest('label')?.textContent?.startsWith('Reasoning'))!;
+        assert.equal(model.disabled,false);
+        await act(async()=>{model.value='other';model.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
+        await act(async()=>{reasoning.value='low';reasoning.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
+        await act(async()=>view.button('Create without message').click());
+        const start=view.commands.find(command=>command.op==='start_account');
+        assert.equal(start.model,'other');assert.equal(start.reasoning_effort,'low');assert.equal(start.service_tier,null);
+        assert.equal(view.commands.some(command=>command.op==='save_profile'),false);
+        assert.equal(view.created[0].message.send,false);
     }finally{await view.dispose();}
 });
 

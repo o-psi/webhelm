@@ -33,6 +33,15 @@ function Entry({entry,running,messageStart,decisions,renderMessage}:{entry:ToolE
     return <Collapsible className="tool-entry" open={open} onOpenChange={setOpen} data-tool-id={entry.key}><CollapsibleTrigger asChild><Button variant="ghost" className={toolTrigger} type="button"><ChevronRightIcon className="tool-chevron" aria-hidden="true"/><span className="tool-summary-text">{label}</span></Button></CollapsibleTrigger><CollapsibleContent><div className="tool-body">{args!=null&&<pre>{typeof args==='string'?args:JSON.stringify(args,null,2)}</pre>}{entry.request?.projection_truncated&&renderMessage({...entry.request,content:'',parts:[],tool_calls:[]})}{entry.result&&renderMessage(entry.result)}</div></CollapsibleContent></Collapsible>;
 }
 export function ToolGroup({entries,running,messageStart,decisions,renderMessage}:{entries:ToolEntry[];running:boolean;messageStart:number;decisions:boolean;renderMessage:(message:any)=>React.ReactNode}){
-    const [older,setOlder]=useState(false);const count=Math.max(0,entries.length-3);
-    return <section className="tool-group" aria-label="Tool actions">{count>0&&<div className="tool-group-heading"><span>{count} older actions · {entries.slice(0,count).filter(entry=>entry.result).length}/{count} finished</span><Button variant="link" size="sm" className="h-auto px-0 text-xs text-muted-foreground" type="button" onClick={()=>setOlder(!older)}>{older?'Hide older actions':'Show older actions'}</Button></div>}{entries.map((entry,index)=><div key={entry.key} hidden={!older&&index<count}><Entry entry={entry} running={running} messageStart={messageStart} decisions={decisions} renderMessage={renderMessage}/></div>)}</section>;
+    const [open,setOpen]=useState(false);
+    const category=(entry:ToolEntry)=>{
+        const name=entry.call?.function?.name||entry.call?.name;
+        return name==='shell'?'command':['write_file','apply_patch'].includes(name)?'edit':name==='read_file'?'read':name==='search_files'?'search':name==='host_browser'?'browser action':'other action';
+    };
+    const counts=new Map<string,number>();for(const entry of entries)counts.set(category(entry),(counts.get(category(entry))||0)+1);
+    const kinds=[...counts].map(([name,count])=>`${count} ${name}${count===1?'':'s'}`).join(' · ');
+    const failed=entries.filter(entry=>/^(Failed|Refused|Approval denied|Approval expired|Approval invalidated|Approval unavailable|Cancelled|Command failed|Execution error)/.test(actionStatus(entry.call||{},entry.result,false,decisions))).length;
+    const pending=entries.filter(entry=>!entry.result).length;
+    const outcome=failed?`${failed} failed`:pending?`${pending} ${running?'working':'unconfirmed'}`:`${entries.length} recorded`;
+    return <section className="tool-group" aria-label="Tool actions"><Button variant="ghost" type="button" className="tool-group-heading h-auto min-h-7 w-full justify-start gap-2 px-1 text-left text-xs text-muted-foreground" aria-expanded={open} onClick={()=>setOpen(value=>!value)}><ChevronRightIcon className={`size-3.5 ${open?'rotate-90':''}`} aria-hidden="true"/><span className="min-w-0 flex-1 truncate">{kinds}</span><span className={failed?'text-destructive':''}>{outcome}</span></Button>{open&&<div className="grid gap-1 border-l pl-2">{entries.map(entry=><Entry key={entry.key} entry={entry} running={running} messageStart={messageStart} decisions={decisions} renderMessage={renderMessage}/>)}</div>}</section>;
 }

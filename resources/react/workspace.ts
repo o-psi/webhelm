@@ -1,10 +1,14 @@
 import {uuid, request, voyageResult, mutation, resolved, receiptStatus} from '../js/vessel-client.js';
 import {ConversationStream} from '../js/conversation-stream.js';
 import {preparePicture, MAX_PICTURE_BYTES, MAX_PICTURES} from './prepare-picture';
+import {inspectionRequest,inventorySupports,type InspectionScope} from './inspection-command';
 
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
 export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any};
 export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]};
+const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision'} as Record<string,string>)[op]||'action';
+const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
+const settledNotice=(op:string,status:string)=>status==='not_applied'?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
 // Transport state outlives React renders and selected tabs. No prompt is persisted.
 export class Workspace {
     tabs = new Map<string, Tab>();
@@ -79,7 +83,7 @@ export class Workspace {
         this.reads.set(key, task);
         try { await task; } finally { this.reads.delete(key); if(this.queued.delete(key) && !this.closed) void this.refresh(key); }
     }
-    async act(key: string, op: string, fields: Record<string, unknown> = {}) {
+    async act(key: string, op: string, fields: Record<string, unknown> = {}, onReceipt?: (value:any)=>void) {
         const tab = this.tabs.get(key);
         if (!tab || !this.actionable(tab) || !this.permitted(tab,op)) return;
         if (tab.snapshot.lifecycle?.archived || tab.snapshot.lifecycle?.deleted || (tab.snapshot.pending_cleanup_run && !['cancel','respond','set_access','steer'].includes(op) && !['running','starting','cancelling'].includes(tab.snapshot.run?.state))) { tab.notice='Voyage lifecycle or cleanup blocks this action. Review its status.'; this.changed(); return; }
@@ -135,7 +139,8 @@ export class Workspace {
             const known = resolved(response, command.command.command_id, tab.session);
             if (known && receiptStatus(response) !== 'unknown_after_restart') connection.journal.settle(command.command.command_id);
             const status = receiptStatus(response);
-            tab.notice = response.error ? `Vessel refused: ${response.error}` : !known || status === 'unknown_after_restart' ? 'Outcome uncertain. Do not resend; check the receipt.' : status === 'not_applied' ? 'Message was not applied; draft retained.' : '';
+            if(known&&!response.error&&status!=='not_applied'&&status!=='unknown_after_restart')onReceipt?.(response.result?.result);
+            tab.notice = response.error ? `Vessel refused: ${response.error}` : !known || status === 'unknown_after_restart' ? uncertainNotice(op) : status === 'not_applied' ? settledNotice(op,status) : '';
             if (known && !response.error && ['accepted', 'queued', 'applied'].includes(status) && ['submit', 'steer', 'submit_content'].includes(op)) {
                 if (tab.draft === draft) tab.draft = '';
                 tab.pictures = tab.pictures.filter(picture => !pictures.includes(picture)); pictures.forEach(picture => URL.revokeObjectURL(picture.url));
@@ -146,10 +151,35 @@ export class Workspace {
             if (stage === 'upload' && !command) {
                 tab.notice = `${reason} Draft and pictures retained; no message was submitted.`;
             } else {
-                tab.notice = `Action not confirmed: ${reason} Draft retained. Check receipts before sending again; do not resend an uncertain command.`;
+                tab.notice = uncertainNotice(op);
             }
         }
         finally { tab.busy = false; if (stage === 'submit') tab.stale = true; this.changed(); await this.refresh(key); }
+    }
+    async inspect(key:string,scope:InspectionScope,path:string){
+        const tab=this.tabs.get(key);
+        if(!tab||!this.actionable(tab)||!this.permitted(tab,'operator_tool'))throw new Error('Wait for a fresh voyage with execution permission.');
+        if(['accepted','running','awaiting_decision','cancel_requested','starting','cancelling'].includes(tab.snapshot?.run?.state))throw new Error('Wait for the current run before inspecting the workspace.');
+        const command=inspectionRequest(scope,path);
+        const tools=await this.read(key,'controls',{run_id:tab.snapshot?.run?.run_id||null,section:'tools'});
+        if(!inventorySupports(tools,command.name))throw new Error(`Executing voyage does not advertise ${command.name}; no local fallback is available.`);
+        let receipt:any=null;
+        const applied=await this.act(key,'operator_tool',command,value=>{receipt=value;});
+        if(!applied||typeof receipt?.run_id!=='string')throw new Error('Inspection admission or exact run identity is unconfirmed. Check the voyage receipt; do not repeat the request.');
+        return receipt.run_id as string;
+    }
+    async canonicalMessage(key:string,index:number,revision:number){
+        const tab=this.tabs.get(key);if(!tab||tab.snapshot?.revision!==revision||!Number.isSafeInteger(index))throw new Error('Inspection result changed. Reopen it.');
+        const incarnation=tab.incarnation;let offset=0,text='',page:any;
+        do{
+            page=await this.read(key,'message_chunk',{index,offset,limit:65536,expected_revision:revision});
+            if(page.total_bytes>4*1024*1024||typeof page.data!=='string'||new TextEncoder().encode(text).length+new TextEncoder().encode(page.data).length>4*1024*1024||page.has_more&&(!Number.isSafeInteger(page.next_offset)||page.next_offset<=offset))throw new Error('Inspection result exceeds the browser limit or has invalid continuation.');
+            text+=page.data;offset=page.next_offset;
+        }while(page.has_more);
+        if(tab.snapshot?.revision!==revision||tab.incarnation!==incarnation)throw new Error('Inspection result changed. Reopen it.');
+        const message=JSON.parse(text);
+        if(message.role!=='assistant'||typeof message.content!=='string')throw new Error('Canonical inspection result unavailable.');
+        return message.content as string;
     }
     async attach(key: string, files: File[], guard?: () => boolean) {
         const tab = this.tabs.get(key); if (!tab || tab.busy || this.closed || guard && !guard()) return false;
@@ -242,14 +272,17 @@ export class Workspace {
         const connection = this.connections().get(tab.vessel); if (!connection?.client) return;
         tab.busy = true; this.changed();
         try {
+            let lastSettled:{op:string;status:string}|null=null;
             for (const entry of this.pending(tab)) {
                 const response = await connection.client.exchange(request('receipt', {session_id: tab.session, command_id: entry.command_id}));
                 if (resolved(response, entry.command_id, tab.session, true) && receiptStatus(response) !== 'unknown_after_restart') {
                     connection.journal.settle(entry.command_id);
-                    tab.notice = `Receipt ${entry.command_id}: ${receiptStatus(response)}. Review retained draft before sending.`;
-                } else tab.notice = `Receipt ${entry.command_id} remains uncertain. No action replayed.`;
+                    lastSettled={op:entry.op,status:receiptStatus(response)};
+                }
             }
-        } catch { tab.notice = 'Receipt unavailable. No action replayed.'; }
+            const pending=this.pending(tab);
+            tab.notice=pending.length===1?uncertainNotice(pending[0].op):pending.length>1?`We can’t confirm ${pending.length} actions yet. Check the conversation and receipts before trying again.`:lastSettled?settledNotice(lastSettled.op,lastSettled.status):tab.notice;
+        } catch { tab.notice = 'We can’t check the receipt right now. Check the current voyage before trying again.'; }
         finally { tab.busy = false; this.changed(); }
     }
     async observePending(key: string) {

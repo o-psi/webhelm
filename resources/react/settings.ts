@@ -26,8 +26,10 @@ export class Creation {
         const command={op:'start_account',command_id:uuid(),session_id:uuid(),workspace:workspace==='/'?workspace:workspace.replace(/\/+$/,''),...settings};
         const key=`${this.prefix()}${connection.id}:${connection.vessel_id}:${command.command_id}`;
         this.storage.setItem(key,JSON.stringify({vessel:connection.id,vessel_id:connection.vessel_id,command}));
-        const response=await connection.client.exchange({protocol:1,command});
-        if(response?.protocol!==1||response.outcome_unknown!==false)throw new Error('Creation uncertain. Check creation; do not resend.');
+        let response:any;
+        try{response=await connection.client.exchange({protocol:1,command});}
+        catch{throw new Error('We can’t confirm whether the voyage was created. Your draft is kept; check creation before trying again.');}
+        if(response?.protocol!==1||response.outcome_unknown!==false)throw new Error('We can’t confirm whether the voyage was created. Your draft is kept; check creation before trying again.');
         if(response.error!=null){this.storage.removeItem(key);throw new Error('Creation refused. Review settings.');}
         return this.accept(connection,key,command,response.result);
     }
@@ -45,6 +47,6 @@ export class Creation {
         if(result.command_id!==record.command.command_id||result.session_id!==record.command.session_id)throw new Error('Creation receipt identity changed.');
         if(result.status==='created')return this.accept(connection,record.key,record.command,result.process);
         if(result.status==='not_admitted'){this.storage.removeItem(record.key);return null;}
-        throw new Error('Creation remains uncertain. Nothing replayed.');
+        throw new Error('We still can’t confirm whether the voyage was created. Check creation later before trying again.');
     }
 }
