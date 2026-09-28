@@ -6,6 +6,7 @@ import {Button} from './components/ui/button';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
+import {ArrowUpIcon,ChevronDownIcon,FolderIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,SquareIcon,UserRoundIcon} from 'lucide-react';
 import {HostBrowser} from './HostBrowser';
 import React, {useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ToolGroup,threadRows} from './ToolGroup';
@@ -24,10 +25,6 @@ import workingStatuses from '../../shared/helm/assets/working-statuses.json';
 
 type Bootstrap = {tenantId: string; vessels: any[]; ticketUrl: string; connectionsUrl: string; logoutUrl: string};
 const csrf = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
-function Icon({name}: {name: string}) {
-    const paths: Record<string, string> = {plus:'M12 5v14M5 12h14',search:'m21 21-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',folder:'M3 7V5h6l2 2h10v13H3Z',clip:'m9 17 8-8a3 3 0 0 0-4-4l-9 9a5 5 0 0 0 7 7l9-9',up:'m6 12 6-6 6 6M12 6v14',stop:'M6 6h12v12H6Z',menu:'M4 8h16M4 16h16',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1',server:'M3 4h18v6H3ZM3 14h18v6H3ZM6 7h1M6 17h1',chevron:'m8 10 4 4 4-4',user:'M8 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0M4 21v-2a8 8 0 0 1 16 0v2'};
-    return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.chevron}/></svg>;
-}
 function content(value: unknown): string {
     if (typeof value === 'string') return value;
     if (Array.isArray(value)) return value.map(part => part?.text || (part?.type === 'image' ? '[Image attachment]' : JSON.stringify(part))).join('\n');
@@ -49,14 +46,14 @@ function Composer({tab, workspace, onSettings}: {tab?: Tab; workspace: Workspace
     const enabled = tab && workspace.actionable(tab) && workspace.permitted(tab,sendOp);
     const send = () => { if (tab && enabled) void workspace.act(tab.key, sendOp); };
     return <form className="composer" aria-label="Message composer" onPaste={event=>{if(tab&&event.clipboardData.files.length){event.preventDefault();void pickFiles([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(tab&&event.dataTransfer.files.length){event.preventDefault();void pickFiles([...event.dataTransfer.files]);}}} onSubmit={event => {event.preventDefault(); send();}}>
-        <div className="composer-box"><input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{tab?.notice && <p className="composer-feedback" role="status">{tab.notice}</p>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="ghost" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}>×</Button></figure>)}</div>}<Textarea aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
+        <div className="composer-box"><Input ref={fileInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{tab?.notice && <p className="composer-feedback" role="status">{tab.notice}</p>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="ghost" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}>×</Button></figure>)}</div>}<Textarea aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
         <div className="composer-toolbar"><div className="composer-options">
-            <Button variant="ghost" type="button" onClick={onSettings} title="Location"><Icon name="folder"/><span>{tab?.snapshot?.workspace || 'Location'}</span><Icon name="chevron"/></Button>
-            <Button variant="ghost" type="button" disabled={!tab||tab.busy||attaching} aria-label="Attach pictures" title="Attach pictures" onClick={()=>fileInput.current?.click()}><Icon name="clip"/></Button>
-            <Button variant="ghost" type="button" onClick={onSettings} title="Choose profile"><span>Profile</span><Icon name="chevron"/></Button>
+            <Button variant="ghost" type="button" onClick={onSettings} title="Location"><FolderIcon aria-hidden="true"/><span>{tab?.snapshot?.workspace || 'Location'}</span><ChevronDownIcon aria-hidden="true"/></Button>
+            <Button variant="ghost" type="button" disabled={!tab||tab.busy||attaching} aria-label="Attach pictures" title="Attach pictures" onClick={()=>fileInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button>
+            <Button variant="ghost" type="button" onClick={onSettings} title="Choose profile"><span>Profile</span><ChevronDownIcon aria-hidden="true"/></Button>
             <small>{[tab?.snapshot?.inference?.model,tab?.snapshot?.inference?.reasoning_effort,tab?.snapshot?.inference?.service_tier].filter(Boolean).join(' · ')}</small>
             <div className="access-picker"><label className="sr-only" htmlFor={`access-${tab?.session||'new'}`}>Voyage access mode</label><NativeSelect id={`access-${tab?.session||'new'}`} disabled={!enabled} value={tab?.snapshot?.access||''} title="Access is enforced by the executing host; configured roots and limits still apply." onChange={event=>{if(tab)void workspace.act(tab.key,'set_access',{access:event.target.value});}}><option value="" disabled>Access unknown</option><option value="read-only">Read only</option><option value="approval">Approval</option><option value="unrestricted">Full access</option></NativeSelect></div>
-        </div>{running && <Button variant="ghost" type="button" className="icon-button" aria-label="Cancel run" disabled={!enabled} onClick={() => tab && void workspace.act(tab.key,'cancel')}><Icon name="stop"/></Button>}<Button variant="default" className="send-button icon-button" aria-label={sendOp === 'steer' ? 'Steer' : 'Send'} disabled={!enabled || (!tab?.draft.trim() && !tab?.pictures.length)}><Icon name="up"/></Button></div></div>
+        </div>{running && <Button variant="ghost" type="button" className="icon-button" aria-label="Cancel run" disabled={!enabled} onClick={() => tab && void workspace.act(tab.key,'cancel')}><SquareIcon aria-hidden="true"/></Button>}<Button variant="default" className="send-button icon-button" aria-label={sendOp === 'steer' ? 'Steer' : 'Send'} disabled={!enabled || (!tab?.draft.trim() && !tab?.pictures.length)}><ArrowUpIcon aria-hidden="true"/></Button></div></div>
     </form>;
 }
 // Decorative only: the words and frames are not execution progress or transcript content.
@@ -199,8 +196,8 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     }, [route?.vessel, route?.session, fleet.connections.get(route?.vessel || '')?.voyages.some((item: any) => item.session_id === route?.session), runtime]);
     const selected=active && route && active === JSON.stringify([route.vessel, route.session]) ? workspace.tabs.get(active) : null;
     const sidebar=<aside className={`sidebar ${mobile?'mobile-open':''}`} aria-label="Voyages">
-            <header className="sidebar-heading"><h2>Voyages <span>{voyages.length || ''}</span></h2><Button variant="default" className="new-voyage icon-button" onClick={()=>{setMobile(false);setSettings({});}} aria-label="New voyage" title="New voyage"><Icon name="plus"/></Button><Button variant="ghost" className="mobile-close icon-button" aria-label="Close voyage navigation" onClick={()=>setMobile(false)}>×</Button></header>
-            <div className="search"><Icon name="search"/><Input aria-label="Find a voyage or Vessel" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search voyages…"/></div>
+            <header className="sidebar-heading"><h2>Voyages <span>{voyages.length || ''}</span></h2><Button variant="default" className="new-voyage icon-button" onClick={()=>{setMobile(false);setSettings({});}} aria-label="New voyage" title="New voyage"><PlusIcon aria-hidden="true"/></Button><Button variant="ghost" className="mobile-close icon-button" aria-label="Close voyage navigation" onClick={()=>setMobile(false)}>×</Button></header>
+            <div className="search"><SearchIcon aria-hidden="true"/><Input aria-label="Find a voyage or Vessel" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search voyages…"/></div>
             <nav className="voyage-list" aria-label="Voyages">{voyages.map((voyage:any)=>{
                 const key=JSON.stringify([voyage.connection.id,voyage.session_id]),tab=workspace.tabs.get(key);
                 const status=cardStatus(voyage,Boolean(voyage.connection.client),tab&&!tab.stale ? tab.snapshot : null);
@@ -211,20 +208,20 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
             <footer className="sidebar-footer"><p className="connection-state" role="status">{selected ? selected.stale?'Reconnecting…':`Connected · ${selected.snapshot?.run?.state||'idle'}` : connections.some((c:any)=>c.client)?'Ready':connections.length?'Connecting…':'No Vessels connected'}</p>
                 <div className="footer-controls">
                     <div className="connections"><DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="ghost" type="button" className="connections-trigger" aria-label="Vessel connections"><Icon name="server"/><span>{connections.filter((c:any)=>c.client).length}/{connections.length} connected</span><Icon name="chevron"/></Button></DropdownMenuTrigger>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" type="button" className="connections-trigger" aria-label="Vessel connections"><ServerIcon aria-hidden="true"/><span>{connections.filter((c:any)=>c.client).length}/{connections.length} connected</span><ChevronDownIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
                         <DropdownMenuContent portalContainer={mobilePortal} side="top" align="start" className="w-64"><DropdownMenuLabel>Vessel connections</DropdownMenuLabel>{connections.map((c:any)=><p className="px-2 py-1 text-xs text-muted-foreground" key={c.id}>{c.name} · {c.status}</p>)}<DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Manage Vessels</DropdownMenuItem></DropdownMenuContent>
                     </DropdownMenu></div>
-                    <Button variant="ghost" className="icon-button" aria-label="Reconnect Vessels" title="Reconnect Vessels" onClick={()=>fleet.reconnect()}><Icon name="refresh"/></Button>
-                    <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="icon-button" aria-label="Profile menu"><Icon name="user"/></Button></DropdownMenuTrigger>
+                    <Button variant="ghost" className="icon-button" aria-label="Reconnect Vessels" title="Reconnect Vessels" onClick={()=>fleet.reconnect()}><RefreshCwIcon aria-hidden="true"/></Button>
+                    <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="icon-button" aria-label="Profile menu"><UserRoundIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
                         <DropdownMenuContent portalContainer={mobilePortal} side="top" align="end" className="w-48"><DropdownMenuLabel>Appearance</DropdownMenuLabel><DropdownMenuRadioGroup value={appearance} onValueChange={setAppearance}>{['light','dark','system'].map(mode=><DropdownMenuRadioItem key={mode} value={mode}>{mode}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup><DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Vessel connections</DropdownMenuItem><DropdownMenuItem onSelect={()=>logoutForm.current?.requestSubmit()}>Sign out</DropdownMenuItem></DropdownMenuContent>
                     </DropdownMenu>
-                    <form ref={logoutForm} action={bootstrap.logoutUrl} method="post" hidden><input type="hidden" name="_token" value={csrf()}/></form>
+                    <form ref={logoutForm} action={bootstrap.logoutUrl} method="post" hidden><Input type="hidden" name="_token" value={csrf()}/></form>
                 </div>
             </footer>
         </aside>;
     return <div className="helm-console">
         <Sheet open={mobile} onOpenChange={setMobile}>
-            <SheetTrigger asChild><Button variant="ghost" className="mobile-toggle icon-button" aria-label="Open voyage navigation" aria-expanded={mobile}><Icon name="menu"/></Button></SheetTrigger>
+            <SheetTrigger asChild><Button variant="ghost" className="mobile-toggle icon-button" aria-label="Open voyage navigation" aria-expanded={mobile}><MenuIcon aria-hidden="true"/></Button></SheetTrigger>
             <SheetContent ref={setMobilePortal} side="left" showCloseButton={false} className="mobile-navigation"><SheetTitle className="sr-only">Voyages</SheetTitle><SheetDescription className="sr-only">Choose a voyage or manage Vessel connections.</SheetDescription>{mobile&&sidebar}</SheetContent>
         </Sheet>
         {!mobile&&sidebar}
