@@ -8,13 +8,18 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
     dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
     const saved: Record<string, unknown> = {};
-    for (const key of ['window', 'document', 'location', 'Event', 'CustomEvent', 'MutationObserver', 'HTMLElement', 'Node', 'NodeFilter', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'Element', 'ShadowRoot', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
+    for (const key of ['window', 'document', 'location', 'localStorage', 'Event', 'CustomEvent', 'MutationObserver', 'HTMLElement', 'Node', 'NodeFilter', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'Element', 'ShadowRoot', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
         saved[key] = (globalThis as any)[key];
         (globalThis as any)[key] = key === 'getComputedStyle' ? dom.window.getComputedStyle.bind(dom.window) : key === 'requestAnimationFrame' ? (callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0) : key === 'cancelAnimationFrame' ? clearTimeout : (dom.window as any)[key];
     }
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     const oldFetch = globalThis.fetch;
     let requests = 0;
+    const commands: string[] = [];
+    const connection = {id: 'c', name: 'Workstation', vessel_id: 'v', client: {async exchange({command}: any) {
+        commands.push(command.op);
+        return {protocol: 1, outcome_unknown: false, error: null, result: {vessel_id: 'v', version: '1.0.2', scope: 'owner', remote_updates: true, features: ['execution_profiles']}};
+    }}};
     globalThis.fetch = async () => { requests++; throw Error('network lost'); };
     const {createRoot} = await import('react-dom/client');
     const {Connections} = await import('../resources/react/Connections.tsx');
@@ -34,13 +39,17 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     try {
         await React.act(async () => root.render(React.createElement(Connections, {
             bootstrap: {vessels: [{id: 'c', name: 'Workstation', vessel_id: 'v', endpoint: 'https://vessel.example'}], pairings: [{id: 'p', name: 'Laptop'}]},
-            states: {c: {connected: true, status: 'Connected'}}, onClose: () => {},
+            states: {c: {connected: true, status: 'Connected'}}, connections: new Map([['c', connection]]), tenant: 'test', onClose: () => {},
         })));
         assert.match(query('.connections-card')!.textContent!, /Connected/);
         assert.match(query('.connections-card')!.textContent!, /vessel.example/);
         assert.match(query('.connections-pending')!.textContent!, /Laptop/);
         await click('View details');
         assert.ok(query('.connections-detail-card .connections-status.is-connected'));
+        assert.match(query('.connections-maintenance')!.textContent!, /Vessel maintenance/);
+        assert.equal(query('#update-current')!.textContent, 'Installed Vessel version: 1.0.2');
+        assert.ok(query('#update-check'), 'the selected Vessel has update controls');
+        assert.deepEqual(commands, ['capabilities']);
         assert.equal(query('.connections-confirm'), null);
         await click('Remove from Helm Web');
         assert.ok(query('.connections-confirm'));
@@ -48,6 +57,7 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         await click('Keep connection');
         assert.equal(query('.connections-confirm'), null);
         await click('Back');
+        assert.equal(query('.connections-maintenance'), null);
         await click('Add Vessel');
         await enter('input', 'New host');
         await enter('textarea', 'private invitation');
@@ -72,6 +82,56 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         delete saved.Event;
         delete saved.CustomEvent;
         Object.assign(globalThis, saved);
+        dom.window.close();
+    }
+});
+
+test('maintenance handles old, offline and reconnected Vessels without crossing identities', async () => {
+    const dom = new JSDOM('<div id="mount"></div>', {url: 'https://helm.test/', pretendToBeVisual: true});
+    const saved: Record<string, unknown> = {};
+    for (const key of ['window', 'document', 'location', 'localStorage', 'Event', 'CustomEvent', 'MutationObserver', 'HTMLElement', 'Node', 'NodeFilter', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'Element', 'ShadowRoot', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
+        saved[key] = (globalThis as any)[key];
+        (globalThis as any)[key] = key === 'getComputedStyle' ? dom.window.getComputedStyle.bind(dom.window) : key === 'requestAnimationFrame' ? (callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0) : key === 'cancelAnimationFrame' ? clearTimeout : (dom.window as any)[key];
+    }
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    const {createRoot} = await import('react-dom/client');
+    const {Connections} = await import('../resources/react/Connections.tsx');
+    const root = createRoot(dom.window.document.querySelector('#mount')!);
+    const old = {id:'old', name:'Old Vessel', vessel_id:'old-id', client:{async exchange() {return {protocol:1, outcome_unknown:false, error:null, result:{vessel_id:'old-id', version:'1.0.0', scope:'owner', features:[], remote_updates:false}};}}};
+    const reconnecting: {id:string; name:string; vessel_id:string; client:any} = {id:'offline', name:'Offline Vessel', vessel_id:'offline-id', client:null};
+    const connections = new Map<string, any>([['old', old], ['offline', reconnecting]]);
+    const props = {bootstrap:{vessels:[{id:'old', name:'Old Vessel', vessel_id:'old-id'}, {id:'offline', name:'Offline Vessel', vessel_id:'offline-id'}], pairings:[]},
+        states:{old:{connected:true,status:'Connected'},offline:{connected:false,status:'Unavailable'}}, connections, tenant:'test', onClose() {}};
+    const render = () => React.act(async()=>root.render(React.createElement(Connections,props)));
+    const select = async (name:string) => React.act(async()=>{
+        const card=[...dom.window.document.querySelectorAll('.connections-card')].find(node=>node.querySelector('h3')?.textContent===name);
+        assert.ok(card,name);card.querySelector<HTMLButtonElement>('button')!.click();
+    });
+    const back = () => React.act(async()=>dom.window.document.querySelector<HTMLButtonElement>('.connections-back')!.click());
+    try {
+        await render();
+        await select('Old Vessel');
+        assert.match(dom.window.document.querySelector('.connections-maintenance')!.textContent!, /one-time remote administrator installation/);
+        assert.equal(dom.window.document.querySelector<HTMLElement>('#update-source')!.hidden,true);
+
+        await back();
+        await select('Offline Vessel');
+        assert.match(dom.window.document.querySelector('.connections-maintenance')!.textContent!, /Connect this Vessel/);
+        assert.equal(dom.window.document.querySelector('#update-check'),null);
+
+        reconnecting.client = {async exchange() {return {protocol:1,outcome_unknown:false,error:null,result:{vessel_id:'different-id',version:'wrong',scope:'owner',remote_updates:true}};}};
+        await render();
+        assert.match(dom.window.document.querySelector('.connections-maintenance')!.textContent!, /Vessel identity changed/);
+        assert.equal(dom.window.document.querySelector('#update-check'),null);
+
+        reconnecting.client = {async exchange() {return {protocol:1,outcome_unknown:false,error:null,result:{vessel_id:'offline-id',version:'current',scope:'owner',remote_updates:true,features:['execution_profiles']}};}};
+        await render();
+        assert.equal(dom.window.document.querySelector('#update-current')!.textContent,'Installed Vessel version: current');
+        assert.ok(dom.window.document.querySelector('#update-check'));
+    } finally {
+        await React.act(async()=>root.unmount());
+        delete saved.Event;delete saved.CustomEvent;
+        Object.assign(globalThis,saved);
         dom.window.close();
     }
 });

@@ -43,8 +43,8 @@ but not reloading. Profile setup carries over the archived console’s compact
 overview, separate searchable pickers, back navigation, fixed actions, deletion
 confirmation and expired-sign-in refresh. React owns the screens and draft state;
 no Flux console code is loaded. Reasoning/service and account usage have dedicated
-steps. Vessel updates under Location exposes exact prepare/review/apply/status and capability-gates older
-hosts. Existing private keys, tenants, connections and conversation journals need
+steps. Vessel maintenance in Manage Vessels exposes exact prepare/review/apply/status and capability-gates older
+hosts. Voyage setup directs owners of older Vessels there. Existing private keys, tenants, connections and conversation journals need
 no migration for this interface cutover.
 
 helm.vessel.voyage. Foleybridge.Software presents Helm, Vessel, and Voyage

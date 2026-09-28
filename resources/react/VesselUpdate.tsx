@@ -1,8 +1,6 @@
 import {NativeSelect} from './components/ui/native-select';
 import {Button} from './components/ui/button';
-import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import React, {useEffect, useRef} from 'react';
-import {ChevronDownIcon} from 'lucide-react';
 import {vesselUpdate} from '../js/vessel-update.js';
 
 // The same receipt controller is used across the cutover. It owns this static
@@ -28,21 +26,18 @@ export function VesselUpdateMarkup() {
             <Button variant="ghost" type="button" id="update-discard">Not now</Button>
         </div>
         <Button variant="outline" type="button" id="update-refresh" hidden>Check update status</Button>
-        <Button variant="default" type="button" id="update-continue" hidden>Continue setup</Button>
+        <Button variant="default" type="button" id="update-continue" hidden>Review current Vessel</Button>
     </>;
 }
 
-export function VesselUpdate({connection, caps, tenant, onResume}: {connection:any; caps:any; tenant:string; onResume:()=>void}) {
-    const root=useRef<HTMLDivElement>(null), resume=useRef(onResume);
-    resume.current=onResume;
+export function VesselUpdate({connection, caps, tenant, onRefresh}: {connection:any; caps:any; tenant:string; onRefresh:()=>void}) {
+    const root=useRef<HTMLDivElement>(null), refresh=useRef(onRefresh);
+    refresh.current=onRefresh;
     useEffect(()=>{
-        const controller=vesselUpdate(root.current!, {show:()=>{},resume:()=>resume.current()});
+        const controller=vesselUpdate(root.current!, {show:()=>{},resume:()=>refresh.current()});
         controller.bind(connection,caps);
         root.current!.querySelector<HTMLElement>('#setup-update-open')!.hidden=true;
         return ()=>controller.dispose();
     },[connection,connection?.client,caps,tenant]);
-    return <Collapsible defaultOpen={!caps.features?.includes('execution_profiles')}>
-        <CollapsibleTrigger asChild><Button variant="ghost" type="button" className="vessel-update-trigger -mx-2.5 font-semibold">Vessel updates<ChevronDownIcon className="vessel-update-chevron" aria-hidden="true"/></Button></CollapsibleTrigger>
-        <CollapsibleContent forceMount><div ref={root} data-tenant-id={tenant}><VesselUpdateMarkup/></div></CollapsibleContent>
-    </Collapsible>;
+    return <div ref={root} data-tenant-id={tenant}><VesselUpdateMarkup/></div>;
 }

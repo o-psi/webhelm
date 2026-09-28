@@ -54,7 +54,7 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
-                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v'};
+                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'fixture-version',features:['execution_profiles'],remote_updates:true};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
                 else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',revision:1,observation_cursor:5,messages:Array.from({length:40},(_,i)=>({role:'assistant',content:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
                 else if(c.op==='decisions')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:[]};
@@ -84,6 +84,15 @@ try {
         await page.getByRole('button',{name:'Account and appearance'}).click();
         await page.getByRole('menuitemradio',{name:'light'}).click();
     }
+    await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
+    await page.locator('.connections-dialog').getByRole('button',{name:'View details'}).click();
+    await page.locator('.connections-maintenance #update-current').getByText('Installed Vessel version: fixture-version').waitFor();
+    check(await page.locator('.connections-maintenance').isVisible(),`${label}: Vessel maintenance is missing from Manage Vessels`);
+    check(await page.locator('.connections-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Vessel manager overflows horizontally`);
+    await page.screenshot({path:`${output}/${label}-vessel-maintenance.png`});
+    await page.getByRole('button',{name:'Close Vessel connections'}).click();
+    if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.locator('.voyage-card').click();
     const conversation=page.locator('.conversation:not([hidden])');
     const draft=conversation.locator('textarea').first();

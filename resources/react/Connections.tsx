@@ -6,6 +6,8 @@ import {Badge} from './components/ui/badge';
 import {Dialog, DialogContent, DialogTitle} from './components/ui/dialog';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
+import {VesselUpdate} from './VesselUpdate';
+import {vesselRead} from './settings';
 import React, {useEffect, useRef, useState} from 'react';
 import {ArrowLeftIcon,ArrowRightIcon,ExternalLinkIcon,PlusIcon,ServerIcon,XIcon} from 'lucide-react';
 
@@ -39,8 +41,41 @@ function bootstrapFrom(html: string): Bootstrap {
     return data;
 }
 
-export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
+function VesselMaintenance({connection, tenant}: {connection:any; tenant:string}) {
+    const [caps, setCaps] = useState<any>(null);
+    const [notice, setNotice] = useState('');
+    const [failed, setFailed] = useState(false);
+    const [reload, setReload] = useState(0);
+
+    useEffect(() => {
+        let alive = true;
+        setCaps(null);
+        setFailed(false);
+        if (!connection?.client) {
+            setNotice('Connect this Vessel to check its maintenance status.');
+        } else {
+            const observedClient = connection.client;
+            setNotice('Checking Vessel capabilities…');
+            vesselRead(connection, 'capabilities').then(value => {
+                if (connection.client !== observedClient) throw new Error('Vessel connection changed. Check again before reviewing maintenance.');
+                if (value?.vessel_id !== connection.vessel_id) throw new Error('Vessel identity changed. Reconnect before reviewing maintenance.');
+                if (alive) { setCaps(value); setNotice(''); }
+            }).catch(error => { if (alive) { setNotice(error instanceof Error ? error.message : 'Vessel capabilities unavailable.'); setFailed(true); } });
+        }
+        return () => { alive = false; };
+    }, [connection, connection?.client, reload]);
+
+    return <section className="connections-maintenance" aria-label="Vessel maintenance">
+        <h3>Vessel maintenance</h3>
+        {notice && <p role="status">{notice}</p>}
+        {caps && <VesselUpdate connection={connection} caps={caps} tenant={tenant} onRefresh={()=>setReload(value=>value+1)}/>}
+        {connection?.client && failed && <Button variant="outline" type="button" onClick={()=>setReload(value=>value+1)}>Check again</Button>}
+    </section>;
+}
+
+export function Connections({bootstrap, states = {}, connections, tenant, onReconnect, onClose}: {
     bootstrap: Bootstrap; states?: Record<string, Status>;
+    connections: Map<string, any>; tenant: string;
     onReconnect?: () => void; onClose: () => void;
 }) {
     const initialMethod = bootstrap.connectionForm === 'import' ? 'credential' : 'invitation';
@@ -177,6 +212,9 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
             </div>}
             {screen === 'details' && selected && <div className="connections-details"><div className="connections-detail-card"><span className={`connections-status ${states[selected.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(selected.id)}</span><dl><div><dt>Address</dt><dd>{selected.endpoint || 'Not available'}</dd></div><div><dt>Vessel ID</dt><dd>{selected.vessel_id}</dd></div></dl></div>
                 {!states[selected.id]?.connected && onReconnect && <Button variant="outline" type="button" className="justify-self-start" onClick={onReconnect}>Reconnect Vessels</Button>}
+                {connections.get(selected.id)?.vessel_id === selected.vessel_id
+                    ? <VesselMaintenance connection={connections.get(selected.id)} tenant={tenant}/>
+                    : <p role="status">Vessel connection changed. Reload Manage Vessels before reviewing maintenance.</p>}
                 <section className="connections-danger"><h3>Remove from Helm Web</h3><p>Removing this connection stops new browser access through this Web account. It does not stop voyages or revoke the underlying Vessel grant used by other clients.</p>
                     {!confirmRemove ? <Button variant="destructive" type="button" onClick={()=>setConfirmRemove(true)}>Remove from Helm Web…</Button> : <div className="connections-confirm" role="group" aria-label={`Confirm removing ${selected.name}`}><p>Remove <strong>{selected.name}</strong> from this Web account?</p><Button variant="outline" type="button" disabled={busy} onClick={()=>setConfirmRemove(false)}>Keep connection</Button><Button variant="destructive" type="button" className="connections-remove" disabled={busy || uncertain} onClick={()=>void send(`/connections/${encodeURIComponent(selected.id)}`, {confirm_disconnect: 1}, 'DELETE')}>Remove {selected.name}</Button></div>}
                 </section>

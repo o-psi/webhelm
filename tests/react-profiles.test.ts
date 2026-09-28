@@ -28,16 +28,23 @@ test('profiles editor saves, duplicates, defaults and deletes without mutating v
  }finally{await act(async()=>root.unmount());dom.window.close();}
 });
 
-test('old Vessel settings expose the updater without requesting unsupported profiles',async()=>{
+test('old Vessel settings direct maintenance to Manage Vessels without requesting unsupported profiles',async()=>{
  const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test'});Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),requestAnimationFrame:(callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0),cancelAnimationFrame:clearTimeout,MutationObserver:dom.window.MutationObserver,HTMLElement:dom.window.HTMLElement,Node:dom.window.Node,NodeFilter:dom.window.NodeFilter,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Element:dom.window.Element,ShadowRoot:dom.window.ShadowRoot,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent});
  dom.window.HTMLDialogElement.prototype.showModal=function(){};dom.window.HTMLDialogElement.prototype.close=function(){};
  const commands:string[]=[];
  const connection:any={id:'old',name:'Old Vessel',vessel_id:'v',client:{async exchange({command}:any){commands.push(command.op);return {protocol:1,outcome_unknown:false,error:null,result:{vessel_id:'v',scope:'owner',version:'1.0.0',features:[],workspaces:[]}};}}};
  const {Settings}=await import('../resources/react/Settings');
  const root=createRoot(document.getElementById('root')!);
- try{await act(async()=>root.render(React.createElement(Settings,{fleet:{connections:new Map([['old',connection]])},workspace:{} as any,tenant:'test',onClose(){},onCreated(){assert.fail('No voyage should be created');}})));
- assert.deepEqual(commands,['capabilities']);assert.match(document.body.textContent!,/one-time remote administrator/);
- assert.equal(document.querySelector<HTMLElement>('#update-source')!.hidden,true);
- assert.equal(document.querySelector('[data-slot=collapsible]')!.getAttribute('data-state'),'open');
+ const props={fleet:{connections:new Map([['old',connection]])},workspace:{} as any,tenant:'test',onClose(){},onCreated(){assert.fail('No voyage should be created');}};
+ try{await act(async()=>root.render(React.createElement(Settings,props)));
+ assert.deepEqual(commands,['capabilities']);assert.match(document.body.textContent!,/Open Manage Vessels to review maintenance/);
+ assert.equal(document.querySelector('#update-source'),null);
+ assert.equal(document.body.textContent!.includes('Vessel maintenance'),false);
+ await act(async()=>document.querySelector<HTMLButtonElement>('.setup-row')!.click());
+ const workspace=document.querySelector<HTMLInputElement>('input[placeholder="Existing absolute folder on this Vessel"]')!;
+ await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value')!.set!.call(workspace,'/work');workspace.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
+ connection.client={...connection.client};
+ await act(async()=>root.render(React.createElement(Settings,props)));
+ assert.deepEqual(commands,['capabilities','capabilities'],'reconnection does not send unsupported profile or account reads');
  }finally{await act(async()=>root.unmount());dom.window.close();}
 });

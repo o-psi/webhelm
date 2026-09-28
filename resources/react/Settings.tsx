@@ -11,12 +11,11 @@ import React,{useEffect,useRef,useState} from 'react';
 import {ArrowLeftIcon,ChevronRightIcon,XIcon} from 'lucide-react';
 import {ProfileActions} from './ProfileActions';
 import {Enrollment} from './Enrollment';
-import {VesselUpdate} from './VesselUpdate';
 import {accountChoices,Creation,vesselRead} from './settings';
 import type {Tab,Workspace} from './workspace';
 
-type Screen='overview'|'location'|'maintenance'|'profiles'|'editor'|'accounts'|'models'|'reasoning'|'enrollment'|'delete'|'usage';
-const titles:Record<Screen,string>={overview:'Voyage setup',location:'Location',maintenance:'Vessel maintenance',profiles:'Profiles',editor:'Edit profile',accounts:'Choose account',models:'Choose model',reasoning:'Reasoning & service',enrollment:'Connect ChatGPT',delete:'Delete profile',usage:'Account usage'};
+type Screen='overview'|'location'|'profiles'|'editor'|'accounts'|'models'|'reasoning'|'enrollment'|'delete'|'usage';
+const titles:Record<Screen,string>={overview:'Voyage setup',location:'Location',profiles:'Profiles',editor:'Edit profile',accounts:'Choose account',models:'Choose model',reasoning:'Reasoning & service',enrollment:'Connect ChatGPT',delete:'Delete profile',usage:'Account usage'};
 const expiredOAuth=(account:any)=>account?.binding.transport==='chatgpt_oauth'&&account.state==='ready'&&account.availability==='expired';
 // Rows and choices are multi-line list items; utilities override the one-line Button geometry.
 const setupRow='setup-row h-auto w-full justify-between gap-3 whitespace-normal px-3.5 py-3 text-left font-normal';
@@ -30,13 +29,16 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
     const history=useRef<{screen:Screen;focus:HTMLElement|null}[]>([]);
     const [vessel,setVessel]=useState(tab?.vessel||[...fleet.connections.keys()][0]||'');
     const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(''),[accounts,setAccounts]=useState<any[]>([]),[account,setAccount]=useState(''),[models,setModels]=useState<any[]>([]),[model,setModel]=useState(''),[reasoning,setReasoning]=useState(''),[service,setService]=useState('');
+    const [capabilityClient,setCapabilityClient]=useState<any>(null);
     const [usage,setUsage]=useState<any>(null),[usageNotice,setUsageNotice]=useState('');
-    const [capabilityReload,setCapabilityReload]=useState(0),[accountsReload,setAccountsReload]=useState(0);
+    const [accountsReload,setAccountsReload]=useState(0);
     const [catalogue,setCatalogue]=useState<any>(null),[profileId,setProfileId]=useState(''),[editor,setEditor]=useState<any>(null),[profileName,setProfileName]=useState('');
     const [deleteTarget,setDeleteTarget]=useState<any>(null);
     const [reviewRequired,setReviewRequired]=useState(false);
     const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[recovery,setRecovery]=useState(0);
     const connection=fleet.connections.get(vessel),selected=accounts.find(item=>sameAccount(item.binding,account?JSON.parse(account):null)),selectedModel=models.find(item=>item.id===model);
+    const currentCaps=capabilityClient===connection?.client?caps:null;
+    const supportsProfiles=Boolean(currentCaps?.features?.includes('execution_profiles'));
     const profile=catalogue?.profiles.find((item:any)=>item.id===profileId),profileAccount=accounts.find(item=>sameAccount(item.binding,profile?.account));
     const generation=useRef(0),usageGeneration=useRef(0),refreshAttempts=useRef(new Set<string>());
     const creation=useRef<Creation|null>(null),origin=useRef({incarnation:tab?.incarnation,revision:tab?.snapshot?.revision});
@@ -50,28 +52,30 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
     useEffect(()=>{generation.current++;return()=>{generation.current++;};},[vessel,path,connection?.client]);
     useEffect(()=>{
         let alive=true;const changedVessel=lastVessel.current!==vessel;lastVessel.current=vessel;
-        retainEditor();setCaps(null);setAccounts([]);setCatalogue(null);
+        retainEditor();setCaps(null);setCapabilityClient(null);setAccounts([]);setCatalogue(null);
         if(changedVessel){setPath('');setEditor(null);}
         setNotice('Loading Vessel…');
+        const observedClient=connection?.client;
         vesselRead(connection,'capabilities').then(async value=>{
+            if(connection?.client!==observedClient)throw new Error('Vessel connection changed. Reload choices.');
             if(value.vessel_id!==connection.vessel_id)throw new Error('Vessel identity changed.');
-            if(!value.features?.includes('execution_profiles')){if(alive){setCaps(value);setScreen('maintenance');setNotice(`Vessel ${value.version||'version unknown'} needs an update before profile setup.`);}return;}
+            if(!value.features?.includes('execution_profiles')){if(alive){setCaps(value);setCapabilityClient(observedClient);setNotice(`Vessel ${value.version||'version unknown'} needs an update before profile setup. Open Manage Vessels to review maintenance.`);}return;}
             if(value.scope!=='owner'&&(!value.rights?.includes('account_use')||(!tab&&!value.rights?.includes('create'))))throw new Error('This connection does not permit account use or creation.');
             let location=tab?.snapshot?.workspace||(changedVessel?'':path);
             if(tab){const process=await vesselRead(connection,'inspect',{session_id:tab.session});if(process.incarnation!==tab.incarnation)throw new Error('Voyage changed. Reopen settings.');location=process.workspace;}
-            if(alive){setCaps(value);setPath(location||value.workspaces?.[0]?.path||'');setNotice('');}
+            if(alive){setCaps(value);setCapabilityClient(observedClient);setPath(location||value.workspaces?.[0]?.path||'');setNotice('');}
         }).catch(error=>alive&&setNotice(error.message));return()=>{alive=false;};
-    },[vessel,connection?.client,capabilityReload]);
+    },[vessel,connection?.client]);
     useEffect(()=>{setEditor(null);setProfileId('');setReviewRequired(false);},[path,vessel]);
     useEffect(()=>{
         let alive=true;setCatalogue(null);
-        if(path.startsWith('/'))vesselRead(connection,'profiles',{workspace:path}).then(value=>{if(alive){setCatalogue(value);setProfileId(current=>value.profiles.some((item:any)=>item.id===current)?current:matchingProfile(value.profiles,tab?.snapshot?.inference)?.id||value.default_profile_id||value.profiles[0]?.id||'');}}).catch(error=>{if(alive){setNotice(error.message);setReviewRequired(true);}});
+        if(path.startsWith('/')&&supportsProfiles)vesselRead(connection,'profiles',{workspace:path}).then(value=>{if(alive){setCatalogue(value);setProfileId(current=>value.profiles.some((item:any)=>item.id===current)?current:matchingProfile(value.profiles,tab?.snapshot?.inference)?.id||value.default_profile_id||value.profiles[0]?.id||'');}}).catch(error=>{if(alive){setNotice(error.message);setReviewRequired(true);}});
         return()=>{alive=false;};
-    },[path,vessel,connection?.client,recovery]);
+    },[path,vessel,connection?.client,recovery,supportsProfiles]);
     useEffect(()=>{
-        let alive=true;setAccounts([]);setModels([]);if(!path.startsWith('/'))return;
+        let alive=true;setAccounts([]);setModels([]);if(!path.startsWith('/')||!supportsProfiles)return;
         vesselRead(connection,'accounts',{workspace:path,transport:null}).then(value=>{if(alive){setAccounts(accountChoices(value));}}).catch(error=>{if(alive){setNotice(error.message);setReviewRequired(true);}});return()=>{alive=false;};
-    },[path,vessel,connection?.client,recovery,accountsReload]);
+    },[path,vessel,connection?.client,recovery,accountsReload,supportsProfiles]);
     // Model discovery is editor-only. A seed is captured before refreshing accounts,
     // so navigation and sign-in completion cannot silently reset an unsaved model.
     useEffect(()=>{
@@ -88,7 +92,7 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
     const recoveryState=pending(),records=recoveryState.records;
     function retainEditor(){if(!editor||!selected||!model)return;editorSeed.current={...editor,account:selected?.binding,model,reasoning_effort:reasoning,service_tier:service};}
     async function save(){
-        if(screen==='editor')return saveProfile();if(screen!=='overview'||busy||!caps||!profile)return;setBusy(true);
+        if(screen==='editor')return saveProfile();if(screen!=='overview'||busy||!supportsProfiles||!profile)return;setBusy(true);
         try{
             const settings=profileSettings(profile);
             if(tab){if(['running','starting','cancelling'].includes(tab.snapshot?.run?.state))throw new Error('Wait for the current run to finish before changing inference settings.');if(tab.incarnation!==origin.current.incarnation||tab.snapshot?.revision!==origin.current.revision)throw new Error('Voyage changed since review. Reopen settings.');if(!await workspace.act(tab.key,'set_account_inference',settings))throw new Error('Settings were not confirmed. Check the voyage receipt before retrying.');onClose();}
@@ -125,7 +129,7 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
     const matches=(text:string)=>text.toLocaleLowerCase().includes(search.toLocaleLowerCase());
     const reasoningStops=['',...new Set<string>([...(selectedModel?.reasoning_efforts||[]),...(reasoning?[reasoning]:[])])];
     const refreshButton=(item:any)=>expiredOAuth(item)&&<Button variant="outline" type="button" disabled={busy||refreshAttempts.current.has(JSON.stringify([vessel,path,item.binding]))} onClick={()=>void refreshSignIn(item)}>Refresh sign-in</Button>;
-    const canSave=!busy&&!recoveryState.error&&caps&&(screen==='editor'?selected?.ready&&selectedModel:profile&&profileAccount?.ready)&&(!!tab||path.startsWith('/'));
+    const canSave=!busy&&!recoveryState.error&&supportsProfiles&&(screen==='editor'?selected?.ready&&selectedModel:profile&&profileAccount?.ready)&&(!!tab||path.startsWith('/'));
     return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose();}}><DialogContent showCloseButton={false} className="settings-dialog profile-setup block w-[min(480px,calc(100vw-20px))] max-w-none gap-0 p-0 sm:max-w-none" aria-labelledby="profile-setup-title" onInteractOutside={event=>event.preventDefault()} onEscapeKeyDown={event=>{if(busy)event.preventDefault();}}>
         <form onSubmit={event=>{event.preventDefault();void save();}}>
             <header>{screen!=='overview'&&<Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Back" onClick={back}><ArrowLeftIcon aria-hidden="true"/></Button>}<DialogTitle asChild><h2 id="profile-setup-title" ref={heading} tabIndex={-1}>{screen==='overview'?(tab?'Voyage setup':'New voyage'):titles[screen]}</h2></DialogTitle><>{screen==='profiles'&&catalogue?.can_manage&&<Button variant="outline" type="button" aria-label="Create profile" disabled={busy} onClick={()=>editProfile('new')}>Create profile</Button>}</><Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Close settings" onClick={onClose}><XIcon aria-hidden="true"/></Button></header>
@@ -133,18 +137,16 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
                 {screen==='overview'&&<>
                     <p>{tab?'Choose a saved profile for the next run.':'Choose where your voyage runs and the profile it uses.'}</p>
                     <SetupRow label="Location" detail={[connection?.name,path].filter(Boolean).join(' · ')||'Choose a Vessel and workspace'} disabled={busy} onClick={()=>navigate('location')}/>
-                    <SetupRow label="Profile" detail={!catalogue?(reviewRequired?'Profiles unavailable':'Loading saved profiles…'):profile?`${profile.name} · ${profile.model}`:'Choose a profile'} disabled={busy||!catalogue} onClick={()=>navigate('profiles')}/>
-                    {caps?.scope==='owner'&&<SetupRow label="Vessel maintenance" detail="Updates and recovery" disabled={busy} onClick={()=>navigate('maintenance')}/>}
+                    <SetupRow label="Profile" detail={!catalogue?(currentCaps&&!supportsProfiles?'Vessel update required':reviewRequired?'Profiles unavailable':'Loading saved profiles…'):profile?`${profile.name} · ${profile.model}`:'Choose a profile'} disabled={busy||!catalogue} onClick={()=>navigate('profiles')}/>
                     {profile&&<p className="setup-summary">{profile.reasoning_effort||'Provider default reasoning'} · {profile.service_tier||'Default service tier'}<br/>{profileAccount?.label||'Account unavailable'}</p>}
                     {profileAccount&&!profileAccount.ready&&<div className="setup-warning"><p>This profile’s account is {profileAccount.availability?.replaceAll('_',' ')||'unavailable'}.</p>{refreshButton(profileAccount)}</div>}
                     {!tab&&<p>Creating a voyage does not send a message. The Vessel sets its initial access mode; review it before your first message.</p>}
                 </>}
                 {screen==='location'&&<>
                     <label>Vessel<NativeSelect disabled={!!tab||busy} value={vessel} onChange={event=>setVessel(event.target.value)}>{[...fleet.connections.values()].map((item:any)=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</NativeSelect></label>
-                    <label>Workspace{caps?.scope==='owner'&&!tab?<Input value={path} onChange={event=>setPath(event.target.value)} placeholder="Existing absolute folder on this Vessel" disabled={busy}/>:<NativeSelect disabled={!!tab||busy} value={path} onChange={event=>setPath(event.target.value)}>{tab?<option value={path}>{path}</option>:(caps?.workspaces||[]).map((item:any)=><option key={item.path} value={item.path}>{item.name} · {item.path}</option>)}</NativeSelect>}</label>
+                    <label>Workspace{currentCaps?.scope==='owner'&&!tab?<Input value={path} onChange={event=>setPath(event.target.value)} placeholder="Existing absolute folder on this Vessel" disabled={busy}/>:<NativeSelect disabled={!!tab||busy} value={path} onChange={event=>setPath(event.target.value)}>{tab?<option value={path}>{path}</option>:(currentCaps?.workspaces||[]).map((item:any)=><option key={item.path} value={item.path}>{item.name} · {item.path}</option>)}</NativeSelect>}</label>
                     <p>{tab?'An existing voyage keeps its Vessel and workspace.':'Use an existing folder on the Vessel.'}</p>
                 </>}
-                {screen==='maintenance'&&<>{caps&&<VesselUpdate connection={connection} caps={caps} tenant={tenant} onResume={()=>setCapabilityReload(value=>value+1)}/>}</>}
                 {screen==='profiles'&&<>
                     <label className="setup-search">Search profiles<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
                     <div className="setup-choices">{(catalogue?.profiles||[]).filter((item:any)=>matches(`${item.name} ${item.model}`)).map((item:any)=><div className="profile-choice-row" key={item.id}>
