@@ -28,14 +28,17 @@ test('React shell renders safely without Livewire and uses the production consol
     } finally { globalThis.document = previous; dom.window.close(); }
 });
 
-test('preview preserves console responsive widths, theme, card and composer styling', async () => {
+test('console keeps responsive layout while shadcn owns control styling', async () => {
     const {readFileSync} = await import('node:fs');
     const css = readFileSync(new URL('../resources/react/style.css', import.meta.url), 'utf8');
     assert.match(css, /grid-template-columns:256px minmax\(0,1fr\)/);
     assert.match(css, /\.dark\{color-scheme:dark/);
     assert.match(css, /max-width:80rem/);
     assert.match(css, /max-width:96rem/);
-    assert.match(css, /border-radius:24px/);
+    assert.match(css, /--primary: oklch\(0\.205 0 0\)/);
+    assert.doesNotMatch(css, /\.composer textarea\[data-slot="textarea"\]/);
+    assert.doesNotMatch(css, /\.settings-dialog button\{padding/);
+    assert.doesNotMatch(css, /\.new-voyage,\.send-button\{/);
     assert.match(css, /prefers-reduced-motion:reduce/);
     assert.match(css, /\.sidebar\.mobile-open/);
     assert.match(css, /\.conversation\[hidden\]\{display:none\}/);

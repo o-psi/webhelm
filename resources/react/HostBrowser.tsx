@@ -64,7 +64,7 @@ export function HostBrowser({tab, client}: {tab: Tab; client: any}) {
         const previous = conversation.inert; conversation.inert = true;
         return () => {conversation.inert = previous;};
     }, [open, expanded,mobile]);
-    const action=<Button variant="ghost" ref={toggle} className="task-browser-action" type="button" aria-expanded={open} aria-controls={id} aria-describedby={activity ? `${id}-activity` : undefined} title={`Browser · ${tab.title}`} onClick={() => open ? close() : setOpen(true)}>
+    const action=<Button variant="outline" ref={toggle} className="task-browser-action" type="button" aria-expanded={open} aria-controls={id} aria-describedby={activity ? `${id}-activity` : undefined} title={`Browser · ${tab.title}`} onClick={() => open ? close() : setOpen(true)}>
             Browser{activity && <span className="browser-activity" aria-hidden="true"/>}
         </Button>;
     const body=<><header className="task-browser-heading"><div>{mobile?<SheetTitle asChild><h2 id={`${id}-title`}>Browser</h2></SheetTitle>:<h2 id={`${id}-title`}>Browser</h2>}<span>{tab.title}</span></div><div className="task-browser-heading-actions"><Button variant="ghost" className="expand-browser" type="button" hidden={mobile} aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>{expanded?'Show chat':'Expand browser'}</Button><Button variant="ghost" type="button" aria-label="Close browser viewer" title="Close viewer; keep browser running" onClick={close}>Close ×</Button></div></header>

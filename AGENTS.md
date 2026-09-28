@@ -1,6 +1,6 @@
 # WebHelm repository
 
-This is the private Helm Web Laravel/React repository, extracted from `web/` of [helm.vessel.voyage](https://github.com/o-psi/helm.vessel.voyage). Its app root is the repository root. Follow the application guidance below, and consult README.md for deployment. `shared/` snapshots browser viewer assets from the public repository; coordinate protocol changes across repositories. Do not commit deployment secrets or production runtime state.
+This is the Helm Web Laravel/React repository, extracted from `web/` of [helm.vessel.voyage](https://github.com/o-psi/helm.vessel.voyage). Its app root is the repository root. Follow the application guidance below, and consult README.md for deployment. `shared/` snapshots browser viewer assets from the Helm/Vessel/Voyage repository; coordinate protocol changes across repositories. Do not commit deployment secrets or production runtime state.
 
 <laravel-boost-guidelines>
 === foundation rules ===

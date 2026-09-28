@@ -70,6 +70,6 @@ test('OS picture selection shows a named preview in the composer', async () => {
         await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:true,onSettings:()=>{}})));
         assert.equal(dom.window.document.querySelector('.composer .pictures img')?.getAttribute('alt'),'photo.png');
         assert.match(dom.window.document.querySelector('.composer')!.textContent!,/photo.png/);
-        assert.equal(dom.window.document.querySelector<HTMLButtonElement>('.composer .send-button')?.disabled,false);
+        assert.equal(dom.window.document.querySelector<HTMLButtonElement>('.composer [aria-label="Send"]')?.disabled,false);
     } finally {await React.act(async()=>root.unmount());Object.assign(globalThis,saved);dom.window.close();}
 });

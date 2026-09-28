@@ -23,9 +23,11 @@ The React console uses source-owned shadcn/ui components in
 from this repository root with `npx shadcn@latest add COMPONENT`, then review the generated
 source and lockfile. Its Tailwind 4 theme lives in `resources/react/style.css`;
 `resources/css/app.css` remains the separate Flux stylesheet for public/login
-pages. The console keeps Helm's existing light/dark palette and layout. Buttons,
-fields, menus, dialogs, mobile navigation, disclosures, alerts, progress and
-sliders use shadcn primitives. The receipt-driven voyage action, enrollment,
+pages. The console uses the shadcn neutral light/dark tokens and component
+variants. App CSS only lays out the sidebar, conversation, composer and browser
+viewer; it does not reskin shadcn controls. Buttons, cards, badges, fields, menus,
+dialogs, mobile navigation, disclosures, alerts, progress and sliders use shadcn
+primitives. The receipt-driven voyage action, enrollment,
 updater and browser adapters retain their focused behavior; these components
 do not own execution or transport state.
 
@@ -274,4 +276,4 @@ Composer hook is installed, so production updates do not depend on a dev package
 
 ## Repository split and shared browser assets
 
-This private repository contains Helm Web independently of the public Helm/Vessel/Voyage repository. `shared/` contains snapshots of the viewer, status vocabulary, and browser vendor file from the source repository at split time. Keep these files in sync with protocol changes there. The production updater now clones this private repository: configure read-only GitHub authentication for the `helm` deployment identity privately before installing the updated updater. Do not place credentials in this repository or overwrite the CT runtime `.env`, database, or backups. A Git push alone does not deploy.
+This public repository contains Helm Web independently of the Helm/Vessel/Voyage repository. `shared/` contains snapshots of the viewer, status vocabulary, and browser vendor file from the source repository at split time. Keep these files in sync with protocol changes there. The production updater clones this repository as the `helm` deployment identity without GitHub credentials. Do not place credentials in this repository or overwrite the CT runtime `.env`, database, or backups. A Git push alone does not deploy; request the scoped update job and verify its receipt and health checks.
