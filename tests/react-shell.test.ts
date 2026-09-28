@@ -35,8 +35,14 @@ test('console keeps responsive layout while shadcn owns control styling', async 
     const css = readFileSync(new URL('../resources/react/style.css', import.meta.url), 'utf8');
     assert.match(css, /grid-template-columns:256px minmax\(0,1fr\)/);
     assert.match(css, /\.dark\{color-scheme:dark/);
-    assert.match(css, /max-width:80rem/);
-    assert.match(css, /max-width:96rem/);
+    // One reading measure at every width: the thread never widens past 768px.
+    assert.match(css, /\.thread\{max-width:768px/);
+    assert.doesNotMatch(css, /max-width:80rem|max-width:96rem/);
+    // Helm geometry is layered so shadcn utilities passed through className win.
+    assert.match(css, /@layer components \{\n:root\{/);
+    // Run-state colors are semantic tokens in both themes.
+    assert.match(css, /--status-active: oklch/);
+    assert.match(css, /\[data-status-tone=warning\]\{--tone:var\(--status-warning\)\}/);
     assert.match(css, /--primary: oklch\(0\.205 0 0\)/);
     assert.doesNotMatch(css, /\.composer textarea\[data-slot="textarea"\]/);
     assert.doesNotMatch(css, /\.settings-dialog button\{padding/);

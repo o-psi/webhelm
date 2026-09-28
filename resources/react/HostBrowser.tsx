@@ -1,4 +1,5 @@
 import {Button} from './components/ui/button';
+import {GlobeIcon,Maximize2Icon,Minimize2Icon,XIcon} from 'lucide-react';
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
 import React, {useEffect, useId, useRef, useState} from 'react';
 import {mountHostBrowser} from '../js/host-browser.js';
@@ -64,10 +65,10 @@ export function HostBrowser({tab, client}: {tab: Tab; client: any}) {
         const previous = conversation.inert; conversation.inert = true;
         return () => {conversation.inert = previous;};
     }, [open, expanded,mobile]);
-    const action=<Button variant="outline" ref={toggle} className="task-browser-action" type="button" aria-expanded={open} aria-controls={id} aria-describedby={activity ? `${id}-activity` : undefined} title={`Browser · ${tab.title}`} onClick={() => open ? close() : setOpen(true)}>
-            Browser{activity && <span className="browser-activity" aria-hidden="true"/>}
+    const action=<Button variant="outline" ref={toggle} className={`task-browser-action${open&&!mobile?' hidden':''}`} type="button" aria-expanded={open} aria-controls={id} aria-describedby={activity ? `${id}-activity` : undefined} title={`Browser · ${tab.title}`} onClick={() => open ? close() : setOpen(true)}>
+            <GlobeIcon aria-hidden="true"/>Browser{activity && <span className="browser-activity" aria-hidden="true"/>}
         </Button>;
-    const body=<><header className="task-browser-heading"><div>{mobile?<SheetTitle asChild><h2 id={`${id}-title`}>Browser</h2></SheetTitle>:<h2 id={`${id}-title`}>Browser</h2>}<span>{tab.title}</span></div><div className="task-browser-heading-actions"><Button variant="ghost" className="expand-browser" type="button" hidden={mobile} aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>{expanded?'Show chat':'Expand browser'}</Button><Button variant="ghost" type="button" aria-label="Close panel" title="Close panel; task browser keeps running" onClick={close}>Close panel</Button></div></header>
+    const body=<><header className="task-browser-heading"><div>{mobile?<SheetTitle asChild><h2 id={`${id}-title`}>Browser</h2></SheetTitle>:<h2 id={`${id}-title`}>Browser</h2>}<span>{tab.title}</span></div><div className="task-browser-heading-actions"><Button variant="ghost" size="sm" className="expand-browser" type="button" hidden={mobile} aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>{expanded?<Minimize2Icon aria-hidden="true"/>:<Maximize2Icon aria-hidden="true"/>}{expanded?'Show chat':'Expand browser'}</Button><Button variant="ghost" size="sm" type="button" aria-label="Close panel" title="Close panel; task browser keeps running" onClick={close}><XIcon aria-hidden="true"/>Close panel</Button></div></header>
             {!ready && <p role="status">Vessel disconnected. The browser will reconnect when this Vessel connection returns.</p>}
             <div className="task-browser-content" ref={setViewerRoot}/></>;
     return <div className="react-host-browser">

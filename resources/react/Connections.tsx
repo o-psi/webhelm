@@ -7,6 +7,7 @@ import {Dialog, DialogContent, DialogTitle} from './components/ui/dialog';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import React, {useEffect, useRef, useState} from 'react';
+import {ArrowLeftIcon,ArrowRightIcon,ExternalLinkIcon,PlusIcon,ServerIcon,XIcon} from 'lucide-react';
 
 type Vessel = {id: string; name: string; vessel_id: string; endpoint?: string};
 type Pending = {id: string; name: string};
@@ -137,16 +138,16 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
     const title = screen === 'list' ? 'Your Vessels' : screen === 'add' ? 'Add a Vessel' : screen === 'guide' ? 'Get an invitation' : selected?.name || 'Vessel details';
     const command = `STATE="/path/to/vessel/state"\nENDPOINT="https://vessel.example.com"\nINVITE_DIR=$(mktemp -d)\nvessel pair-invite --directory "$STATE" \\\n  --endpoint "$ENDPOINT" \\\n  --principal ${data.principalId || 'YOUR_PRINCIPAL_ID'} \\\n  --full-access \\\n  --output "$INVITE_DIR/invitation.json" &&\ncat "$INVITE_DIR/invitation.json"`;
 
-    return <Dialog open onOpenChange={open=>{if(!open)close();}}><DialogContent showCloseButton={false} className="settings-dialog connections-dialog" onInteractOutside={event=>event.preventDefault()} onEscapeKeyDown={event=>onCancel(event)} aria-labelledby="vessel-manager-title">
+    return <Dialog open onOpenChange={open=>{if(!open)close();}}><DialogContent showCloseButton={false} className="settings-dialog connections-dialog flex w-[min(760px,calc(100vw-24px))] max-w-none flex-col gap-0 p-0 sm:max-w-none max-sm:w-[calc(100vw-16px)]" onInteractOutside={event=>event.preventDefault()} onEscapeKeyDown={event=>onCancel(event)} aria-labelledby="vessel-manager-title">
         <header className="connections-header">
-            {screen !== 'list' && <Button variant="ghost" type="button" className="connections-back" disabled={busy} onClick={back} aria-label="Back">←</Button>}
+            {screen !== 'list' && <Button variant="ghost" size="icon" type="button" className="connections-back" disabled={busy} onClick={back} aria-label="Back"><ArrowLeftIcon aria-hidden="true"/></Button>}
             <div className="connections-title"><DialogTitle asChild><h2 id="vessel-manager-title" ref={heading} tabIndex={-1}>{title}</h2></DialogTitle>
                 <p>{screen === 'list' ? `${count} saved · ${online} connected` : screen === 'add' ? 'Connect a computer where your voyages will run.' : screen === 'guide' ? 'Create a private invitation on the Vessel host.' : 'Connection details and access'}</p></div>
-            {screen === 'list' && <Button variant="default" type="button" className="connections-add" onClick={openAdd} disabled={busy || count >= 64}>+ Add Vessel</Button>}
-            <Button variant="ghost" type="button" className="connections-close" aria-label="Close Vessel connections" disabled={busy} onClick={close}>×</Button>
+            {screen === 'list' && <Button variant="default" type="button" className="connections-add" onClick={openAdd} disabled={busy || count >= 64}><PlusIcon aria-hidden="true"/>Add Vessel</Button>}
+            <Button variant="ghost" size="icon" type="button" className="connections-close" aria-label="Close Vessel connections" disabled={busy} onClick={close}><XIcon aria-hidden="true"/></Button>
         </header>
         {notice && <Alert className={`connections-notice ${error ? 'is-error' : ''}`} variant={error?'destructive':'default'} role={error ? 'alert' : 'status'}><AlertDescription>{notice}</AlertDescription>
-            {uncertain && <Button variant="ghost" type="button" onClick={()=>void checkStatus()} disabled={busy}>Check status</Button>}</Alert>}
+            {uncertain && <Button variant="outline" type="button" onClick={()=>void checkStatus()} disabled={busy}>Check status</Button>}</Alert>}
         <div className="connections-body">
             {screen === 'list' && <>
                 <p className="connections-intro">These computers run your voyages. Provider credentials stay on each Vessel.</p>
@@ -154,10 +155,10 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
                     {(data.pairings || []).map(pairing => <div key={pairing.id} className="connections-pending-row"><div><strong>{pairing.name}</strong><small>The original pairing is still pending. Retry that pairing only after reviewing its status.</small></div><Button variant="outline" type="button" disabled={busy || uncertain} onClick={()=>void send(`/connections/pair/${encodeURIComponent(pairing.id)}/retry`, {})}>Retry original pairing</Button></div>)}
                 </section>}
                 {count ? <div className="connections-grid">{data.vessels.map(vessel => <Card role="article" className="connections-card px-4" key={vessel.id}>
-                    <div className="connections-card-top"><span className="connections-server" aria-hidden="true">▣</span><Badge variant="outline" className={`connections-status ${states[vessel.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(vessel.id)}</Badge></div>
+                    <div className="connections-card-top"><span className="connections-server" aria-hidden="true"><ServerIcon/></span><Badge variant="outline" className={`connections-status ${states[vessel.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(vessel.id)}</Badge></div>
                     <h3>{vessel.name}</h3><p>{endpointHost(vessel.endpoint)}</p>
-                    <Button variant="ghost" type="button" className="connections-card-action" onClick={()=>viewDetails(vessel.id)}>View details <span aria-hidden="true">→</span></Button>
-                </Card>)}</div> : <div className="connections-empty"><span aria-hidden="true">▣</span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><Button variant="default" type="button" onClick={openAdd}>Add your first Vessel</Button></div>}
+                    <Button variant="outline" size="sm" type="button" className="connections-card-action self-start" onClick={()=>viewDetails(vessel.id)}>View details<ArrowRightIcon aria-hidden="true"/></Button>
+                </Card>)}</div> : <div className="connections-empty"><span aria-hidden="true"><ServerIcon/></span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><Button variant="default" type="button" onClick={openAdd}>Add your first Vessel</Button></div>}
                 {count >= 64 && <p>Connection limit reached. Remove a Vessel before adding another.</p>}
             </>}
             {screen === 'add' && <>
@@ -166,23 +167,23 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
                     <label>Name<Input ref={nameField} required maxLength={100} value={name} onChange={event=>setName(event.target.value)} placeholder="e.g. My workstation" disabled={busy} autoComplete="off"/></label>
                     <label>{method === 'invitation' ? 'Invitation JSON' : 'Connection credential JSON'}<Textarea required maxLength={16384} rows={5} value={secret} onChange={event=>method === 'invitation' ? setInvitation(event.target.value) : setCredential(event.target.value)} placeholder={method === 'invitation' ? 'Paste the private invitation from your Vessel' : 'Paste an existing Vessel connection credential'} disabled={busy} autoComplete="off" spellCheck={false}/></label>
                     <p className="connections-private">This private value goes to Helm Web for pairing and is never placed in a voyage message. {method === 'invitation' ? 'Invitations expire after 10 minutes.' : 'Importing the same Vessel replaces this tenant’s saved connection.'}</p>
-                    {method === 'invitation' && <Button variant="ghost" type="button" className="connections-help-link" onClick={()=>setScreen('guide')}>How do I get an invitation? →</Button>}
+                    {method === 'invitation' && <Button variant="link" type="button" className="connections-help-link h-auto px-0" onClick={()=>setScreen('guide')}>How do I get an invitation?<ArrowRightIcon aria-hidden="true"/></Button>}
                 </form>
             </>}
             {screen === 'guide' && <div className="connections-guide">
                 <ol><li>Install Vessel and Voyage on a Linux machine you control.</li><li>Expose its authenticated public HTTPS/WSS endpoint. A local service alone is not reachable from Helm Web.</li><li>On that machine, replace the paths and endpoint below, then run this command. Paste the resulting invitation into Add a Vessel.</li></ol>
                 <pre>{command}</pre><p>Keep the invitation private. It grants this Web account full access to that Vessel and expires after 10 minutes.</p>
-                <a href={guideUrl} target="_blank" rel="noopener noreferrer">Full first-time setup guide ↗</a>
+                <a href={guideUrl} target="_blank" rel="noopener noreferrer">Full first-time setup guide<ExternalLinkIcon aria-hidden="true"/></a>
             </div>}
             {screen === 'details' && selected && <div className="connections-details"><div className="connections-detail-card"><span className={`connections-status ${states[selected.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(selected.id)}</span><dl><div><dt>Address</dt><dd>{selected.endpoint || 'Not available'}</dd></div><div><dt>Vessel ID</dt><dd>{selected.vessel_id}</dd></div></dl></div>
-                {!states[selected.id]?.connected && onReconnect && <Button variant="ghost" type="button" onClick={onReconnect}>Reconnect Vessels</Button>}
+                {!states[selected.id]?.connected && onReconnect && <Button variant="outline" type="button" className="justify-self-start" onClick={onReconnect}>Reconnect Vessels</Button>}
                 <section className="connections-danger"><h3>Remove from Helm Web</h3><p>Removing this connection stops new browser access through this Web account. It does not stop voyages or revoke the underlying Vessel grant used by other clients.</p>
                     {!confirmRemove ? <Button variant="destructive" type="button" onClick={()=>setConfirmRemove(true)}>Remove from Helm Web…</Button> : <div className="connections-confirm" role="group" aria-label={`Confirm removing ${selected.name}`}><p>Remove <strong>{selected.name}</strong> from this Web account?</p><Button variant="outline" type="button" disabled={busy} onClick={()=>setConfirmRemove(false)}>Keep connection</Button><Button variant="destructive" type="button" className="connections-remove" disabled={busy || uncertain} onClick={()=>void send(`/connections/${encodeURIComponent(selected.id)}`, {confirm_disconnect: 1}, 'DELETE')}>Remove {selected.name}</Button></div>}
                 </section>
             </div>}
         </div>
         {(screen === 'list' || screen === 'add') && <footer className="connections-footer">
-            {screen === 'list' ? <Button variant="ghost" type="button" onClick={close}>Done</Button> : <Button variant="default" className="connections-primary" type="submit" form="vessel-add-form" disabled={busy || uncertain || !name.trim() || !secret.trim()}>{busy ? 'Connecting…' : 'Connect Vessel'}</Button>}
+            {screen === 'list' ? <Button variant="outline" type="button" onClick={close}>Done</Button> : <Button variant="default" className="connections-primary" type="submit" form="vessel-add-form" disabled={busy || uncertain || !name.trim() || !secret.trim()}>{busy ? 'Connecting…' : 'Connect Vessel'}</Button>}
         </footer>}
     </DialogContent></Dialog>;
 }

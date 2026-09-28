@@ -16,7 +16,7 @@ export function cardStatus(item: any, connected: boolean, snapshot: any = null) 
     }
     const label = run || state || 'unknown';
     const tone = ['running', 'starting', 'live'].includes(label) ? 'active'
-        : ['cancelling', 'blocked', 'waiting'].includes(label) ? 'warning'
+        : ['cancelling', 'blocked', 'waiting', 'awaiting_decision', 'cancel_requested'].includes(label) ? 'warning'
         : ['failed', 'error'].includes(label) ? 'error'
         : ['completed', 'succeeded'].includes(label) ? 'success' : 'muted';
     return {label: label[0].toUpperCase() + label.slice(1).replaceAll('_', ' '), tone,

@@ -8,6 +8,7 @@ import {Dialog, DialogContent, DialogTitle} from './components/ui/dialog';
 import {sameAccount,profileSettings,profileSummary,matchingProfile,duplicateName,profileNameError} from '../js/execution-profiles.js';
 import {uuid} from '../js/vessel-client.js';
 import React,{useEffect,useRef,useState} from 'react';
+import {ArrowLeftIcon,ChevronRightIcon,XIcon} from 'lucide-react';
 import {ProfileActions} from './ProfileActions';
 import {Enrollment} from './Enrollment';
 import {VesselUpdate} from './VesselUpdate';
@@ -17,8 +18,11 @@ import type {Tab,Workspace} from './workspace';
 type Screen='overview'|'location'|'maintenance'|'profiles'|'editor'|'accounts'|'models'|'reasoning'|'enrollment'|'delete'|'usage';
 const titles:Record<Screen,string>={overview:'Voyage setup',location:'Location',maintenance:'Vessel maintenance',profiles:'Profiles',editor:'Edit profile',accounts:'Choose account',models:'Choose model',reasoning:'Reasoning & service',enrollment:'Connect ChatGPT',delete:'Delete profile',usage:'Account usage'};
 const expiredOAuth=(account:any)=>account?.binding.transport==='chatgpt_oauth'&&account.state==='ready'&&account.availability==='expired';
+// Rows and choices are multi-line list items; utilities override the one-line Button geometry.
+const setupRow='setup-row h-auto w-full justify-between gap-3 whitespace-normal px-3.5 py-3 text-left font-normal';
+const setupChoice='setup-choice h-auto w-full flex-col items-start gap-1 whitespace-normal p-3 text-left font-normal';
 function SetupRow({label,detail,onClick,disabled=false}:{label:string;detail:string;onClick:()=>void;disabled?:boolean}){
-    return <Button variant="ghost" type="button" className="setup-row" onClick={onClick} disabled={disabled}><span><strong>{label}</strong><small>{detail}</small></span><span aria-hidden="true">›</span></Button>;
+    return <Button variant="outline" type="button" className={setupRow} onClick={onClick} disabled={disabled}><span><strong>{label}</strong><small>{detail}</small></span><ChevronRightIcon className="setup-row-chevron" aria-hidden="true"/></Button>;
 }
 export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:any;workspace:Workspace;tab?:Tab;tenant:string;onClose:()=>void;onCreated:(vessel:string,process:any)=>void}){
     const heading=useRef<HTMLHeadingElement>(null),body=useRef<HTMLDivElement>(null);
@@ -120,11 +124,11 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
     }
     const matches=(text:string)=>text.toLocaleLowerCase().includes(search.toLocaleLowerCase());
     const reasoningStops=['',...new Set<string>([...(selectedModel?.reasoning_efforts||[]),...(reasoning?[reasoning]:[])])];
-    const refreshButton=(item:any)=>expiredOAuth(item)&&<Button variant="ghost" type="button" disabled={busy||refreshAttempts.current.has(JSON.stringify([vessel,path,item.binding]))} onClick={()=>void refreshSignIn(item)}>Refresh sign-in</Button>;
+    const refreshButton=(item:any)=>expiredOAuth(item)&&<Button variant="outline" type="button" disabled={busy||refreshAttempts.current.has(JSON.stringify([vessel,path,item.binding]))} onClick={()=>void refreshSignIn(item)}>Refresh sign-in</Button>;
     const canSave=!busy&&!recoveryState.error&&caps&&(screen==='editor'?selected?.ready&&selectedModel:profile&&profileAccount?.ready)&&(!!tab||path.startsWith('/'));
-    return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose();}}><DialogContent showCloseButton={false} className="settings-dialog profile-setup" aria-labelledby="profile-setup-title" onInteractOutside={event=>event.preventDefault()} onEscapeKeyDown={event=>{if(busy)event.preventDefault();}}>
+    return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose();}}><DialogContent showCloseButton={false} className="settings-dialog profile-setup block w-[min(480px,calc(100vw-20px))] max-w-none gap-0 p-0 sm:max-w-none" aria-labelledby="profile-setup-title" onInteractOutside={event=>event.preventDefault()} onEscapeKeyDown={event=>{if(busy)event.preventDefault();}}>
         <form onSubmit={event=>{event.preventDefault();void save();}}>
-            <header>{screen!=='overview'&&<Button variant="ghost" type="button" disabled={busy} aria-label="Back" onClick={back}>←</Button>}<DialogTitle asChild><h2 id="profile-setup-title" ref={heading} tabIndex={-1}>{screen==='overview'?(tab?'Voyage setup':'New voyage'):titles[screen]}</h2></DialogTitle><>{screen==='profiles'&&catalogue?.can_manage&&<Button variant="outline" type="button" aria-label="Create profile" disabled={busy} onClick={()=>editProfile('new')}>Create profile</Button>}</><Button variant="ghost" type="button" disabled={busy} aria-label="Close settings" onClick={onClose}>×</Button></header>
+            <header>{screen!=='overview'&&<Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Back" onClick={back}><ArrowLeftIcon aria-hidden="true"/></Button>}<DialogTitle asChild><h2 id="profile-setup-title" ref={heading} tabIndex={-1}>{screen==='overview'?(tab?'Voyage setup':'New voyage'):titles[screen]}</h2></DialogTitle><>{screen==='profiles'&&catalogue?.can_manage&&<Button variant="outline" type="button" aria-label="Create profile" disabled={busy} onClick={()=>editProfile('new')}>Create profile</Button>}</><Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Close settings" onClick={onClose}><XIcon aria-hidden="true"/></Button></header>
             <div ref={body} className="setup-body" aria-busy={busy}>
                 {screen==='overview'&&<>
                     <p>{tab?'Choose a saved profile for the next run.':'Choose where your voyage runs and the profile it uses.'}</p>
@@ -144,7 +148,7 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
                 {screen==='profiles'&&<>
                     <label className="setup-search">Search profiles<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
                     <div className="setup-choices">{(catalogue?.profiles||[]).filter((item:any)=>matches(`${item.name} ${item.model}`)).map((item:any)=><div className="profile-choice-row" key={item.id}>
-                        <Button variant={profileId===item.id?'secondary':'outline'} type="button" className="setup-choice" aria-pressed={profileId===item.id} disabled={busy} onClick={()=>{setProfileId(item.id);back();}}><strong>{item.name}{item.id===catalogue.default_profile_id&&<Badge variant="outline" className="setup-badge">Default</Badge>}</strong><small>{profileSummary(item,accounts)}</small></Button>
+                        <Button variant={profileId===item.id?'secondary':'outline'} type="button" className={setupChoice} aria-pressed={profileId===item.id} disabled={busy} onClick={()=>{setProfileId(item.id);back();}}><strong>{item.name}{item.id===catalogue.default_profile_id&&<Badge variant="outline" className="setup-badge">Default</Badge>}</strong><small>{profileSummary(item,accounts)}</small></Button>
                         {catalogue?.can_manage&&<ProfileActions name={item.name} isDefault={item.id===catalogue.default_profile_id} disabled={busy} onEdit={()=>editProfile('edit',item)} onDuplicate={()=>editProfile('duplicate',item)} onDefault={()=>void mutate('set_default_profile',{profile_id:item.id})} onDelete={()=>{setDeleteTarget({profile:item,revision:catalogue.revision});navigate('delete');}}/>}
                     </div>)}</div>
                     {!catalogue?.profiles?.some((item:any)=>matches(`${item.name} ${item.model}`))&&<p>{search?'No profiles match your search.':'No saved profiles yet.'}</p>}
@@ -156,18 +160,18 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
                     <SetupRow label="Provider account" detail={selected?.label||'Choose an account'} disabled={busy} onClick={()=>navigate('accounts')}/>
                     <SetupRow label="Model" detail={selectedModel?.display_name||model||'Choose a model'} disabled={busy||!selected?.ready} onClick={()=>navigate('models')}/>
                     <SetupRow label="Reasoning & service" detail={`${reasoning||'Provider default'} · ${service||'Default tier'}`} disabled={busy||!selectedModel} onClick={()=>navigate('reasoning')}/>
-                    <Button variant="ghost" type="button" disabled={busy||!selected?.ready} onClick={()=>navigate('usage')}>Account usage</Button>
+                    <Button variant="outline" type="button" className="justify-self-start" disabled={busy||!selected?.ready} onClick={()=>navigate('usage')}>Account usage</Button>
                 </>}
                 {screen==='accounts'&&<>
                     <label className="setup-search">Search accounts<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
-                    <div className="setup-choices">{accounts.filter(item=>matches(item.label)).map(item=><div key={JSON.stringify(item.binding)} className="setup-account"><Button variant={sameAccount(selected?.binding,item.binding)?'secondary':'outline'} type="button" className="setup-choice" disabled={busy||!item.ready} aria-pressed={sameAccount(selected?.binding,item.binding)} onClick={()=>{retainEditor();setAccount(JSON.stringify(item.binding));back();}}><strong>{item.label}</strong><small>{item.ready?'Available':item.availability?.replaceAll('_',' ')||'Unavailable'}</small></Button>{refreshButton(item)}</div>)}</div>
+                    <div className="setup-choices">{accounts.filter(item=>matches(item.label)).map(item=><div key={JSON.stringify(item.binding)} className="setup-account"><Button variant={sameAccount(selected?.binding,item.binding)?'secondary':'outline'} type="button" className={setupChoice} disabled={busy||!item.ready} aria-pressed={sameAccount(selected?.binding,item.binding)} onClick={()=>{retainEditor();setAccount(JSON.stringify(item.binding));back();}}><strong>{item.label}</strong><small>{item.ready?'Available':item.availability?.replaceAll('_',' ')||'Unavailable'}</small></Button>{refreshButton(item)}</div>)}</div>
                     {!accounts.some(item=>matches(item.label))&&<p>No accounts found.</p>}
-                    <div className="setup-actions"><Button variant="ghost" type="button" disabled={busy} onClick={()=>navigate('enrollment')}>Add ChatGPT account</Button><Button variant="ghost" type="button" disabled={busy} onClick={()=>{retainEditor();setAccountsReload(value=>value+1);}}>Reload accounts</Button></div>
+                    <div className="setup-actions"><Button variant="outline" type="button" disabled={busy} onClick={()=>navigate('enrollment')}>Add ChatGPT account</Button><Button variant="ghost" type="button" disabled={busy} onClick={()=>{retainEditor();setAccountsReload(value=>value+1);}}>Reload accounts</Button></div>
                 </>}
                 {screen==='models'&&<>
                     <label className="setup-search">Search models<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
                     <p>Choosing a different model resets reasoning and service to provider defaults. Review them before saving this profile.</p>
-                    <div className="setup-choices">{models.filter(item=>matches(`${item.display_name||''} ${item.id}`)).map(item=><Button variant={model===item.id?'secondary':'outline'} type="button" key={item.id} className="setup-choice" disabled={busy} aria-pressed={model===item.id} onClick={()=>{if(model!==item.id){setModel(item.id);setReasoning('');setService('');}back();}}><strong>{item.display_name||item.id}</strong><small>{item.id}{item.is_default?' · Default':''}</small></Button>)}</div>
+                    <div className="setup-choices">{models.filter(item=>matches(`${item.display_name||''} ${item.id}`)).map(item=><Button variant={model===item.id?'secondary':'outline'} type="button" key={item.id} className={setupChoice} disabled={busy} aria-pressed={model===item.id} onClick={()=>{if(model!==item.id){setModel(item.id);setReasoning('');setService('');}back();}}><strong>{item.display_name||item.id}</strong><small>{item.id}{item.is_default?' · Default':''}</small></Button>)}</div>
                     {!models.some(item=>matches(`${item.display_name||''} ${item.id}`))&&<p>No models found.</p>}
                 </>}
                 {screen==='reasoning'&&<>
@@ -180,14 +184,14 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
                     <p>{selected?.label}</p>
                     {(usage?.snapshot?.windows||[]).filter((window:any)=>Number.isFinite(window.used_percent)).map((window:any,index:number)=><div className="setup-usage" key={index}><strong>{String(window.kind).replaceAll('_',' ')}</strong><span>{Math.round(window.used_percent*10)/10}% used</span><Progress value={Math.max(0,Math.min(100,window.used_percent))} aria-label={`${window.kind} usage`}/>{window.resets_at&&<small>Resets {new Date(window.resets_at*1000).toLocaleString()}</small>}</div>)}
                     <p role="status">{usageNotice||(!usage?.snapshot?.windows?.length?'No usage observation loaded. This is not zero usage.':`Status: ${String(usage.refresh_status||'observed').replaceAll('_',' ')}`)}</p>
-                    <Button variant="ghost" type="button" disabled={busy||!selected?.ready} onClick={()=>void refreshUsage()}>Refresh usage</Button>
+                    <Button variant="outline" type="button" disabled={busy||!selected?.ready} onClick={()=>void refreshUsage()}>Refresh usage</Button>
                 </>}
                 {screen==='enrollment'&&connection&&path&&<Enrollment connection={connection} workspace={path} tenant={tenant} autoOpen onRefreshed={()=>{retainEditor();setAccountsReload(value=>value+1);back();}}/>}
-                {screen==='delete'&&<><p>Delete <strong>{deleteTarget?.profile.name}</strong>? Existing voyages keep their current settings.</p><Button variant="ghost" type="button" className="setup-danger" disabled={busy||!deleteTarget||!catalogue} onClick={()=>{if(deleteTarget.revision!==catalogue.revision){setNotice('Profiles changed. Go back and review this profile before deleting.');return;}void mutate('delete_profile',{profile_id:deleteTarget.profile.id});}}>Delete profile</Button></>}
+                {screen==='delete'&&<><p>Delete <strong>{deleteTarget?.profile.name}</strong>? Existing voyages keep their current settings.</p><Button variant="destructive" type="button" disabled={busy||!deleteTarget||!catalogue} onClick={()=>{if(deleteTarget.revision!==catalogue.revision){setNotice('Profiles changed. Go back and review this profile before deleting.');return;}void mutate('delete_profile',{profile_id:deleteTarget.profile.id});}}>Delete profile</Button></>}
             </div>
             <footer><p role="status">{recoveryState.error?'Recovery storage is unavailable. Do not clear it or repeat uncertain creation.':notice}</p>
-                {reviewRequired&&<Button variant="ghost" type="button" disabled={busy} onClick={()=>{retainEditor();setReviewRequired(false);setNotice('');setRecovery(value=>value+1);}}>Check status</Button>}
-                {records.map(record=><Button variant="ghost" type="button" key={record.key} disabled={busy} onClick={async()=>{setBusy(true);try{const c=fleet.connections.get(record.vessel);const process=await creation.current!.reconcile(c,record);if(process){onCreated(c.id,process);onClose();}else setNotice('Creation was not admitted. You can review and try again.');}catch(error){setNotice(error instanceof Error?error.message:'Receipt unavailable.');}finally{setBusy(false);}}}>Check creation · {record.vessel}</Button>)}
+                {reviewRequired&&<Button variant="outline" type="button" disabled={busy} onClick={()=>{retainEditor();setReviewRequired(false);setNotice('');setRecovery(value=>value+1);}}>Check status</Button>}
+                {records.map(record=><Button variant="outline" type="button" key={record.key} disabled={busy} onClick={async()=>{setBusy(true);try{const c=fleet.connections.get(record.vessel);const process=await creation.current!.reconcile(c,record);if(process){onCreated(c.id,process);onClose();}else setNotice('Creation was not admitted. You can review and try again.');}catch(error){setNotice(error instanceof Error?error.message:'Receipt unavailable.');}finally{setBusy(false);}}}>Check creation · {record.vessel}</Button>)}
                 <div className="setup-footer-actions">{screen==='overview'?<><Button variant="ghost" type="button" disabled={busy} onClick={onClose}>Cancel</Button><Button variant="default" className="primary-action" disabled={!canSave}>{busy?'Working…':tab?'Apply profile':'Create voyage'}</Button></>:screen==='editor'?<><Button variant="ghost" type="button" disabled={busy} onClick={back}>Cancel profile edit</Button><Button variant="default" className="primary-action" disabled={!canSave}>{busy?'Working…':'Save profile'}</Button></>:null}</div>
             </footer>
         </form>

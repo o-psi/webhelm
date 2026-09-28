@@ -8,6 +8,7 @@ import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuLabel,Drop
 import {Card,CardContent} from './components/ui/card';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import {Alert,AlertDescription} from './components/ui/alert';
+import {MoreHorizontalIcon} from 'lucide-react';
 
 export function VoyageActions({connection,voyage,onChanged,portalContainer,accessTrigger=false,triggerLabel}:{connection:any;voyage:any;onChanged:()=>void;portalContainer?:HTMLElement|null;accessTrigger?:boolean;triggerLabel?:string}){
     const host=useRef<HTMLDivElement>(null),controller=useRef<ReturnType<typeof sidebarActions>|null>(null),showResolver=useRef<(()=>void)|null>(null);
@@ -23,8 +24,8 @@ export function VoyageActions({connection,voyage,onChanged,portalContainer,acces
     const archived=Boolean(voyage.catalogue?.summary?.archived||voyage.archive);
     const item=(action:string,label:string,destructive=false)=><DropdownMenuItem key={action} variant={destructive?'destructive':'default'} onSelect={()=>void controller.current?.open(latest.current.connection,latest.current.voyage,action)}>{label}</DropdownMenuItem>;
     return <div ref={host} className={accessTrigger?undefined:'voyage-action-host'}>
-        {accessTrigger?<Button variant="outline" type="button" aria-label="Review access mode" onClick={()=>void controller.current?.open(latest.current.connection,latest.current.voyage,'access')}>{triggerLabel||'Access mode'}</Button>:<DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" type="button" size="icon-sm" aria-label="Voyage actions" title="Voyage actions">⋯</Button></DropdownMenuTrigger>
-            <DropdownMenuContent portalContainer={portalContainer} data-actions aria-label="Voyage actions" align="end" className="voyage-action-menu">
+        {accessTrigger?<Button variant="outline" type="button" aria-label="Review access mode" onClick={()=>void controller.current?.open(latest.current.connection,latest.current.voyage,'access')}>{triggerLabel||'Access mode'}</Button>:<DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" type="button" size="icon-sm" aria-label="Voyage actions" title="Voyage actions"><MoreHorizontalIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
+            <DropdownMenuContent portalContainer={portalContainer} data-actions aria-label="Voyage actions" align="end" className="voyage-action-menu min-w-48">
                 {item('details','Details')}
                 <DropdownMenuSeparator/>
                 <DropdownMenuLabel>Manage</DropdownMenuLabel>
@@ -33,7 +34,7 @@ export function VoyageActions({connection,voyage,onChanged,portalContainer,acces
             </DropdownMenuContent>
         </DropdownMenu>}
         {container&&<Dialog open={open} onOpenChange={next=>{if(!next){controller.current?.invalidate();setOpen(false);}}}>
-            <DialogContent portalContainer={container} showCloseButton={false} className="settings-dialog sidebar-action-dialog" onInteractOutside={event=>event.preventDefault()}>
+            <DialogContent portalContainer={container} showCloseButton={false} className="settings-dialog sidebar-action-dialog w-[440px] sm:max-w-[calc(100vw-2rem)]" onInteractOutside={event=>event.preventDefault()}>
                 <form id="sidebar-action-form" ref={node=>{if(node){showResolver.current?.();showResolver.current=null;}}}>
                     <header><DialogTitle asChild><h2 id="sidebar-action-title"/></DialogTitle></header>
                     <p id="sidebar-action-target"/><p id="sidebar-action-status" role="status"/>
