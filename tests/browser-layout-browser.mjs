@@ -34,7 +34,7 @@ const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH 
 const report = {capturedAt:new Date().toISOString(),chromium:browser.version(),entry:entry.file,sha256:createHash('sha256').update(await readFile(`${build}/${entry.file}`)).digest('hex'),synthetic:true,viewports:[],failures:[]};
 const check = (value, message) => {if(!value)report.failures.push(message);};
 try {
- for(const viewport of [{width:1440,height:900},{width:390,height:844}]) {
+ for(const viewport of (process.env.LAYOUT_VIEWPORT==='mobile'?[{width:390,height:844}]:[{width:1440,height:900},{width:390,height:844}])) {
     const label = viewport.width===1440?'desktop':'mobile';
     const context = await browser.newContext({viewport,reducedMotion:'reduce'});
     const page = await context.newPage();
@@ -67,7 +67,7 @@ try {
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
                 else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
-                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1,observation_cursor:5,messages:[...Array.from({length:40},(_,i)=>({role:'assistant',content:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
+                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1,observation_cursor:5,messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
                 else if(c.op==='decisions')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:[]};
                 else if(c.op==='host_browser'){
                     if(c.operation.action==='control'){mode=c.operation.mode;binding.controller_epoch++;}
@@ -151,7 +151,13 @@ try {
     await page.getByRole('button',{name:'Account and appearance'}).click();
     await page.getByRole('menuitemradio',{name:'light'}).click();
     await page.locator('.voyage-card').click();
+    if(label==='mobile')await page.locator('.mobile-navigation').waitFor({state:'hidden'});
     const conversation=page.locator('.conversation:not([hidden])');
+    await page.screenshot({path:`${output}/${label}-before-model.png`});
+    check(await conversation.getByRole('button',{name:'Previous user message'}).count()===1,`${label}: turn navigation is missing`);
+    const beforeTurn=await conversation.locator('.transcript').evaluate(element=>element.scrollTop);
+    await conversation.getByRole('button',{name:'Previous user message'}).click();
+    check(await conversation.locator('.transcript').evaluate(element=>element.scrollTop)<beforeTurn,`${label}: previous turn did not move the transcript`);
     await page.getByRole('button',{name:'Choose model'}).click();
     check(await page.getByRole('menuitem',{name:'Fixture model'}).isVisible(),`${label}: direct model choices did not load`);
     await page.keyboard.press('Escape');

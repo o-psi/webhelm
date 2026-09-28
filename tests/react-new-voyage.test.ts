@@ -7,7 +7,7 @@ import {completeNewVoyage} from '../resources/react/new-voyage-delivery';
 
 const binding={account_id:'account',connection_id:'provider',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 
-async function mount({uncertain=false}:{uncertain?:boolean}={}){
+async function mount({uncertain=false,recovery=null}:{uncertain?:boolean;recovery?:any}={}){
     const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test'});
     const previous={window:globalThis.window,document:globalThis.document,localStorage:globalThis.localStorage};
     Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Event:dom.window.Event});
@@ -28,12 +28,22 @@ async function mount({uncertain=false}:{uncertain?:boolean}={}){
         return {protocol:1,outcome_unknown:false,error:null,result};
     }}};
     const root=createRoot(document.getElementById('root')!);
-    await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:()=>{}})));
+    await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,recovery,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:()=>{}})));
     await act(async()=>{await new Promise(resolve=>setTimeout(resolve,230));});
     const button=(label:string)=>{const found=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>(item.getAttribute('aria-label')||item.textContent||'').trim()===label);assert.ok(found,label);return found;};
     const dispose=async()=>{await act(async()=>root.unmount());Object.assign(globalThis,previous);dom.window.close();};
     return {dom,commands,created,button,dispose};
 }
+
+test('uncertain message transfer starts as a reviewable draft and sends nothing',async()=>{
+    const view=await mount({recovery:{vessel:'c',workspace:'/work',text:'Check the old result first',hasPictures:true,source:'Original voyage'}});
+    try{
+        assert.equal(document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')?.value,'Check the old result first');
+        assert.match(document.querySelector('.new-voyage-recovery')!.textContent!,/earlier action may have happened/);
+        assert.match(document.querySelector('.new-voyage-recovery')!.textContent!,/Reattach any pictures/);
+        assert.equal(view.commands.some(command=>command.op==='start_account'||command.op==='submit'),false);
+    }finally{await view.dispose();}
+});
 
 test('new voyage sends the retained prompt only after an exact creation receipt',async()=>{
     const view=await mount();

@@ -5,6 +5,14 @@ import {LiveInspection} from './LiveInspection';
 import type {Tab,Workspace} from './workspace';
 
 type Change={key:string;path:string;kind:string;status:string;preview:string;truncated:boolean};
+export function PatchPreview({source}:{source:string}){
+    const lines=source.split('\n');
+    if(lines.length>2000)return <pre className="overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre" aria-label="Recorded patch request">{source}</pre>;
+    return <pre className="overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre" aria-label="Recorded patch request">{lines.map((line,index)=>{
+        const kind=/^(?:\+\+\+|---|@@|\*\*\*)/.test(line)?'heading':line.startsWith('+')?'added':line.startsWith('-')?'removed':'';
+        return <span key={index} className={kind?`diff-${kind}`:undefined}>{line}{index<lines.length-1?'\n':''}</span>;
+    })}</pre>;
+}
 export function recordedChanges(messages:any[]):Change[]{
     const results=new Map(messages.filter(message=>['tool','function'].includes(message.role)&&message.tool_call_id).map(message=>[message.tool_call_id,message]));
     const changes:Change[]=[];
@@ -36,7 +44,7 @@ export function ReviewChanges({tab,workspace}:{tab:Tab;workspace:Workspace}){
             <div className="max-h-44 min-h-0 overflow-auto border-b p-2 lg:max-h-none lg:border-r lg:border-b-0" aria-label="Recorded file edits">{changes.length?changes.map(change=><Button key={change.key} variant={current?.key===change.key?'secondary':'ghost'} type="button" className="mb-1 h-auto w-full flex-col items-start gap-0.5 whitespace-normal px-2 py-2 text-left" aria-pressed={current?.key===change.key} onClick={()=>setSelected(change.key)}><span className="w-full truncate font-medium" title={change.path}>{change.path}</span><small className="text-muted-foreground">{change.kind} · {change.status}</small></Button>):<p className="p-2 text-sm text-muted-foreground">No file edit requests appear in the loaded conversation.</p>}
                 {Boolean(tab.snapshot?.message_offset)&&<Button variant="outline" size="sm" type="button" className="mt-2 w-full" disabled={loading||tab.busy} onClick={()=>{setLoading(true);void workspace.earlier(tab.key).finally(()=>setLoading(false));}}>{loading?'Loading…':'Load earlier history'}</Button>}
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-3">{current?<><h3 className="mb-1 break-all text-sm font-medium">{current.path}</h3><p className="text-xs text-muted-foreground">{current.kind} · {current.status}</p>{current.preview?<pre className="overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-all">{current.preview}</pre>:<p className="text-sm text-muted-foreground">Content was not included in this projection.</p>}{current.truncated&&<p className="text-xs text-muted-foreground">Preview limited to 64 KiB.</p>}</>:<p className="text-sm text-muted-foreground">Choose an edit to review its recorded request.</p>}</div>
+            <div className="min-h-0 flex-1 overflow-auto p-3">{current?<><h3 className="mb-1 break-all text-sm font-medium">{current.path}</h3><p className="text-xs text-muted-foreground">{current.kind} request · {current.status}</p>{current.preview?<PatchPreview source={current.preview}/>:<p className="text-sm text-muted-foreground">Content was not included in this projection.</p>}{current.truncated&&<p className="text-xs text-muted-foreground">Preview limited to 64 KiB.</p>}</>:<p className="text-sm text-muted-foreground">Choose an edit to review its recorded request.</p>}</div>
         </div></>}
     </div>;
 }

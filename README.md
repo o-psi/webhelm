@@ -61,7 +61,12 @@ requests from loaded conversation history. Recorded edits are historical request
 not a current filesystem diff. Read requests are admitted as one exact operator
 run; the dock waits for that run’s canonical result and never repeats an uncertain
 request. Uncertain command notices explain the affected action in the composer;
-exact command IDs remain in expandable receipt details for inspection.
+exact command IDs remain in expandable receipt details for inspection. If a
+receipt remains unknown, the original voyage stays fenced while a new voyage
+can open with a copied text draft for explicit review. No command or picture is
+resent by that transition. The conversation provides response copying (fetching
+complete canonical text when the visible projection is truncated), user-turn
+navigation, and a compact sidebar for scanning long voyage lists.
 
 helm.vessel.voyage. Foleybridge.Software presents Helm, Vessel, and Voyage
 as a product suite for running coding agents across machines the user controls.

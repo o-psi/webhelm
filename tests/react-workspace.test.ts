@@ -76,7 +76,8 @@ test('unknown-after-restart receipt remains blocking and never replays', async (
     f.workspace.draft(key, 'Hello'); f.mode('unknown'); await f.workspace.act(key, 'submit');
     f.mode('unknown_after_restart'); await f.workspace.reconcile(key);
     assert.equal(f.storage.length, 1); assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!), false);
-    assert.match(f.workspace.tabs.get(key)?.notice||'', /can’t confirm whether your message went through/);
+    assert.match(f.workspace.tabs.get(key)?.notice||'', /cannot confirm whether your message was applied after a restart/);
+    assert.equal(f.workspace.tabs.get(key)?.receiptStates[f.commands.find(c=>c.op==='submit').command_id],'unknown_after_restart');
     assert.doesNotMatch(f.workspace.tabs.get(key)?.notice||'', /Receipt [a-f0-9-]+/);
     f.workspace.close();
 });

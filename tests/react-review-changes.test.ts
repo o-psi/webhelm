@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recordedChanges} from '../resources/react/ReviewChanges';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {PatchPreview,recordedChanges} from '../resources/react/ReviewChanges';
 
 test('recorded edits are identified from tool requests and do not claim current filesystem state',()=>{
  const messages=[
@@ -12,4 +14,12 @@ test('recorded edits are identified from tool requests and do not claim current 
  assert.deepEqual(changes.map(change=>[change.path,change.kind,change.status]),[['src/app.ts','Patch','Done'],['src/other.ts','File write','Failed']]);
  assert.match(changes[0].preview,/\+new line/);
  assert.equal(changes.some(change=>change.path==='src/app.ts'&&change.kind==='File read'),false);
+});
+
+test('recorded patch coloring distinguishes file headers from additions and removals',()=>{
+ const html=renderToStaticMarkup(React.createElement(PatchPreview,{source:'*** Update File: src/app.ts\n-old\n+new\n context'}));
+ assert.match(html,/diff-heading[^>]*>\*\*\* Update File/);
+ assert.match(html,/diff-removed[^>]*>-old/);
+ assert.match(html,/diff-added[^>]*>\+new/);
+ assert.match(html,/aria-label="Recorded patch request"/);
 });

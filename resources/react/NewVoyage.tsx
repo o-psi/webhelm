@@ -10,8 +10,9 @@ import {Creation,accountChoices,vesselRead} from './settings';
 import {preparePicture,MAX_PICTURE_BYTES,MAX_PICTURES} from './prepare-picture';
 
 export type NewVoyageMessage = {text:string; pictures:File[]; access:'read-only'|'approval'|'unrestricted'; send:boolean; applyAccess:boolean};
+export type RecoveryDraft = {vessel:string; workspace:string; text:string; hasPictures:boolean; source:string};
 
-export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,onCreated,onAdvanced}:{fleet:any;tenant:string;hidden:boolean;resetToken:number;reloadToken:number;onCreated:(vessel:string,process:any,message:NewVoyageMessage)=>Promise<void>|void;onAdvanced:()=>void}){
+export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,recovery,onCreated,onAdvanced}:{fleet:any;tenant:string;hidden:boolean;resetToken:number;reloadToken:number;recovery?:RecoveryDraft|null;onCreated:(vessel:string,process:any,message:NewVoyageMessage)=>Promise<void>|void;onAdvanced:()=>void}){
     const connections=[...fleet.connections.values()] as any[];
     const [vessel,setVessel]=useState<string>(()=>connections.find(item=>item.client)?.id||connections[0]?.id||'');
     const connection=fleet.connections.get(vessel);
@@ -31,6 +32,10 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,onCreated,
     const currentModel=modelOptions.find(item=>item.id===selectedModel);
     useEffect(()=>{if(!hidden)input.current?.focus();},[hidden]);
     useEffect(()=>{setText('');setPictures([]);setNotice('');},[resetToken]);
+    useEffect(()=>{
+        if(!recovery)return;
+        setVessel(recovery.vessel);setPath(recovery.workspace);setText(recovery.text);setPictures([]);setNotice('');
+    },[recovery]);
     useEffect(()=>{
         const epoch=++capsGeneration.current;
         setCaps(null);setCatalogue(null);setAccounts([]);setChoicesFor(null);
@@ -131,12 +136,13 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,onCreated,
     return <section className={`new-voyage col-start-1 row-start-1 min-h-0 overflow-auto px-4 py-10 ${hidden?'hidden':'flex'}`} hidden={hidden} aria-label="New voyage">
         <div className="new-voyage-content m-auto w-full max-w-3xl">
             <h1 className="mb-6 text-center text-3xl font-medium tracking-tight">What should we work on?</h1>
+            {recovery&&<div className="new-voyage-recovery mx-auto mb-4 max-w-2xl rounded-lg border p-3 text-sm" role="status"><strong>Continue from {recovery.source}</strong><p className="mb-0 mt-1">The earlier action may have happened. Review this draft before sending; repeating the same request could duplicate work. The original receipt remains in its voyage.{recovery.hasPictures?' Reattach any pictures you still need.':''}</p></div>}
             <form className="composer" aria-label="New voyage composer" onSubmit={event=>{event.preventDefault();void create(true);}} onPaste={event=>{if(event.clipboardData.files.length){event.preventDefault();void addPictures([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(event.dataTransfer.files.length){event.preventDefault();void addPictures([...event.dataTransfer.files]);}}}>
-                <Card className="composer-box gap-2 p-3" size="sm">
+                <Card className="composer-box gap-2 p-3 shadow-sm" size="sm">
                     {notice&&<p className="composer-feedback" role="status">{notice}</p>}
                     {pending.error&&<p className="composer-feedback" role="alert">Recovery storage is unavailable. Creating a voyage is disabled.</p>}
                     {pictures.length>0&&<div className="new-voyage-pictures flex flex-wrap gap-2">{pictures.map((picture,index)=><div className="flex max-w-40 items-center gap-1 rounded-md border px-2 text-xs" key={`${picture.name}:${index}`}><span className="truncate" title={picture.name}>{picture.name}</span><Button variant="ghost" size="icon-xs" type="button" aria-label={`Remove ${picture.name}`} disabled={busy} onClick={()=>setPictures(current=>current.filter((_,i)=>i!==index))}><XIcon aria-hidden="true"/></Button></div>)}</div>}
-                    <Textarea ref={input} aria-label="Message" rows={3} value={text} disabled={busy} onChange={event=>setText(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void create(true);}}} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
+                    <Textarea ref={input} className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent" aria-label="Message" rows={3} value={text} disabled={busy} onChange={event=>setText(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void create(true);}}} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
                     <Input ref={pictureInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void addPictures(files);}}/>
                     <div className="new-voyage-controls grid gap-3 sm:grid-cols-2">
                         <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Vessel<NativeSelect value={vessel} disabled={busy} onChange={event=>{setVessel(event.target.value);setPath('');setProfileId('');}}>{connections.map(item=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</NativeSelect></label>

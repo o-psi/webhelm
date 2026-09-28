@@ -5,7 +5,7 @@ import {inspectionRequest,inventorySupports,type InspectionScope} from './inspec
 
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
 export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any};
-export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]};
+export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]};
 const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const settledNotice=(op:string,status:string)=>status==='not_applied'?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
@@ -26,7 +26,7 @@ export class Workspace {
     changed = () => { this.version++; this.listeners.forEach(listener => listener()); };
     open(vessel: string, session: string, title: string) {
         const key = JSON.stringify([vessel, session]);
-        if (!this.tabs.has(key)) this.tabs.set(key, {key, vessel, session, title, draft: '', snapshot: null, incarnation: null, stale: true, busy: false, notice: '', freshAt: 0, decisions: [], pictures: []});
+        if (!this.tabs.has(key)) this.tabs.set(key, {key, vessel, session, title, draft: '', snapshot: null, incarnation: null, stale: true, busy: false, notice: '', receiptStates: {}, freshAt: 0, decisions: [], pictures: []});
         this.changed(); void this.refresh(key); return key;
     }
     draft(key: string, value: string) { const tab = this.tabs.get(key); if (tab) { tab.draft = value; this.changed(); } }
@@ -139,6 +139,7 @@ export class Workspace {
             const known = resolved(response, command.command.command_id, tab.session);
             if (known && receiptStatus(response) !== 'unknown_after_restart') connection.journal.settle(command.command.command_id);
             const status = receiptStatus(response);
+            if (known && status === 'unknown_after_restart') tab.receiptStates[command.command.command_id] = status;
             if(known&&!response.error&&status!=='not_applied'&&status!=='unknown_after_restart')onReceipt?.(response.result?.result);
             tab.notice = response.error ? `Vessel refused: ${response.error}` : !known || status === 'unknown_after_restart' ? uncertainNotice(op) : status === 'not_applied' ? settledNotice(op,status) : '';
             if (known && !response.error && ['accepted', 'queued', 'applied'].includes(status) && ['submit', 'steer', 'submit_content'].includes(op)) {
@@ -275,13 +276,18 @@ export class Workspace {
             let lastSettled:{op:string;status:string}|null=null;
             for (const entry of this.pending(tab)) {
                 const response = await connection.client.exchange(request('receipt', {session_id: tab.session, command_id: entry.command_id}));
-                if (resolved(response, entry.command_id, tab.session, true) && receiptStatus(response) !== 'unknown_after_restart') {
-                    connection.journal.settle(entry.command_id);
-                    lastSettled={op:entry.op,status:receiptStatus(response)};
+                if (resolved(response, entry.command_id, tab.session, true)) {
+                    const status=receiptStatus(response);
+                    if (status === 'unknown_after_restart') tab.receiptStates[entry.command_id] = status;
+                    else {
+                        connection.journal.settle(entry.command_id);
+                        delete tab.receiptStates[entry.command_id];
+                        lastSettled={op:entry.op,status};
+                    }
                 }
             }
             const pending=this.pending(tab);
-            tab.notice=pending.length===1?uncertainNotice(pending[0].op):pending.length>1?`We can’t confirm ${pending.length} actions yet. Check the conversation and receipts before trying again.`:lastSettled?settledNotice(lastSettled.op,lastSettled.status):tab.notice;
+            tab.notice=pending.length===1&&tab.receiptStates[pending[0].command_id]==='unknown_after_restart'?`The Vessel cannot confirm whether your ${actionName(pending[0].op)} was applied after a restart. Review this conversation before sending similar work in a new voyage.`:pending.length===1?uncertainNotice(pending[0].op):pending.length>1?`We can’t confirm ${pending.length} actions yet. Check the conversation and receipts before trying again.`:lastSettled?settledNotice(lastSettled.op,lastSettled.status):tab.notice;
         } catch { tab.notice = 'We can’t check the receipt right now. Check the current voyage before trying again.'; }
         finally { tab.busy = false; this.changed(); }
     }

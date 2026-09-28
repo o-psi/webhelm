@@ -7,7 +7,7 @@ import {Card} from './components/ui/card';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from './components/ui/dialog';
-import {ArrowDownIcon,ArrowUpIcon,ChevronDownIcon,ChevronRightIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
+import {ArrowDownIcon,ArrowUpIcon,CheckIcon,ChevronDownIcon,ChevronRightIcon,CopyIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
 import {HostBrowser} from './HostBrowser';
 import React, {useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ToolGroup,threadRows,toolTrigger} from './ToolGroup';
@@ -16,7 +16,7 @@ import {ImagePart,Output} from './MessageParts';
 import {VoyageActions} from './VoyageActions';
 import {Settings} from './Settings';
 import {InferenceControls} from './InferenceControls';
-import {NewVoyage,type NewVoyageMessage} from './NewVoyage';
+import {NewVoyage,type NewVoyageMessage,type RecoveryDraft} from './NewVoyage';
 import {completeNewVoyage} from './new-voyage-delivery';
 import {Decisions} from './Decisions';
 import {VesselFleet} from '../js/vessel-fleet.js';
@@ -37,7 +37,20 @@ function content(value: unknown): string {
 export function prose(text: string) {
     return DOMPurify.sanitize(marked.parse(text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'')) as string, {ALLOWED_TAGS:['p','br','strong','em','del','code','pre','blockquote','ul','ol','li','h1','h2','h3','h4','hr','a','table','thead','tbody','tr','th','td'], ALLOWED_ATTR:['href','title'], ALLOW_DATA_ATTR:false});
 }
-function Composer({tab, workspace, onSettings, connection, voyage}: {tab?: Tab; workspace: Workspace; onSettings:()=>void; connection?:any; voyage?:any}) {
+export function CopyResponse({tab,workspace,message}:{tab:Tab;workspace:Workspace;message:any}){
+    const [copied,setCopied]=useState(false),[error,setError]=useState(false);
+    const copy=async()=>{
+        try{
+            const text=message.projection_truncated&&Number.isSafeInteger(message.message_index)?await workspace.canonicalMessage(tab.key,message.message_index,tab.snapshot.revision):message.projection_truncated?null:content(message.content);
+            if(typeof text!=='string')throw new Error('Complete response unavailable.');
+            await navigator.clipboard.writeText(text);
+            setCopied(true);setError(false);
+            window.setTimeout(()=>setCopied(false),2000);
+        }catch{setError(true);}
+    };
+    return <div className="message-actions"><Button variant="ghost" size="sm" type="button" aria-label={copied?'Response copied':'Copy response'} title={error?'Copy unavailable. Open the complete message and try again.':'Copy complete response'} onClick={()=>void copy()}>{copied?<CheckIcon aria-hidden="true"/>:<CopyIcon aria-hidden="true"/>}<span>{error?'Copy unavailable':copied?'Copied':'Copy'}</span></Button></div>;
+}
+function Composer({tab, workspace, onSettings, onRecover, connection, voyage}: {tab?: Tab; workspace: Workspace; onSettings:()=>void; onRecover?:()=>void; connection?:any; voyage?:any}) {
     const fileInput = useRef<HTMLInputElement>(null);
     const [attaching,setAttaching] = useState(false);
     const pickFiles = async (files: File[]) => {
@@ -52,14 +65,15 @@ function Composer({tab, workspace, onSettings, connection, voyage}: {tab?: Tab; 
     const enabled = tab && !stopping && workspace.actionable(tab) && workspace.permitted(tab,sendOp);
     const canStop = tab && activeRun && workspace.actionable(tab) && workspace.permitted(tab,'cancel');
     const send = () => { if (tab && enabled) void workspace.act(tab.key, sendOp); };
-    const pendingEntries=(()=>{try{return tab?workspace.pending(tab):[];}catch{return [];}})();
+    const pendingState=(()=>{try{return {entries:tab?workspace.pending(tab):[],error:false};}catch{return {entries:[],error:true};}})();
+    const pendingEntries=pendingState.entries;
+    const blocked=pendingEntries.length>0||pendingState.error;
     return <form className="composer" aria-label="Message composer" onPaste={event=>{if(tab&&event.clipboardData.files.length){event.preventDefault();void pickFiles([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(tab&&event.dataTransfer.files.length){event.preventDefault();void pickFiles([...event.dataTransfer.files]);}}} onSubmit={event => {event.preventDefault(); send();}}>
-        <Card className="composer-box gap-2 p-3" size="sm"><Input ref={fileInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{(tab?.notice||pendingEntries.length>0)&&<div className="composer-feedback" role="status"><p>{tab?.notice||'A previous action needs confirmation. Check the receipt before trying again.'}</p>{pendingEntries.length>0&&<><Button variant="ghost" size="sm" type="button" disabled={tab?.busy||!connection?.client} onClick={() => tab && void workspace.reconcile(tab.key)}>Check receipt{pendingEntries.length>1?'s':''}</Button><details><summary>Receipt details</summary><ul>{pendingEntries.map((entry:any)=><li key={entry.command_id}><code>{entry.op} · {entry.command_id}</code></li>)}</ul></details></>}</div>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="outline" size="icon-xs" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}><XIcon aria-hidden="true"/></Button></figure>)}</div>}<Textarea aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
+        <Card className="composer-box gap-2 p-3 shadow-sm" size="sm"><Input ref={fileInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{(tab?.notice||blocked)&&<div className="composer-feedback" role="status"><p>{pendingState.error?'Recovery record is unavailable. This voyage is paused to avoid repeating an uncertain action.':tab?.notice||'A previous action needs confirmation. Check the receipt before trying again.'}</p>{blocked&&<div className="flex flex-wrap items-center gap-2">{pendingEntries.length>0&&<Button variant="ghost" size="sm" type="button" disabled={tab?.busy||!connection?.client} onClick={() => tab && void workspace.reconcile(tab.key)}>Check receipt{pendingEntries.length>1?'s':''}</Button>}{onRecover&&<Button variant="outline" size="sm" type="button" onClick={onRecover}>Continue in a new voyage</Button>}</div>}{pendingEntries.length>0&&<details><summary>Receipt details</summary><ul>{pendingEntries.map((entry:any)=><li key={entry.command_id}><code>{entry.op} · {entry.command_id}</code>{tab?.receiptStates?.[entry.command_id]&&<span> · {tab.receiptStates[entry.command_id].replaceAll('_',' ')}</span>}</li>)}</ul></details>}</div>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="outline" size="icon-xs" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}><XIcon aria-hidden="true"/></Button></figure>)}</div>}<Textarea className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent" aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
         <div className="composer-toolbar"><div className="composer-options">
-            <Button variant="ghost" type="button" onClick={onSettings} title="Voyage settings"><Settings2Icon aria-hidden="true"/><span>Voyage settings</span><ChevronDownIcon aria-hidden="true"/></Button>
+            <Button variant="ghost" type="button" onClick={onSettings} title="Voyage settings" aria-label="Voyage settings"><Settings2Icon aria-hidden="true"/><span className="sr-only">Voyage settings</span></Button>
             <Button variant="ghost" type="button" disabled={!tab||tab.busy||attaching} aria-label="Attach pictures" title="Attach pictures" onClick={()=>fileInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button>
             {tab&&connection&&tab.snapshot?.inference&&<InferenceControls tab={tab} workspace={workspace} connection={connection}/>}
-            <small className="composer-summary" title={tab?.snapshot?.workspace||''}>{tab?.snapshot?.workspace}</small>
             {connection&&voyage&&<VoyageActions connection={connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} accessTrigger triggerLabel={`Access: ${{'read-only':'Read only',approval:'Approval',unrestricted:'Full access'}[tab?.snapshot?.access as 'read-only'|'approval'|'unrestricted']||'Unknown'}`}/>}
         </div>{running && <Button variant="outline" type="button" aria-label="Stop run" disabled={!canStop} onClick={() => tab && void workspace.act(tab.key,'cancel')}><SquareIcon aria-hidden="true"/>{stopping?'Stopping…':'Stop run'}</Button>}<Button variant="default" aria-label={sendOp === 'steer' ? 'Send to current run' : 'Send'} disabled={!enabled || (!tab?.draft.trim() && !tab?.pictures.length)}><ArrowUpIcon aria-hidden="true"/>{sendOp === 'steer' ? 'Send to current run' : 'Send'}</Button></div><small className="composer-hint">Enter to send · Shift+Enter for a new line</small></Card>
     </form>;
@@ -102,11 +116,31 @@ export function RunStatus({tab}: {tab: Tab}) {
     </div>;
 }
 
-export function Conversation({tab, workspace, active, onSettings, connection, voyage}: {tab: Tab; workspace: Workspace; active: boolean; onSettings:()=>void; connection?:any; voyage?:any}) {
+export function Conversation({tab, workspace, active, onSettings, onRecover, connection, voyage}: {tab: Tab; workspace: Workspace; active: boolean; onSettings:()=>void; onRecover?:()=>void; connection?:any; voyage?:any}) {
     const run = tab.snapshot?.run, scroll = useRef<HTMLDivElement>(null), following = useRef(true);
     const loadingHistory = useRef(false), retryHistoryAt = useRef(0);
     const [showJump,setShowJump] = useState(false);
+    const [turnNavigation,setTurnNavigation]=useState({previous:false,next:false});
     useEffect(() => {if(active && following.current && scroll.current) scroll.current.scrollTop=scroll.current.scrollHeight;},[active,tab.snapshot]);
+    const turnPositions=()=>{
+        const container=scroll.current;
+        if(!container)return [];
+        const top=container.getBoundingClientRect().top;
+        return [...container.querySelectorAll<HTMLElement>('.message.user')].map(message=>message.getBoundingClientRect().top-top+container.scrollTop-12);
+    };
+    const updateTurnNavigation=()=>{
+        const top=scroll.current?.scrollTop||0,positions=turnPositions();
+        const previous=positions.some(position=>position<top-40),next=positions.some(position=>position>top+40);
+        setTurnNavigation(current=>current.previous===previous&&current.next===next?current:{previous,next});
+    };
+    const jumpTurn=(direction:'previous'|'next')=>{
+        const container=scroll.current;if(!container)return;
+        const positions=turnPositions(),top=container.scrollTop;
+        const target=direction==='previous'?positions.filter(position=>position<top-40).at(-1):positions.find(position=>position>top+40);
+        if(target==null)return;
+        following.current=false;container.scrollTo({top:target,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+        updateTurnNavigation();
+    };
     const loadNearTop = () => {
         const el = scroll.current, offset = tab.snapshot?.message_offset;
         if (!active || !el || !offset || tab.busy || loadingHistory.current || Date.now() < retryHistoryAt.current) return;
@@ -129,12 +163,13 @@ export function Conversation({tab, workspace, active, onSettings, connection, vo
             });
         });
     };
-    useEffect(() => {if (active) loadNearTop();}, [active, tab.snapshot?.message_offset]);
+    useEffect(() => {if (active) {loadNearTop();updateTurnNavigation();}}, [active, tab.snapshot?.message_offset, tab.snapshot?.messages]);
     const renderMessage=(message:any)=>{return <article key={message.message_index} className={`message ${message.role}`}>
                     {['tool','function'].includes(message.role) ? <pre>{content(message.content)}</pre> : <><span className="sr-only">{message.role}</span><div className="prose" dangerouslySetInnerHTML={{__html:prose(message.parts?.length?message.parts.filter((part:any)=>part.type==='text').map((part:any)=>part.text).join('\n'):content(message.content))}}/></>}
                     {message.interrupted_attempt&&<small className="message-meta">Interrupted attempt</small>}
                     {message.parts?.filter((part:any)=>part.type==='image').map((part:any,index:number)=><ImagePart key={part.attachment?.id||index} attachment={part.attachment} tab={tab} workspace={workspace}/>)}
                     {message.projection_truncated && <Button variant="ghost" disabled={tab.busy} onClick={()=>void workspace.expand(tab.key,message.message_index)}>Read complete message</Button>}
+                    {message.role==='assistant'&&Boolean(content(message.content).trim())&&<CopyResponse tab={tab} workspace={workspace} message={message}/>}
                 </article>;};
     const headerStatus=voyage?cardStatus(voyage,Boolean(connection?.client),tab.stale?null:tab.snapshot):null;
     const location=[connection?.name,tab.snapshot?.workspace].filter(Boolean).join(' · ');
@@ -147,9 +182,9 @@ export function Conversation({tab, workspace, active, onSettings, connection, vo
             <RunStatus tab={tab}/>
             {(run?.tool_previews || []).filter((preview:any)=>!(tab.snapshot?.messages||[]).some((message:any)=>message.tool_calls?.some((call:any)=>call.id===preview.call_id))).map((preview:any,index:number) => <Collapsible className="tool-entry" key={index}><CollapsibleTrigger asChild><Button variant="ghost" className={toolTrigger} type="button"><ChevronRightIcon className="tool-chevron" aria-hidden="true"/><span className="tool-summary-text">Tool preview · {preview.name || 'Tool'}</span></Button></CollapsibleTrigger><CollapsibleContent><pre>{content(preview.arguments)}</pre></CollapsibleContent></Collapsible>)}
             {(run?.reasoning_previews||[]).map((preview:any,index:number)=><Collapsible className="tool-entry" key={index}><CollapsibleTrigger asChild><Button variant="ghost" className={toolTrigger} type="button"><ChevronRightIcon className="tool-chevron" aria-hidden="true"/><span className="tool-summary-text">{preview.kind==='summary'?'Reasoning summary':'Provider thinking'} · {preview.finalized?'finalized disclosure':'streaming · provisional'}</span></Button></CollapsibleTrigger><CollapsibleContent><pre>{preview.text}</pre>{preview.truncated&&<small>Preview truncated</small>}</CollapsibleContent></Collapsible>)}
-        </div>{showJump && <div className="jump-anchor"><Button variant="outline" className="jump rounded-full bg-background shadow-sm dark:bg-popover" onClick={() => {following.current=true;setShowJump(false);scroll.current?.scrollTo({top:scroll.current.scrollHeight});}}>Jump to latest<ArrowDownIcon aria-hidden="true"/></Button></div>}</div>
+        </div>{(turnNavigation.previous||turnNavigation.next||showJump)&&<div className="jump-anchor"><div className="turn-navigation" role="group" aria-label="Conversation navigation"><Button variant="ghost" size="icon-sm" type="button" aria-label="Previous user message" title="Previous user message" disabled={!turnNavigation.previous} onClick={()=>jumpTurn('previous')}><ArrowUpIcon aria-hidden="true"/></Button><Button variant="ghost" size="icon-sm" type="button" aria-label="Next user message" title="Next user message" disabled={!turnNavigation.next} onClick={()=>jumpTurn('next')}><ArrowDownIcon aria-hidden="true"/></Button>{showJump&&<Button variant="ghost" size="sm" className="jump-latest" type="button" onClick={() => {following.current=true;setShowJump(false);scroll.current?.scrollTo({top:scroll.current.scrollHeight});}}>Latest<ArrowDownIcon aria-hidden="true"/></Button>}</div></div>}</div>
         <Decisions tab={tab} workspace={workspace}/>
-        <Composer tab={tab} workspace={workspace} onSettings={onSettings} connection={active?connection:null} voyage={active?voyage:null}/>
+        <Composer tab={tab} workspace={workspace} onSettings={onSettings} onRecover={onRecover} connection={active?connection:null} voyage={active?voyage:null}/>
     </section>;
 }
 
@@ -188,6 +223,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     const [manage,setManage] = useState(()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('manage-vessels'));
     const [settings,setSettings] = useState<{tab?:Tab}|null>(null);
     const [newDraftReset,setNewDraftReset]=useState(0),[profileReload,setProfileReload]=useState(0);
+    const [recovery,setRecovery]=useState<RecoveryDraft|null>(null);
     const [mobile,setMobile] = useState(false);
     const [mobilePortal,setMobilePortal] = useState<HTMLElement|null>(null);
     const [appearance,setAppearance] = useState(() => {try{return localStorage.getItem('flux.appearance') || 'system';}catch{return 'system';}});
@@ -215,12 +251,18 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         return {decisions:tab&&!tab.stale?tab.decisions.length:0,pendingReceipts};
     });
     const groupedView=!query.trim()&&vesselFilter==='all'&&stateFilter==='current';
-    const startNew=()=>{
+    const showNew=()=>{
         if(window.location.pathname!=='/')window.history.pushState(null,'','/'+window.location.search+window.location.hash);
         setRoute(null);setActive(null);setMobile(false);
     };
+    const startNew=()=>{setRecovery(null);showNew();};
+    const recoverInNewVoyage=(tab:Tab)=>{
+        setRecovery({vessel:tab.vessel,workspace:tab.snapshot?.workspace||'',text:tab.draft,hasPictures:tab.pictures.length>0,source:tab.title});
+        showNew();
+    };
     const deliverNewVoyage=async(vessel:string,process:any,message:NewVoyageMessage)=>{
         const key=selectVoyage(vessel,process.session_id,process.name||'New voyage');
+        setRecovery(null);
         setNewDraftReset(value=>value+1);
         await completeNewVoyage(workspace,key,message);
     };
@@ -228,7 +270,8 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         const key=JSON.stringify([voyage.connection.id,voyage.session_id]),tab=workspace.tabs.get(key);
         const status=cardStatus(voyage,Boolean(voyage.connection.client),tab&&!tab.stale ? tab.snapshot : null);
         return <div className="voyage-row" key={key}><button type="button" className="voyage-card py-2" data-status-tone={status.tone} data-animated={status.animated || undefined} aria-current={selected?.key===key} onClick={()=>selectVoyage(voyage.connection.id,voyage.session_id,voyage.name||voyage.session_id)}>
-            <span className="card-title" title={voyage.name||voyage.session_id}>{voyage.name||voyage.session_id}{tab?.draft && <span className="card-draft" title="Unsent draft"> •</span>}</span><span className="card-meta"><span title={voyage.connection.name}>{voyage.connection.name}</span><time title={voyage.activity?.iso}>{activityLabel(voyage.activity)}</time></span><span className="card-status status-label"><i aria-hidden="true"/>{status.label}{status.detail&&<span className="card-detail">{status.detail}</span>}</span>
+            <span className="card-topline"><span className="card-vessel" title={voyage.connection.name}>{voyage.connection.name}</span><span className="card-status status-label" title={[status.label,status.detail].filter(Boolean).join(' · ')}><i aria-hidden="true"/>{status.label.startsWith('Last run ')?status.label.slice(9):status.label}</span></span>
+            <span className="card-title" title={voyage.name||voyage.session_id}>{voyage.name||voyage.session_id}{tab?.draft && <span className="card-draft" title="Unsent draft"> •</span>}</span><time className="card-activity" title={voyage.activity?.iso}>{activityLabel(voyage.activity)}</time>
         </button><VoyageActions connection={voyage.connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} portalContainer={mobilePortal}/></div>;
     };
     const sidebar=<aside className={`sidebar ${mobile?'mobile-open':''}`} aria-label="Voyages">
@@ -259,10 +302,10 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
             <SheetContent ref={setMobilePortal} side="left" showCloseButton={false} className="mobile-navigation"><SheetTitle className="sr-only">Voyages</SheetTitle><SheetDescription className="sr-only">Choose a voyage or manage Vessel connections.</SheetDescription>{mobile&&sidebar}</SheetContent>
         </Sheet>
         {!mobile&&sidebar}
-        <main className="voyage-workspace" aria-label="Conversation"><NewVoyage fleet={fleet} tenant={bootstrap.tenantId} hidden={Boolean(route)} resetToken={newDraftReset} reloadToken={profileReload} onCreated={deliverNewVoyage} onAdvanced={()=>setSettings({})}/>
+        <main className="voyage-workspace" aria-label="Conversation"><NewVoyage fleet={fleet} tenant={bootstrap.tenantId} hidden={Boolean(route)} resetToken={newDraftReset} reloadToken={profileReload} recovery={recovery} onCreated={deliverNewVoyage} onAdvanced={()=>setSettings({})}/>
             {route && !selected && <p className="empty" role="status">Waiting for this voyage on its Vessel. If it does not appear, check your connection or access.</p>}
             {selected && <HostBrowser key={selected.key} tab={selected} client={fleet.connections.get(selected.vessel)?.client} workspace={workspace}/> }
-            {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})} connection={fleet.connections.get(tab.vessel)} voyage={fleet.connections.get(tab.vessel)?.voyages.find((item:any)=>item.session_id===tab.session)}/>)}
+            {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})} onRecover={()=>recoverInNewVoyage(tab)} connection={fleet.connections.get(tab.vessel)} voyage={fleet.connections.get(tab.vessel)?.voyages.find((item:any)=>item.session_id===tab.session)}/>)}
         </main>
         {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} connections={fleet.connections} tenant={bootstrap.tenantId} onReconnect={()=>fleet.reconnect()} onClose={()=>setManage(false)}/>}
         {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} profileOnly={!settings.tab} tenant={bootstrap.tenantId} onClose={()=>{setSettings(null);setProfileReload(value=>value+1);}} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}

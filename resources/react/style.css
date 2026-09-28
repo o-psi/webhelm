@@ -259,4 +259,38 @@
 /* Touch: primary chrome controls reach a 40px target (D10). */
 @media(pointer:coarse){:is(.sidebar,.composer,.conversation-header,.task-browser-heading,.voyage-action-host) button:not(.voyage-card){min-height:40px}:is(.sidebar,.composer,.voyage-action-host) [data-size^="icon"]{min-width:40px}.task-browser-action{min-height:40px}}
 
+/* Keep navigation scannable when a Vessel has many voyages. */
+.sidebar{gap:10px;padding:14px 12px}.voyage-list{margin:0 -4px;padding:0 4px;gap:1px}
+.voyage-row .voyage-card{display:grid;gap:3px;padding:8px 38px 8px 10px;min-height:68px}
+.voyage-card[aria-current=true]::before{left:1px;top:8px;bottom:8px}
+.card-topline{display:flex;justify-content:space-between;align-items:center;gap:6px;min-width:0}
+.card-vessel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--muted-foreground)}
+.voyage-card .card-status{margin:0;flex-shrink:0;font-size:11px;white-space:nowrap;max-width:50%;overflow:hidden;text-overflow:ellipsis}
+.voyage-card .card-status i{width:6px;height:6px}
+.voyage-card .card-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35;font-size:13px}
+.card-activity{display:block;color:var(--muted-foreground);font-size:11px;line-height:1.25}
+.voyage-action-host{right:3px;top:25px}
+
+/* Conversation typography and actions sit with the response they affect. */
+.thread{max-width:800px}.message{margin-bottom:24px}.message.user{padding:8px 14px;border-radius:17px}
+.message.assistant{position:relative}.message.assistant .prose{font-size:14px;line-height:1.7}
+.message-actions{position:absolute;right:0;bottom:-20px;z-index:1;display:flex;justify-content:flex-end;opacity:0;transition:opacity 120ms}
+.message.assistant:hover .message-actions,.message.assistant:focus-within .message-actions{opacity:1}
+.message-actions [data-slot="button"]{height:25px;color:var(--muted-foreground);font-size:11px}.message-actions svg{width:13px;height:13px}
+.prose table{width:100%;border-collapse:collapse;font-size:13px}.prose th,.prose td{border:0;border-bottom:1px solid var(--border);padding:9px 12px;text-align:left;vertical-align:top}.prose th{font-weight:600}
+.tool-group{margin:8px 0 14px}.tool-group-heading{border-bottom:1px solid var(--border)}
+.jump-anchor{align-items:flex-start}.turn-navigation{pointer-events:auto;display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--border);border-radius:999px;background:var(--background);box-shadow:0 1px 4px color-mix(in oklch,var(--foreground) 10%,transparent)}.turn-navigation [data-slot="button"]{width:28px;height:28px;border:0;border-radius:999px}.turn-navigation .jump-latest{width:auto;padding:0 8px;border-left:1px solid var(--border);border-radius:0 999px 999px 0;font-size:12px}.turn-navigation svg{width:14px;height:14px}
+@media(pointer:coarse){.message-actions{opacity:1}}
+
+/* The prompt is one continuous editing surface; controls remain within it. */
+.composer{max-width:832px;padding:8px 16px 12px}.composer-box{border-radius:18px}
+.composer textarea{min-height:58px}.composer-hint{display:none}
+.composer-options{flex-wrap:nowrap;min-width:0;overflow-x:auto;scrollbar-width:none}.composer-options::-webkit-scrollbar{display:none}
+.composer-options>button,.composer-options>div,.composer-options [aria-label="Model and reasoning"]{flex-shrink:0}
+.composer-options [aria-label="Model and reasoning"]{flex-wrap:nowrap}
+.composer-toolbar{flex-wrap:nowrap}.composer-toolbar>button:last-child{margin-left:auto}
+@container conversation (max-width:560px){.composer-toolbar{flex-wrap:wrap}.composer-options{flex:1 0 100%;width:100%;order:0;flex-wrap:wrap;overflow:visible}.composer-toolbar>button{order:1}.composer-toolbar>button:last-child{margin-left:auto}}
+@media(max-width:639px){.conversation-header{padding-right:108px}.dock-actions{right:12px;top:9px}.dock-actions [data-slot="button"]{width:36px;height:36px;padding:0;justify-content:center}.dock-actions .dock-action-label{display:none}.dock-actions .browser-activity{position:absolute;right:3px;top:3px;width:6px;height:6px}}
+.diff-added{color:var(--status-success);background:color-mix(in oklch,var(--status-success) 9%,transparent)}.diff-removed{color:var(--status-error);background:color-mix(in oklch,var(--status-error) 9%,transparent)}.diff-heading{color:var(--muted-foreground);font-weight:600}
+
 }
