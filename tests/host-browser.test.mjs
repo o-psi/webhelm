@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gzipSync} from 'node:zlib';
-import {BrowserConnection, mountBrowserViewer} from '../../helm/browser-view/viewer.mjs';
+import {BrowserConnection, mountBrowserViewer} from '../shared/helm/browser-view/viewer.mjs';
 import {mountHostBrowser,hostBrowserAdapter} from '../resources/js/host-browser.js';
 
 test('module-imported rrweb vendor exposes the replay API used by Helm Web',()=>{

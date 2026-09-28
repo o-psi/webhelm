@@ -1,7 +1,7 @@
 > The console now connects browsers directly to public Vessel WSS endpoints (#307).
 > Laravel handles login, tenant connections and temporary credential bootstrap.
 > Node is needed to build assets, not to relay conversations. See
-> [Helm Web deployment and gateway migration](../docs/helm-web.md#upgrade-and-retire-the-conversation-gateway).
+> [Helm Web deployment and gateway migration](https://github.com/o-psi/helm.vessel.voyage/blob/main/docs/helm-web.md#upgrade-and-retire-the-conversation-gateway).
 
 # Helm website
 
@@ -11,10 +11,10 @@ React 19 / TypeScript is the authenticated console at `/`. `/react` redirects to
 `/` and retains the connection-management query. Laravel owns authentication,
 tenant-scoped connection bootstrap and the shared public/login pages. The console
 loads no Livewire or Flux runtime. The retired console is preserved in
-[`archive/helm-web-flux`](../archive/helm-web-flux/README.md), outside route,
+[`archive/helm-web-flux`](https://github.com/o-psi/helm.vessel.voyage/tree/main/archive/helm-web-flux), outside route,
 Composer, Vite and default test discovery. Do not implement console changes there.
 
-From `web/`, use `npm ci`, `npm run typecheck`, `npm test`, and `npm run build`.
+From this repository root, use `npm ci`, `npm run typecheck`, `npm test`, and `npm run build`.
 The supported Node range is in `package.json`. Production assets contain the
 React console plus shared public/login assets; a build alone does not deploy them.
 
@@ -46,7 +46,7 @@ links, glibc 2.39+ requirements and review-first installation instructions. It l
 An opt-in authenticated **Helm Web console** at `/` gives each OAuth identity a
 personal tenant with its own publicly reachable Vessel connections over a direct
 authenticated WebSocket after same-origin credential bootstrap. See
-[console setup and limits](../docs/helm-web.md).
+[console setup and limits](https://github.com/o-psi/helm.vessel.voyage/blob/main/docs/helm-web.md).
 Signed-out visitors go to `/landing`. Google, X and GitHub sign-in are shown only
 when their application credentials are configured.
 The console never executes agents on the web host.
@@ -88,7 +88,7 @@ Application: `/srv/helm/app`, owned by the unprivileged `helm` deployment accoun
 Private runtime state is under `/srv/helm/runtime`, outside the application source;
 preserve it and the production `.env` across source updates. The initial CT source
 was copied from the laptop's live working tree, including uncommitted changes.
-Future changes to `web/` require an explicit deployment to CT 106 and a private
+Future changes to this repository require an explicit deployment to CT 106 and a private
 backup before replacing that source; a local edit or Git push does not update the
 running website. Deploy matching PHP source and built assets together.
 
@@ -133,7 +133,7 @@ cannot make that account the `helm` application owner or root. Provision the
 root-owned deployment job once from an administrator shell on the CT:
 
 ```sh
-/path/to/checkout/web/deploy/provision-helm-web-update
+/path/to/checkout/deploy/provision-helm-web-update
 ```
 
 The provisioner installs a checksum-checked official Node 24 runtime in
@@ -226,13 +226,13 @@ checks, then verify the authenticated production root in the shared browser.
 ## Laravel Boost (local AI development)
 
 [Laravel Boost](https://laravel.com/docs/boost) is a development-only Composer
-dependency (`laravel/boost`); install with `composer install` from `web/`.
+dependency (`laravel/boost`); install with `composer install` from this repository root.
 The committed `boost.json`, `AGENTS.md`, and `.agents/skills/` contain the generated
 Laravel/Livewire/Flux guidance. They do not replace the root repository instructions.
 The Codex generator is used for its portable AGENTS.md and skill format; it does
 not imply that Helm uses Codex or that a client connection has been activated.
 
-To refresh the generated guidance and skills from `web/`:
+To refresh the generated guidance and skills from this repository root:
 
 ```sh
 APP_ENV=local LOG_CHANNEL=stderr php artisan boost:update --no-interaction
@@ -240,14 +240,14 @@ APP_ENV=local LOG_CHANNEL=stderr php artisan boost:update --no-interaction
 
 For Helm, merge [helm-boost.toml](helm-boost.toml) into the **executing host's**
 Helm configuration (normally `~/.config/helm/config.toml`), retaining existing
-settings. Its relative `web/artisan` path assumes a repository-root workspace;
-use the absolute path to `web/artisan` for other workspaces. Start a new voyage
+settings. Its relative `artisan` path assumes this repository as workspace;
+use the absolute path to `artisan` for other workspaces. Start a new voyage
 and check `/tools` for the discovered Boost tools. Helm does not automatically
 load this snippet or Codex's `.codex/config.toml`. Existing voyages do not gain
-new MCP tools in place. See [MCP configuration](../docs/configuration.md#mcp-tools-and-artifacts).
+new MCP tools in place. See [MCP configuration](https://github.com/o-psi/helm.vessel.voyage/blob/main/docs/configuration.md#mcp-tools-and-artifacts).
 
 For other MCP clients, configure a stdio server launching `php` with arguments
-`["/absolute/path/to/web/artisan", "boost:mcp"]` and environment variables
+`["/absolute/path/to/webhelm/artisan", "boost:mcp"]` and environment variables
 `APP_ENV=local` and `LOG_CHANNEL=stderr`. These overrides apply only to the
 Boost process: the checkout's existing environment may disable development
 commands, and its configured log directory may not be writable locally.
@@ -260,3 +260,7 @@ isolate the database. No database query is needed for the initialization/tools
 listing smoke check. Do not expose this server publicly. Production deployments
 should continue using `composer install --no-dev`; no automatic `boost:update`
 Composer hook is installed, so production updates do not depend on a dev package.
+
+## Repository split and shared browser assets
+
+This private repository contains Helm Web independently of the public Helm/Vessel/Voyage repository. `shared/` contains snapshots of the viewer, status vocabulary, and browser vendor file from the source repository at split time. Keep these files in sync with protocol changes there. The production updater now clones this private repository: configure read-only GitHub authentication for the `helm` deployment identity privately before installing the updated updater. Do not place credentials in this repository or overwrite the CT runtime `.env`, database, or backups. A Git push alone does not deploy.

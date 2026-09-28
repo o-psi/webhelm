@@ -5,9 +5,9 @@ import {resolve,dirname} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {transform} from 'esbuild';
-const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
-const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE||`${root}/voyage/browser/node_modules/playwright-core/index.mjs`).href);
-const source=await readFile(`${root}/web/resources/react/prepare-picture.ts`,'utf8');
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE||`${root}/node_modules/playwright-core/index.mjs`).href);
+const source=await readFile(`${root}/resources/react/prepare-picture.ts`,'utf8');
 const module=(await transform(source,{loader:'ts',format:'esm',target:'es2022'})).code;
 const server=createServer((request,response)=>{
     response.setHeader('Content-Type',request.url==='/prepare-picture.js'?'text/javascript':'text/html');

@@ -12,7 +12,7 @@ import {marked} from 'marked';
 import DOMPurify from 'dompurify';
 import {Workspace, type Tab} from './workspace';
 import {voyageLocation, voyagePath} from './voyage-url';
-import workingStatuses from '../../../helm/assets/working-statuses.json';
+import workingStatuses from '../../shared/helm/assets/working-statuses.json';
 
 type Bootstrap = {tenantId: string; vessels: any[]; ticketUrl: string; connectionsUrl: string; logoutUrl: string};
 const csrf = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';

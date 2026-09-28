@@ -1,5 +1,5 @@
-import '../../../voyage/browser/rrweb-vendor.mjs';
-import {mountBrowserViewer} from '../../../helm/browser-view/viewer.mjs';
+import '../../shared/voyage/browser/rrweb-vendor.mjs';
+import {mountBrowserViewer} from '../../shared/helm/browser-view/viewer.mjs';
 import {request, voyageResult} from './vessel-client.js';
 
 const prepared = value => value?.status === 'prepared' && value?.not_dispatched === true;

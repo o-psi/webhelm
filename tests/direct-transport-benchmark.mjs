@@ -149,6 +149,6 @@ else {
     await writeFile(path.join(output,`${label}.json`),JSON.stringify(result,null,2)+'\n');
     console.log(`${label}: ${result.replies} replies verified`);
   }
-  const hashes={};for(const file of ['web/tests/direct-transport-benchmark.mjs','web/gateway/gateway.js','web/gateway/protocol.js','web/gateway/transport.js'])hashes[file]=createHash('sha256').update(await readFile(new URL('../../'+file,import.meta.url))).digest('hex');
+  const hashes={};for(const file of ['tests/direct-transport-benchmark.mjs','gateway/gateway.js','gateway/protocol.js','gateway/transport.js'])hashes[file]=createHash('sha256').update(await readFile(new URL('../'+file,import.meta.url))).digest('hex');
   await writeFile(path.join(output,'results.json'),JSON.stringify({measured_at:new Date().toISOString(),node:process.version,ws:require('ws/package.json').version,platform:`${process.platform} ${process.arch}`,kernel:os.release(),cpu:os.cpus()[0].model,logical_cpus:os.cpus().length,sizes,rounds,hashes,runs},null,2)+'\n');
 }

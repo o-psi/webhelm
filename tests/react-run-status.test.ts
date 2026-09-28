@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {RunStatus, workingFrame} from '../resources/react/App.tsx';
-import workingStatuses from '../../helm/assets/working-statuses.json';
+import workingStatuses from '../shared/helm/assets/working-statuses.json';
 import {readFileSync} from 'node:fs';
 
 function status(run: any, extra: any = {}, decisions: any[] = []) {

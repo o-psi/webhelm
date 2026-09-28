@@ -3,26 +3,26 @@ import {createServer} from 'node:http';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {resolve,dirname,extname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {chromium} from '../../voyage/browser/node_modules/playwright-core/index.mjs';
+import {chromium} from '../node_modules/playwright-core/index.mjs';
 import assert from 'node:assert/strict';
 
-const repo=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
+const repo=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const output=resolve(process.env.BROWSER_NEXT_OUTPUT||`${repo}/target/browser-next`);
 const mime={'.mjs':'text/javascript','.css':'text/css','.html':'text/html'};
-const html=`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/helm/browser-view/viewer.css"><style>
+const html=`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/shared/helm/browser-view/viewer.css"><style>
 body{margin:0;font:14px system-ui;color:#182638;background:#f4f7fa}*{box-sizing:border-box}
 .workspace{height:100dvh;min-width:0;display:grid;grid-template-columns:minmax(260px,28%) minmax(0,1fr)}
 .conversation{min-width:0;min-height:0;display:flex;flex-direction:column;padding:20px;border-right:1px solid #cdd7e2}
 .conversation h1{font-size:18px}.conversation .messages{flex:1;overflow:auto}.conversation textarea{width:100%;height:75px}
 #viewer{height:100%;min-width:0;min-height:0;padding:8px}
 @media(max-width:750px){.workspace{display:block}.conversation{display:none}#viewer{padding:0}}
-</style><script src="/voyage/browser/rrweb-vendor.mjs"></script></head><body><article id="site"><h1>Example Domain</h1><p>A responsive synthetic page.</p><button id="site-button">Open details</button><label>Your name <input id="site-input"></label></article><script type="module">
-import {mountBrowserViewer} from '/helm/browser-view/viewer.mjs';
-const child=document.createElement('iframe');child.width='400';child.height='220';child.srcdoc='<html><head><script src="/voyage/browser/rrweb-vendor.mjs"><\\/script></head><body><h2>Child form</h2><button>Frame action</button><label>Frame code <input></label><canvas width="80" height="35"></canvas></body></html>';
+</style><script src="/shared/voyage/browser/rrweb-vendor.mjs"></script></head><body><article id="site"><h1>Example Domain</h1><p>A responsive synthetic page.</p><button id="site-button">Open details</button><label>Your name <input id="site-input"></label></article><script type="module">
+import {mountBrowserViewer} from '/shared/helm/browser-view/viewer.mjs';
+const child=document.createElement('iframe');child.width='400';child.height='220';child.srcdoc='<html><head><script src="/shared/voyage/browser/rrweb-vendor.mjs"><\\/script></head><body><h2>Child form</h2><button>Frame action</button><label>Frame code <input></label><canvas width="80" height="35"></canvas></body></html>';
 document.querySelector('#site').append(child);
 await new Promise(resolve=>child.addEventListener('load',resolve,{once:true}));
 const childCanvas=child.contentDocument.querySelector('canvas');childCanvas.getContext('2d').fillRect(0,0,80,35);
-const nested=child.contentDocument.createElement('iframe');nested.width='180';nested.height='90';nested.srcdoc='<html><head><script src="/voyage/browser/rrweb-vendor.mjs"><\\/script></head><body><h3>Nested form</h3><button>Nested action</button><canvas width="50" height="20"></canvas></body></html>';
+const nested=child.contentDocument.createElement('iframe');nested.width='180';nested.height='90';nested.srcdoc='<html><head><script src="/shared/voyage/browser/rrweb-vendor.mjs"><\\/script></head><body><h3>Nested form</h3><button>Nested action</button><canvas width="50" height="20"></canvas></body></html>';
 child.contentDocument.body.append(nested);
 await new Promise(resolve=>nested.addEventListener('load',resolve,{once:true}));
 const nestedCanvas=nested.contentDocument.querySelector('canvas');nestedCanvas.getContext('2d').fillRect(0,0,50,20);

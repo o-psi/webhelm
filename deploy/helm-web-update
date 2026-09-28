@@ -5,7 +5,7 @@ umask 077
 export PATH=/opt/helm-web/node-v24.21.0/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 root=/srv/helm
-repository=https://github.com/o-psi/helm.vessel.voyage.git
+repository=https://github.com/o-psi/webhelm.git
 receipt="$root/deployments/helm-web-self-update.json"
 unit=helm-web-update.service
 stage= backup= release= source=unknown switched=0 stopped=0
@@ -72,12 +72,7 @@ run_update() {
     fi
 
     install -d -o helm -g helm -m 755 "$stage/app"
-    as_helm rsync -a "$stage/repository/web/" "$stage/app/"
-    # The Web build imports the shared browser viewer and status vocabulary.
-    install -d -o helm -g helm -m 755 "$stage/helm/browser-view" "$stage/helm/assets" "$stage/voyage/browser"
-    as_helm rsync -a "$stage/repository/helm/browser-view/viewer.css" "$stage/repository/helm/browser-view/viewer.mjs" "$stage/helm/browser-view/"
-    as_helm rsync -a "$stage/repository/helm/assets/working-statuses.json" "$stage/helm/assets/"
-    as_helm rsync -a "$stage/repository/voyage/browser/rrweb-vendor.mjs" "$stage/voyage/browser/"
+    as_helm rsync -a --exclude=.git "$stage/repository/" "$stage/app/"
     ln -s "$root/runtime/.env" "$stage/app/.env"
     ln -s "$root/private/composer-auth.json" "$stage/app/auth.json"
     # Laravel storage is external so a release switch cannot replace live state.
