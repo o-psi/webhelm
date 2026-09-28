@@ -69,22 +69,32 @@ try {
         window.WebSocket=Socket;
     });
     await page.goto(origin);
+    check(await page.getByRole('button',{name:'New voyage',exact:true}).count()===1,`${label}: empty view has more than one New voyage action`);
+    check(await page.locator('.composer').count()===0,`${label}: empty view shows a disabled composer`);
+    await page.screenshot({path:`${output}/${label}-empty.png`});
     if(label==='mobile'){
         await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
         check(await page.locator('[data-slot="sheet-content"]').isVisible(),'mobile: shadcn navigation sheet did not open');
         await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
         check(await page.getByRole('menuitem',{name:'Manage Vessels'}).isVisible(),'mobile: Vessel menu did not open inside the sheet');
         await page.keyboard.press('Escape');
-        await page.getByRole('button',{name:'Profile menu'}).click();
+        await page.getByRole('button',{name:'Account and appearance'}).click();
         await page.getByRole('menuitemradio',{name:'dark'}).click();
         check(await page.locator('html.dark').count()===1,'mobile: dark appearance did not apply');
-        await page.getByRole('button',{name:'Profile menu'}).click();
+        await page.getByRole('button',{name:'Account and appearance'}).click();
         await page.getByRole('menuitemradio',{name:'light'}).click();
     }
     await page.locator('.voyage-card').click();
     const conversation=page.locator('.conversation:not([hidden])');
     const draft=conversation.locator('textarea').first();
     await draft.fill('Retained synthetic draft');
+    if(label==='desktop'){
+        await page.getByRole('button',{name:'Account and appearance'}).click();
+        await page.getByRole('menuitem',{name:'Sign out'}).click();
+        check(await page.getByRole('dialog',{name:'Sign out with unsent work?'}).isVisible(),'desktop: unsent draft sign-out review did not open');
+        await page.getByRole('button',{name:'Keep working'}).click();
+        check(await draft.inputValue()==='Retained synthetic draft','desktop: cancelling sign-out lost the draft');
+    }
     await page.waitForTimeout(250);
     await conversation.locator('.transcript').evaluate(el=>{el.scrollTop=321;window.savedTranscript=el;window.savedDraft=document.querySelector('.conversation:not([hidden]) textarea');});
     const geometry=()=>page.evaluate(()=>{
@@ -115,7 +125,7 @@ try {
     check(privateAccessibleLabel===privateLabel,`${label}: private accessible label differs`);
     check(commandsBeforeClose.includes('control'),`${label}: control was not forwarded`);
     check(errors.length===0,`${label}: page errors: ${errors.join('; ')}`);
-    await page.getByRole('button',{name:'Close browser viewer',exact:true}).click();
+    await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     const closed=await geometry();
     const retained=await draft.inputValue();

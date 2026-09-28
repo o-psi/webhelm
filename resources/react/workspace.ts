@@ -14,6 +14,7 @@ export class Workspace {
     private closed = false;
     private queued = new Set<string>();
     private epochs = new Map<string, number>();
+    private autoReceiptReads = new Map<string, number>();
     version = 0;
     constructor(private connections: () => Map<string, Connection>) {}
     subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -251,5 +252,14 @@ export class Workspace {
         } catch { tab.notice = 'Receipt unavailable. No action replayed.'; }
         finally { tab.busy = false; this.changed(); }
     }
-    close() { this.tabs.forEach(tab => tab.pictures.forEach(picture => URL.revokeObjectURL(picture.url))); this.closed = true; this.streams.forEach(stream => stream.stop()); this.streams.clear(); this.listeners.clear(); }
+    async observePending(key: string) {
+        const tab = this.tabs.get(key);
+        if (this.closed || !tab || tab.busy || !this.connections().get(tab.vessel)?.client) return;
+        const entries = this.pending(tab).filter((entry: any) => !entry.sidebar_action && (this.autoReceiptReads.get(entry.command_id) || 0) < 3);
+        if (!entries.length) return;
+        for (const entry of entries) this.autoReceiptReads.set(entry.command_id, (this.autoReceiptReads.get(entry.command_id) || 0) + 1);
+        await this.reconcile(key);
+        for (const entry of entries) if (!this.pending(tab).some((pending: any) => pending.command_id === entry.command_id)) this.autoReceiptReads.delete(entry.command_id);
+    }
+    close() { this.tabs.forEach(tab => tab.pictures.forEach(picture => URL.revokeObjectURL(picture.url))); this.closed = true; this.streams.forEach(stream => stream.stop()); this.streams.clear(); this.autoReceiptReads.clear(); this.listeners.clear(); }
 }

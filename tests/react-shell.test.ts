@@ -17,10 +17,12 @@ test('React shell renders safely without Livewire and uses the production consol
         assert.doesNotMatch(output.body.textContent!, /React preview|existing console/i);
         assert.equal(output.querySelector('.tabs'), null);
         assert.equal(output.querySelector('.welcome'), null);
-        assert.equal(output.querySelector('textarea')?.getAttribute('placeholder'), 'Ask anything…');
-        assert.ok(output.querySelector('[aria-label="New voyage"]'));
+        assert.equal(output.querySelector('textarea'), null);
+        assert.match(output.querySelector('main')?.textContent || '', /Choose a voyage from the sidebar or start a new one/);
+        assert.ok(output.querySelector('#voyage-vessel-filter'));
+        assert.equal(output.querySelector('main button')?.textContent, 'New voyage');
         assert.ok(output.querySelector('[aria-label="Open voyage navigation"]'));
-        assert.ok(output.querySelector('[aria-label="Profile menu"]'));
+        assert.ok(output.querySelector('[aria-label="Account and appearance"]'));
         assert.equal(output.querySelector('form')?.getAttribute('method'), 'post');
         assert.equal(output.querySelector<HTMLInputElement>('[name="_token"]')?.value, 'fixture-token');
         assert.equal(output.querySelector('nav')?.getAttribute('aria-label'), 'Voyages');
@@ -71,20 +73,33 @@ test('React enrollment island mounts and scrubs private state on unmount',async(
  }finally{Object.assign(globalThis,saved);dom.window.close();}
 });
 
-test('React voyage action island opens audited details and cleans up',async()=>{
+test('React voyage details observe an exact pending receipt without replay',async()=>{
  const {createRoot}=await import('react-dom/client');const {act}=React;
  const dom=new JSDOM('<div id="mount"></div>',{url:'https://helm.test'});
  dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
  (dom.window.HTMLElement.prototype as any).attachEvent=()=>{};(dom.window.HTMLElement.prototype as any).detachEvent=()=>{};
- const saved={window:globalThis.window,document:globalThis.document};Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),MutationObserver:dom.window.MutationObserver,NodeFilter:dom.window.NodeFilter,Node:dom.window.Node,Element:dom.window.Element,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,ShadowRoot:dom.window.ShadowRoot,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent});
+ const saved={window:globalThis.window,document:globalThis.document,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame};Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),MutationObserver:dom.window.MutationObserver,NodeFilter:dom.window.NodeFilter,Node:dom.window.Node,Element:dom.window.Element,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,ShadowRoot:dom.window.ShadowRoot,Event:dom.window.Event,CustomEvent:dom.window.CustomEvent,requestAnimationFrame:(callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0),cancelAnimationFrame:clearTimeout});
  const {VoyageActions}=await import('../resources/react/VoyageActions.tsx');
- const commands:string[]=[];const connection:any={id:'c',vessel_id:'v',name:'Vessel',journal:{entries:()=>[]},client:{async exchange({command}:any){commands.push(command.op);const result=command.op==='capabilities'?{scope:'owner',vessel_id:'v'}:command.op==='inspect'?{session_id:'s',incarnation:'i',state:'live'}:{session_id:'s',incarnation:'i',result:{session_id:'s',revision:1,run:{state:'idle'}}};return {protocol:1,outcome_unknown:false,result};}}};
+ const commands:string[]=[];let pending:any[]=[{session_id:'s',command_id:'cmd',op:'rename',sidebar_action:true}];const connection:any={id:'c',vessel_id:'v',name:'Vessel',journal:{entries:()=>pending,settle:(id:string)=>{pending=pending.filter(entry=>entry.command_id!==id);}},client:{async exchange({command}:any){commands.push(command.op);const result=command.op==='capabilities'?{scope:'owner',vessel_id:'v'}:command.op==='inspect'?{session_id:'s',incarnation:'i',state:'live'}:command.op==='receipt'?{session_id:'s',result:{command_id:'cmd',status:'applied'}}:{session_id:'s',incarnation:'i',result:{session_id:'s',revision:1,access:'approval',run:{state:'idle'},messages:[{content:'private conversation'}]}};return {protocol:1,outcome_unknown:false,result};}}};
  const root=createRoot(dom.window.document.querySelector('#mount')!);
  try{await act(async()=>root.render(React.createElement(VoyageActions,{connection,voyage:{session_id:'s',name:'Voyage'},onChanged:()=>{}})));
  await act(async()=>{dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Voyage actions"]')!.dispatchEvent(new dom.window.MouseEvent('pointerdown',{bubbles:true,button:0}));});
- await act(async()=>{[...dom.window.document.querySelectorAll<HTMLButtonElement>('[data-actions] button')].find(button=>button.textContent==='Details')!.click();});
+ await act(async()=>{[...dom.window.document.querySelectorAll<HTMLElement>('[data-actions] [role="menuitem"]')].find(item=>item.textContent==='Details')!.click();});
  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,20));});
- assert.equal(dom.window.document.querySelector('[data-slot=dialog-content]')?.getAttribute('data-state'),'open');assert.match(dom.window.document.querySelector('#sidebar-action-details')!.textContent!,/"revision": 1/);assert.deepEqual(commands,['capabilities','inspect','snapshot']);
+ await act(async()=>{[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Technical details')!.click();});
+ assert.equal(dom.window.document.querySelector('[data-slot=dialog-content]')?.getAttribute('data-state'),'open');assert.equal(dom.window.document.querySelector('#sidebar-details-run')!.textContent,'idle');assert.match(dom.window.document.querySelector('#sidebar-action-details')!.textContent!,/"revision": 1/);assert.doesNotMatch(dom.window.document.querySelector('#sidebar-action-details')!.textContent!,/private conversation/);assert.equal((dom.window.document.querySelector('#sidebar-reconcile') as HTMLElement).hidden,false);
+ await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1600));});
+ assert.deepEqual(commands,['capabilities','inspect','snapshot','receipt']);assert.equal(pending.length,0);assert.equal((dom.window.document.querySelector('#sidebar-reconcile') as HTMLElement).hidden,true);
+ await act(async()=>{dom.window.document.querySelector<HTMLButtonElement>('#sidebar-dismiss')!.click();});
+ await act(async()=>root.render(React.createElement(VoyageActions,{connection,voyage:{session_id:'s',name:'Voyage'},onChanged:()=>{},accessTrigger:true,triggerLabel:'Access: Approval'})));
+ await act(async()=>{dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Review access mode"]')!.click();});
+ await act(async()=>{await new Promise(resolve=>setTimeout(resolve,20));});
+ assert.match(dom.window.document.querySelector('#sidebar-access-summary')!.textContent!,/Current: Approval. Proposed: Approval.*Vessel/);
+ assert.equal(dom.window.document.querySelector<HTMLButtonElement>('#sidebar-submit')!.disabled,true);
+ await act(async()=>{const select=dom.window.document.querySelector<HTMLSelectElement>('#sidebar-access')!;select.value='read-only';select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});
+ assert.match(dom.window.document.querySelector('#sidebar-access-summary')!.textContent!,/Current: Approval. Proposed: Read only.*Vessel/);
+ assert.equal(dom.window.document.querySelector<HTMLButtonElement>('#sidebar-submit')!.disabled,false);
+ assert.equal(commands.includes('set_access'),false);
  await act(async()=>root.unmount());assert.equal(dom.window.document.querySelector('[data-slot=dialog-content]'),null);
  }finally{Object.assign(globalThis,saved);dom.window.close();}
 });

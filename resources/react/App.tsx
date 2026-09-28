@@ -3,12 +3,13 @@ import {NativeSelect} from './components/ui/native-select';
 import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';
 import {Button} from './components/ui/button';
-import {Card} from './components/ui/card';
+import {Card,CardContent,CardDescription,CardHeader,CardTitle} from './components/ui/card';
 import {Badge} from './components/ui/badge';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
-import {ArrowUpIcon,ChevronDownIcon,FolderIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,SquareIcon,UserRoundIcon} from 'lucide-react';
+import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from './components/ui/dialog';
+import {ArrowUpIcon,ChevronDownIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon} from 'lucide-react';
 import {HostBrowser} from './HostBrowser';
 import React, {useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ToolGroup,threadRows} from './ToolGroup';
@@ -18,7 +19,7 @@ import {VoyageActions} from './VoyageActions';
 import {Settings} from './Settings';
 import {Decisions} from './Decisions';
 import {VesselFleet} from '../js/vessel-fleet.js';
-import {voyageList, activityLabel, cardStatus} from './presentation';
+import {voyageList, filterVoyages, activityLabel, cardStatus} from './presentation';
 import {marked} from 'marked';
 import DOMPurify from 'dompurify';
 import {Workspace, type Tab} from './workspace';
@@ -35,7 +36,7 @@ function content(value: unknown): string {
 export function prose(text: string) {
     return DOMPurify.sanitize(marked.parse(text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'')) as string, {ALLOWED_TAGS:['p','br','strong','em','del','code','pre','blockquote','ul','ol','li','h1','h2','h3','h4','hr','a','table','thead','tbody','tr','th','td'], ALLOWED_ATTR:['href','title'], ALLOW_DATA_ATTR:false});
 }
-function Composer({tab, workspace, onSettings}: {tab?: Tab; workspace: Workspace; onSettings:()=>void}) {
+function Composer({tab, workspace, onSettings, connection, voyage}: {tab?: Tab; workspace: Workspace; onSettings:()=>void; connection?:any; voyage?:any}) {
     const fileInput = useRef<HTMLInputElement>(null);
     const [attaching,setAttaching] = useState(false);
     const pickFiles = async (files: File[]) => {
@@ -43,19 +44,21 @@ function Composer({tab, workspace, onSettings}: {tab?: Tab; workspace: Workspace
         setAttaching(true);
         try { await workspace.attach(tab.key,files); } finally { setAttaching(false); }
     };
-    const running = ['accepted','running','awaiting_decision','cancel_requested','starting','cancelling'].includes(tab?.snapshot?.run?.state);
+    const activeRun = ['accepted','running','awaiting_decision','starting'].includes(tab?.snapshot?.run?.state);
+    const stopping = ['cancel_requested','cancelling'].includes(tab?.snapshot?.run?.state);
+    const running = activeRun || stopping;
     const sendOp = running ? 'steer' : 'submit';
-    const enabled = tab && workspace.actionable(tab) && workspace.permitted(tab,sendOp);
+    const enabled = tab && !stopping && workspace.actionable(tab) && workspace.permitted(tab,sendOp);
+    const canStop = tab && activeRun && workspace.actionable(tab) && workspace.permitted(tab,'cancel');
     const send = () => { if (tab && enabled) void workspace.act(tab.key, sendOp); };
     return <form className="composer" aria-label="Message composer" onPaste={event=>{if(tab&&event.clipboardData.files.length){event.preventDefault();void pickFiles([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(tab&&event.dataTransfer.files.length){event.preventDefault();void pickFiles([...event.dataTransfer.files]);}}} onSubmit={event => {event.preventDefault(); send();}}>
         <Card className="composer-box" size="sm"><Input ref={fileInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{tab?.notice && <p className="composer-feedback" role="status">{tab.notice}</p>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="outline" size="icon-xs" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}>×</Button></figure>)}</div>}<Textarea aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
         <div className="composer-toolbar"><div className="composer-options">
-            <Button variant="ghost" type="button" onClick={onSettings} title="Location"><FolderIcon aria-hidden="true"/><span>{tab?.snapshot?.workspace || 'Location'}</span><ChevronDownIcon aria-hidden="true"/></Button>
+            <Button variant="ghost" type="button" onClick={onSettings} title="Voyage settings"><Settings2Icon aria-hidden="true"/><span>Voyage settings</span><ChevronDownIcon aria-hidden="true"/></Button>
             <Button variant="ghost" type="button" disabled={!tab||tab.busy||attaching} aria-label="Attach pictures" title="Attach pictures" onClick={()=>fileInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button>
-            <Button variant="ghost" type="button" onClick={onSettings} title="Choose profile"><span>Profile</span><ChevronDownIcon aria-hidden="true"/></Button>
-            <small>{[tab?.snapshot?.inference?.model,tab?.snapshot?.inference?.reasoning_effort,tab?.snapshot?.inference?.service_tier].filter(Boolean).join(' · ')}</small>
-            <div className="access-picker"><label className="sr-only" htmlFor={`access-${tab?.session||'new'}`}>Voyage access mode</label><NativeSelect id={`access-${tab?.session||'new'}`} disabled={!enabled} value={tab?.snapshot?.access||''} title="Access is enforced by the executing host; configured roots and limits still apply." onChange={event=>{if(tab)void workspace.act(tab.key,'set_access',{access:event.target.value});}}><option value="" disabled>Unknown</option><option value="read-only">Read only</option><option value="approval">Approval</option><option value="unrestricted">Full access</option></NativeSelect></div>
-        </div>{running && <Button variant="ghost" size="icon" type="button" aria-label="Cancel run" disabled={!enabled} onClick={() => tab && void workspace.act(tab.key,'cancel')}><SquareIcon aria-hidden="true"/></Button>}<Button variant="default" size="icon" aria-label={sendOp === 'steer' ? 'Steer' : 'Send'} disabled={!enabled || (!tab?.draft.trim() && !tab?.pictures.length)}><ArrowUpIcon aria-hidden="true"/></Button></div></Card>
+            <small>{[tab?.snapshot?.workspace,tab?.snapshot?.inference?.model,tab?.snapshot?.inference?.reasoning_effort,tab?.snapshot?.inference?.service_tier].filter(Boolean).join(' · ')}</small>
+            {connection&&voyage&&<VoyageActions connection={connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} accessTrigger triggerLabel={`Access: ${{'read-only':'Read only',approval:'Approval',unrestricted:'Full access'}[tab?.snapshot?.access as 'read-only'|'approval'|'unrestricted']||'Unknown'}`}/>}
+        </div>{running && <Button variant="outline" type="button" aria-label="Stop run" disabled={!canStop} onClick={() => tab && void workspace.act(tab.key,'cancel')}><SquareIcon aria-hidden="true"/>{stopping?'Stopping…':'Stop run'}</Button>}<Button variant="default" aria-label={sendOp === 'steer' ? 'Send to current run' : 'Send'} disabled={!enabled || (!tab?.draft.trim() && !tab?.pictures.length)}><ArrowUpIcon aria-hidden="true"/>{sendOp === 'steer' ? 'Send to current run' : 'Send'}</Button></div><small>Enter to send · Shift+Enter for a new line</small></Card>
     </form>;
 }
 // Decorative only: the words and frames are not execution progress or transcript content.
@@ -96,8 +99,9 @@ export function RunStatus({tab}: {tab: Tab}) {
     </div>;
 }
 
-export function Conversation({tab, workspace, active, onSettings}: {tab: Tab; workspace: Workspace; active: boolean; onSettings:()=>void}) {
+export function Conversation({tab, workspace, active, onSettings, connection, voyage}: {tab: Tab; workspace: Workspace; active: boolean; onSettings:()=>void; connection?:any; voyage?:any}) {
     const run = tab.snapshot?.run, scroll = useRef<HTMLDivElement>(null), following = useRef(true);
+    const pendingReceipts=(()=>{try{return workspace.pending(tab).length>0;}catch{return false;}})();
     const loadingHistory = useRef(false), retryHistoryAt = useRef(0);
     const [showJump,setShowJump] = useState(false);
     useEffect(() => {if(active && following.current && scroll.current) scroll.current.scrollTop=scroll.current.scrollHeight;},[active,tab.snapshot]);
@@ -132,7 +136,7 @@ export function Conversation({tab, workspace, active, onSettings}: {tab: Tab; wo
                 </article>;};
     return <section className="conversation" hidden={!active} aria-label={tab.title}>
         <h1 className="sr-only">{tab.title}</h1>
-        {tab.notice && <Alert className="notice" role="status"><AlertDescription>{tab.notice}</AlertDescription><Button variant="ghost" onClick={() => void workspace.reconcile(tab.key)}>Check receipts</Button></Alert>}
+        {tab.notice && <Alert className="notice" role="status"><AlertDescription>{tab.notice}</AlertDescription>{pendingReceipts&&<Button variant="ghost" onClick={() => void workspace.reconcile(tab.key)}>Check receipts</Button>}</Alert>}
         <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {const el=scroll.current!;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;setShowJump(!following.current);loadNearTop();}}><div className="thread">
             {!tab.snapshot && <p className="empty">Waiting for a current Vessel snapshot…</p>}
             {threadRows(tab.snapshot?.messages||[]).map(row=>row.entries?<ToolGroup key={row.key} entries={row.entries} running={['running','starting','cancelling'].includes(run?.state)} messageStart={run?.message_start} decisions={tab.decisions.length>0} renderMessage={renderMessage}/>:<React.Fragment key={row.key}>{renderMessage(row.message)}</React.Fragment>)}
@@ -143,7 +147,7 @@ export function Conversation({tab, workspace, active, onSettings}: {tab: Tab; wo
         </div></div>
         {showJump && <Button variant="outline" className="jump" onClick={() => {following.current=true;setShowJump(false);scroll.current?.scrollTo({top:scroll.current.scrollHeight});}}>Jump to latest ↓</Button>}
         <Decisions tab={tab} workspace={workspace}/>
-        <Composer tab={tab} workspace={workspace} onSettings={onSettings}/>
+        <Composer tab={tab} workspace={workspace} onSettings={onSettings} connection={active?connection:null} voyage={active?voyage:null}/>
     </section>;
 }
 
@@ -161,6 +165,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     const {fleet, workspace} = runtime;
     useSyncExternalStore(workspace.subscribe, workspace.getVersion, workspace.getVersion);
     const [active, setActive] = useState<string | null>(null), [query, setQuery] = useState('');
+    const [vesselFilter,setVesselFilter] = useState('all'), [stateFilter,setStateFilter] = useState('current');
     const [route, setRoute] = useState(() => typeof window === 'undefined' ? null : voyageLocation(window.location.pathname));
     const selectVoyage = (vessel: string, session: string, title: string) => {
         const path = voyagePath(vessel, session);
@@ -173,7 +178,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         return () => window.removeEventListener('popstate', changed);
     }, []);
     useEffect(() => {
-        fleet.start(); const timer = setInterval(() => { fleet.poll(); for (const key of workspace.tabs.keys()) void workspace.refresh(key); workspace.changed(); }, 5000);
+        fleet.start(); const timer = setInterval(() => { fleet.poll(); for (const key of workspace.tabs.keys()) { void workspace.refresh(key); void workspace.observePending(key); } workspace.changed(); }, 5000);
         return () => { clearInterval(timer); workspace.close(); fleet.close(); };
     }, [runtime]);
     const [manage,setManage] = useState(()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('manage-vessels'));
@@ -181,6 +186,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     const [mobile,setMobile] = useState(false);
     const [mobilePortal,setMobilePortal] = useState<HTMLElement|null>(null);
     const [appearance,setAppearance] = useState(() => {try{return localStorage.getItem('flux.appearance') || 'system';}catch{return 'system';}});
+    const [logoutReview,setLogoutReview] = useState(false);
     const logoutForm=useRef<HTMLFormElement>(null);
     useEffect(() => {
         const media=window.matchMedia('(prefers-color-scheme: dark)');
@@ -188,7 +194,8 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         update();media.addEventListener('change',update);try{localStorage.setItem('flux.appearance',appearance);}catch{}
         return ()=>media.removeEventListener('change',update);
     },[appearance]);
-    const connections=[...fleet.connections.values()], voyages=voyageList(connections,query,(connection,voyage)=>{const tab=workspace.tabs.get(JSON.stringify([connection.id,voyage.session_id]));return tab&&!tab.stale&&Date.now()-tab.freshAt<35000?tab.snapshot:null;});
+    const connections=[...fleet.connections.values()], allVoyages=voyageList(connections,query,(connection,voyage)=>{const tab=workspace.tabs.get(JSON.stringify([connection.id,voyage.session_id]));return tab&&!tab.stale&&Date.now()-tab.freshAt<35000?tab.snapshot:null;});
+    const voyages=filterVoyages(allVoyages,vesselFilter,stateFilter);
     useEffect(() => {
         if (!route) { setActive(null); return; }
         const connection = fleet.connections.get(route.vessel);
@@ -198,24 +205,25 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     }, [route?.vessel, route?.session, fleet.connections.get(route?.vessel || '')?.voyages.some((item: any) => item.session_id === route?.session), runtime]);
     const selected=active && route && active === JSON.stringify([route.vessel, route.session]) ? workspace.tabs.get(active) : null;
     const sidebar=<aside className={`sidebar ${mobile?'mobile-open':''}`} aria-label="Voyages">
-            <header className="sidebar-heading"><h2>Voyages <span>{voyages.length || ''}</span></h2><Button variant="default" size="icon" onClick={()=>{setMobile(false);setSettings({});}} aria-label="New voyage" title="New voyage"><PlusIcon aria-hidden="true"/></Button><Button variant="ghost" size="icon" className="mobile-close" aria-label="Close voyage navigation" onClick={()=>setMobile(false)}>×</Button></header>
+            <header className="sidebar-heading"><h2>Voyages <span>{voyages.length}{voyages.length!==allVoyages.length?` of ${allVoyages.length}`:''}</span></h2>{(route||mobile)&&<Button variant="default" size="icon" onClick={()=>{setMobile(false);setSettings({});}} aria-label="New voyage" title="New voyage"><PlusIcon aria-hidden="true"/></Button>}<Button variant="ghost" size="icon" className="mobile-close" aria-label="Close voyage navigation" onClick={()=>setMobile(false)}>×</Button></header>
             <div className="search"><SearchIcon aria-hidden="true"/><Input aria-label="Find a voyage or Vessel" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search voyages…" className="pl-9"/></div>
+            <div className="grid grid-cols-2 gap-2"><label className="sr-only" htmlFor="voyage-vessel-filter">Filter by Vessel</label><NativeSelect id="voyage-vessel-filter" value={vesselFilter} onChange={event=>setVesselFilter(event.target.value)}><option value="all">All Vessels</option>{connections.map(connection=><option key={connection.id} value={connection.id}>{connection.name}</option>)}</NativeSelect><label className="sr-only" htmlFor="voyage-state-filter">Filter by status</label><NativeSelect id="voyage-state-filter" value={stateFilter} onChange={event=>setStateFilter(event.target.value)}><option value="current">Current</option><option value="active">Active</option><option value="available">Not active</option><option value="archived">Archived</option><option value="all">All states</option></NativeSelect></div>
             <nav className="voyage-list" aria-label="Voyages">{voyages.map((voyage:any)=>{
                 const key=JSON.stringify([voyage.connection.id,voyage.session_id]),tab=workspace.tabs.get(key);
                 const status=cardStatus(voyage,Boolean(voyage.connection.client),tab&&!tab.stale ? tab.snapshot : null);
                 return <div className="voyage-row" key={key}><Button variant="outline" className="voyage-card" data-status-tone={status.tone} data-animated={status.animated || undefined} aria-current={selected?.key===key} onClick={()=>selectVoyage(voyage.connection.id,voyage.session_id,voyage.name||voyage.session_id)}>
-                    <span className="card-title">{voyage.name||voyage.session_id}{tab?.draft && <span title="Unsent draft"> •</span>}</span><span className="card-meta"><span>{voyage.connection.name}</span><time title={voyage.activity?.iso}>{activityLabel(voyage.activity)}</time></span><Badge variant={status.tone==='error'?'destructive':'secondary'} className="card-status"><i aria-hidden="true"/>{status.label}</Badge>
+                    <span className="card-title" title={voyage.name||voyage.session_id}>{voyage.name||voyage.session_id}{tab?.draft && <span title="Unsent draft"> •</span>}</span><span className="card-meta"><span title={voyage.connection.name}>{voyage.connection.name}</span><time title={voyage.activity?.iso}>{activityLabel(voyage.activity)}</time></span><Badge variant={status.tone==='error'?'destructive':'secondary'} className="card-status"><i aria-hidden="true"/>{status.label}</Badge>{status.detail&&<Badge variant="outline">{status.detail}</Badge>}
                 </Button><VoyageActions connection={voyage.connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} portalContainer={mobilePortal}/></div>;
-            })}{!voyages.length && <p className="empty">{query?'No matching voyages.':'No voyages yet.'}</p>}</nav>
+            })}{!voyages.length && <div className="grid gap-2 p-2"><p className="empty">{query||vesselFilter!=='all'||stateFilter!=='current'?'No voyages match these filters.':'No current voyages.'}</p>{(query||vesselFilter!=='all'||stateFilter!=='current')&&<Button variant="outline" type="button" onClick={()=>{setQuery('');setVesselFilter('all');setStateFilter('current');}}>Clear filters</Button>}</div>}</nav>
             <footer className="sidebar-footer"><p className="connection-state" role="status">{selected ? selected.stale?'Reconnecting…':`Connected · ${selected.snapshot?.run?.state||'idle'}` : connections.some((c:any)=>c.client)?'Ready':connections.length?'Connecting…':'No Vessels connected'}</p>
                 <div className="footer-controls">
                     <div className="connections"><DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="ghost" type="button" className="connections-trigger" aria-label="Vessel connections"><ServerIcon aria-hidden="true"/><span>{connections.filter((c:any)=>c.client).length}/{connections.length} connected</span><ChevronDownIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
                         <DropdownMenuContent portalContainer={mobilePortal} side="top" align="start" className="w-64"><DropdownMenuLabel>Vessel connections</DropdownMenuLabel>{connections.map((c:any)=><p className="px-2 py-1 text-xs text-muted-foreground" key={c.id}>{c.name} · {c.status}</p>)}<DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Manage Vessels</DropdownMenuItem></DropdownMenuContent>
                     </DropdownMenu></div>
-                    <Button variant="ghost" className="icon-button" aria-label="Reconnect Vessels" title="Reconnect Vessels" onClick={()=>fleet.reconnect()}><RefreshCwIcon aria-hidden="true"/></Button>
-                    <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="icon-button" aria-label="Profile menu"><UserRoundIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent portalContainer={mobilePortal} side="top" align="end" className="w-48"><DropdownMenuLabel>Appearance</DropdownMenuLabel><DropdownMenuRadioGroup value={appearance} onValueChange={setAppearance}>{['light','dark','system'].map(mode=><DropdownMenuRadioItem key={mode} value={mode}>{mode}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup><DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Vessel connections</DropdownMenuItem><DropdownMenuItem onSelect={()=>logoutForm.current?.requestSubmit()}>Sign out</DropdownMenuItem></DropdownMenuContent>
+                    {connections.some((connection:any)=>!connection.client)&&<Button variant="ghost" className="icon-button" aria-label="Reconnect Vessels" title="Reconnect Vessels" onClick={()=>fleet.reconnect()}><RefreshCwIcon aria-hidden="true"/></Button>}
+                    <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="icon-button" aria-label="Account and appearance"><UserRoundIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent portalContainer={mobilePortal} side="top" align="end" className="w-48"><DropdownMenuLabel>Appearance</DropdownMenuLabel><DropdownMenuRadioGroup value={appearance} onValueChange={setAppearance}>{['light','dark','system'].map(mode=><DropdownMenuRadioItem key={mode} value={mode}>{mode}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup><DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Vessel connections</DropdownMenuItem><DropdownMenuItem onSelect={()=>{if([...workspace.tabs.values()].some(tab=>tab.draft.trim()||tab.pictures.length))setLogoutReview(true);else logoutForm.current?.requestSubmit();}}>Sign out</DropdownMenuItem></DropdownMenuContent>
                     </DropdownMenu>
                     <form ref={logoutForm} action={bootstrap.logoutUrl} method="post" hidden><Input type="hidden" name="_token" value={csrf()}/></form>
                 </div>
@@ -227,12 +235,13 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
             <SheetContent ref={setMobilePortal} side="left" showCloseButton={false} className="mobile-navigation"><SheetTitle className="sr-only">Voyages</SheetTitle><SheetDescription className="sr-only">Choose a voyage or manage Vessel connections.</SheetDescription>{mobile&&sidebar}</SheetContent>
         </Sheet>
         {!mobile&&sidebar}
-        <main className="voyage-workspace" aria-label="Conversation">{!route && <section className="conversation"><div className="transcript"><div className="thread empty">Choose a voyage from any connected Vessel. <Button variant="ghost" onClick={()=>setSettings({})}>New voyage</Button></div></div><Composer workspace={workspace} onSettings={()=>setSettings({})}/></section>}
+        <main className="voyage-workspace" aria-label="Conversation">{!route && <section className="conversation"><div className="transcript"><Card className="mx-auto max-w-md"><CardHeader><CardTitle>Welcome to Helm</CardTitle><CardDescription>Choose a voyage from the sidebar or start a new one.</CardDescription></CardHeader><CardContent><Button onClick={()=>setSettings({})}>New voyage</Button></CardContent></Card></div></section>}
             {route && !selected && <p className="empty" role="status">Waiting for this voyage on its Vessel. If it does not appear, check your connection or access.</p>}
             {selected && <HostBrowser key={selected.key} tab={selected} client={fleet.connections.get(selected.vessel)?.client}/> }
-            {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})}/>)}
+            {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})} connection={fleet.connections.get(tab.vessel)} voyage={fleet.connections.get(tab.vessel)?.voyages.find((item:any)=>item.session_id===tab.session)}/>)}
         </main>
         {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} onReconnect={()=>fleet.reconnect()} onClose={()=>setManage(false)}/>}
         {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} tenant={bootstrap.tenantId} onClose={()=>setSettings(null)} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}
+        <Dialog open={logoutReview} onOpenChange={setLogoutReview}><DialogContent><DialogHeader><DialogTitle>Sign out with unsent work?</DialogTitle><DialogDescription>Unsent message drafts and prepared pictures in this browser will be lost. Your voyages continue on their Vessels.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" type="button" onClick={()=>setLogoutReview(false)}>Keep working</Button><Button variant="destructive" type="button" onClick={()=>logoutForm.current?.requestSubmit()}>Sign out</Button></DialogFooter></DialogContent></Dialog>
     </div>;
 }

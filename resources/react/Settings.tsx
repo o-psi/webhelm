@@ -14,8 +14,8 @@ import {VesselUpdate} from './VesselUpdate';
 import {accountChoices,Creation,vesselRead} from './settings';
 import type {Tab,Workspace} from './workspace';
 
-type Screen='overview'|'location'|'profiles'|'editor'|'accounts'|'models'|'reasoning'|'enrollment'|'delete'|'usage';
-const titles:Record<Screen,string>={overview:'Voyage setup',location:'Location',profiles:'Profiles',editor:'Edit profile',accounts:'Choose account',models:'Choose model',reasoning:'Reasoning & service',enrollment:'Connect ChatGPT',delete:'Delete profile',usage:'Account usage'};
+type Screen='overview'|'location'|'maintenance'|'profiles'|'editor'|'accounts'|'models'|'reasoning'|'enrollment'|'delete'|'usage';
+const titles:Record<Screen,string>={overview:'Voyage setup',location:'Location',maintenance:'Vessel maintenance',profiles:'Profiles',editor:'Edit profile',accounts:'Choose account',models:'Choose model',reasoning:'Reasoning & service',enrollment:'Connect ChatGPT',delete:'Delete profile',usage:'Account usage'};
 const expiredOAuth=(account:any)=>account?.binding.transport==='chatgpt_oauth'&&account.state==='ready'&&account.availability==='expired';
 function SetupRow({label,detail,onClick,disabled=false}:{label:string;detail:string;onClick:()=>void;disabled?:boolean}){
     return <Button variant="ghost" type="button" className="setup-row" onClick={onClick} disabled={disabled}><span><strong>{label}</strong><small>{detail}</small></span><span aria-hidden="true">›</span></Button>;
@@ -51,7 +51,7 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
         setNotice('Loading Vessel…');
         vesselRead(connection,'capabilities').then(async value=>{
             if(value.vessel_id!==connection.vessel_id)throw new Error('Vessel identity changed.');
-            if(!value.features?.includes('execution_profiles')){if(alive){setCaps(value);setScreen('location');setNotice(`Vessel ${value.version||'version unknown'} needs an update before profile setup.`);}return;}
+            if(!value.features?.includes('execution_profiles')){if(alive){setCaps(value);setScreen('maintenance');setNotice(`Vessel ${value.version||'version unknown'} needs an update before profile setup.`);}return;}
             if(value.scope!=='owner'&&(!value.rights?.includes('account_use')||(!tab&&!value.rights?.includes('create'))))throw new Error('This connection does not permit account use or creation.');
             let location=tab?.snapshot?.workspace||(changedVessel?'':path);
             if(tab){const process=await vesselRead(connection,'inspect',{session_id:tab.session});if(process.incarnation!==tab.incarnation)throw new Error('Voyage changed. Reopen settings.');location=process.workspace;}
@@ -124,12 +124,13 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
     const canSave=!busy&&!recoveryState.error&&caps&&(screen==='editor'?selected?.ready&&selectedModel:profile&&profileAccount?.ready)&&(!!tab||path.startsWith('/'));
     return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose();}}><DialogContent showCloseButton={false} className="settings-dialog profile-setup" aria-labelledby="profile-setup-title" onInteractOutside={event=>event.preventDefault()} onEscapeKeyDown={event=>{if(busy)event.preventDefault();}}>
         <form onSubmit={event=>{event.preventDefault();void save();}}>
-            <header>{screen!=='overview'&&<Button variant="ghost" type="button" disabled={busy} aria-label="Back" onClick={back}>←</Button>}<DialogTitle asChild><h2 id="profile-setup-title" ref={heading} tabIndex={-1}>{screen==='overview'?(tab?'Voyage setup':'New voyage'):titles[screen]}</h2></DialogTitle><>{screen==='profiles'&&catalogue?.can_manage&&<Button variant="ghost" type="button" className="profile-create" aria-label="Create profile" title="Create profile" disabled={busy} onClick={()=>editProfile('new')}>+</Button>}</><Button variant="ghost" type="button" disabled={busy} aria-label="Close settings" onClick={onClose}>×</Button></header>
+            <header>{screen!=='overview'&&<Button variant="ghost" type="button" disabled={busy} aria-label="Back" onClick={back}>←</Button>}<DialogTitle asChild><h2 id="profile-setup-title" ref={heading} tabIndex={-1}>{screen==='overview'?(tab?'Voyage setup':'New voyage'):titles[screen]}</h2></DialogTitle><>{screen==='profiles'&&catalogue?.can_manage&&<Button variant="outline" type="button" aria-label="Create profile" disabled={busy} onClick={()=>editProfile('new')}>Create profile</Button>}</><Button variant="ghost" type="button" disabled={busy} aria-label="Close settings" onClick={onClose}>×</Button></header>
             <div ref={body} className="setup-body" aria-busy={busy}>
                 {screen==='overview'&&<>
                     <p>{tab?'Choose a saved profile for the next run.':'Choose where your voyage runs and the profile it uses.'}</p>
                     <SetupRow label="Location" detail={[connection?.name,path].filter(Boolean).join(' · ')||'Choose a Vessel and workspace'} disabled={busy} onClick={()=>navigate('location')}/>
-                    <SetupRow label="Profile" detail={profile?`${profile.name} · ${profile.model}`:'Choose a profile'} disabled={busy||!catalogue} onClick={()=>navigate('profiles')}/>
+                    <SetupRow label="Profile" detail={!catalogue?(reviewRequired?'Profiles unavailable':'Loading saved profiles…'):profile?`${profile.name} · ${profile.model}`:'Choose a profile'} disabled={busy||!catalogue} onClick={()=>navigate('profiles')}/>
+                    {caps?.scope==='owner'&&<SetupRow label="Vessel maintenance" detail="Updates and recovery" disabled={busy} onClick={()=>navigate('maintenance')}/>}
                     {profile&&<p className="setup-summary">{profile.reasoning_effort||'Provider default reasoning'} · {profile.service_tier||'Default service tier'}<br/>{profileAccount?.label||'Account unavailable'}</p>}
                     {profileAccount&&!profileAccount.ready&&<div className="setup-warning"><p>This profile’s account is {profileAccount.availability?.replaceAll('_',' ')||'unavailable'}.</p>{refreshButton(profileAccount)}</div>}
                 </>}
@@ -137,8 +138,8 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
                     <label>Vessel<NativeSelect disabled={!!tab||busy} value={vessel} onChange={event=>setVessel(event.target.value)}>{[...fleet.connections.values()].map((item:any)=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</NativeSelect></label>
                     <label>Workspace{caps?.scope==='owner'&&!tab?<Input value={path} onChange={event=>setPath(event.target.value)} placeholder="Existing absolute folder on this Vessel" disabled={busy}/>:<NativeSelect disabled={!!tab||busy} value={path} onChange={event=>setPath(event.target.value)}>{tab?<option value={path}>{path}</option>:(caps?.workspaces||[]).map((item:any)=><option key={item.path} value={item.path}>{item.name} · {item.path}</option>)}</NativeSelect>}</label>
                     <p>{tab?'An existing voyage keeps its Vessel and workspace.':'Use an existing folder on the Vessel.'}</p>
-                    {caps&&<VesselUpdate connection={connection} caps={caps} tenant={tenant} onResume={()=>setCapabilityReload(value=>value+1)}/>}
                 </>}
+                {screen==='maintenance'&&<>{caps&&<VesselUpdate connection={connection} caps={caps} tenant={tenant} onResume={()=>setCapabilityReload(value=>value+1)}/>}</>}
                 {screen==='profiles'&&<>
                     <label className="setup-search">Search profiles<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
                     <div className="setup-choices">{(catalogue?.profiles||[]).filter((item:any)=>matches(`${item.name} ${item.model}`)).map((item:any)=><div className="profile-choice-row" key={item.id}>
@@ -185,7 +186,7 @@ export function Settings({fleet,workspace,tab,tenant,onClose,onCreated}:{fleet:a
             <footer><p role="status">{recoveryState.error?'Recovery storage is unavailable. Do not clear it or repeat uncertain creation.':notice}</p>
                 {reviewRequired&&<Button variant="ghost" type="button" disabled={busy} onClick={()=>{retainEditor();setReviewRequired(false);setNotice('');setRecovery(value=>value+1);}}>Check status</Button>}
                 {records.map(record=><Button variant="ghost" type="button" key={record.key} disabled={busy} onClick={async()=>{setBusy(true);try{const c=fleet.connections.get(record.vessel);const process=await creation.current!.reconcile(c,record);if(process){onCreated(c.id,process);onClose();}else setNotice('Creation was not admitted. You can review and try again.');}catch(error){setNotice(error instanceof Error?error.message:'Receipt unavailable.');}finally{setBusy(false);}}}>Check creation · {record.vessel}</Button>)}
-                <div className="setup-footer-actions">{screen==='overview'?<><Button variant="ghost" type="button" disabled={busy} onClick={onClose}>Cancel</Button><Button variant="default" className="primary-action" disabled={!canSave}>{busy?'Working…':tab?'Apply profile':'Create voyage'}</Button></>:screen==='editor'?<><Button variant="ghost" type="button" disabled={busy} onClick={back}>Cancel profile edit</Button><Button variant="default" className="primary-action" disabled={!canSave}>{busy?'Working…':'Save profile'}</Button></>:<Button variant="ghost" type="button" disabled={busy} onClick={back}>{screen==='reasoning'||screen==='location'?'Done':'Back'}</Button>}</div>
+                <div className="setup-footer-actions">{screen==='overview'?<><Button variant="ghost" type="button" disabled={busy} onClick={onClose}>Cancel</Button><Button variant="default" className="primary-action" disabled={!canSave}>{busy?'Working…':tab?'Apply profile':'Create voyage'}</Button></>:screen==='editor'?<><Button variant="ghost" type="button" disabled={busy} onClick={back}>Cancel profile edit</Button><Button variant="default" className="primary-action" disabled={!canSave}>{busy?'Working…':'Save profile'}</Button></>:null}</div>
             </footer>
         </form>
     </DialogContent></Dialog>;

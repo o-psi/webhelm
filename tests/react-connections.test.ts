@@ -8,9 +8,9 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
     dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
     const saved: Record<string, unknown> = {};
-    for (const key of ['window', 'document', 'location', 'Event', 'CustomEvent', 'MutationObserver', 'HTMLElement', 'Node', 'NodeFilter', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'Element', 'ShadowRoot', 'getComputedStyle']) {
+    for (const key of ['window', 'document', 'location', 'Event', 'CustomEvent', 'MutationObserver', 'HTMLElement', 'Node', 'NodeFilter', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement', 'Element', 'ShadowRoot', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) {
         saved[key] = (globalThis as any)[key];
-        (globalThis as any)[key] = key === 'getComputedStyle' ? dom.window.getComputedStyle.bind(dom.window) : (dom.window as any)[key];
+        (globalThis as any)[key] = key === 'getComputedStyle' ? dom.window.getComputedStyle.bind(dom.window) : key === 'requestAnimationFrame' ? (callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0) : key === 'cancelAnimationFrame' ? clearTimeout : (dom.window as any)[key];
     }
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     const oldFetch = globalThis.fetch;
@@ -21,7 +21,7 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     const root = createRoot(dom.window.document.querySelector('#mount')!);
     const query = (selector: string) => dom.window.document.querySelector(selector);
     const click = async (label: string) => React.act(async () => {
-        const button = [...dom.window.document.querySelectorAll('button')].find(node => node.textContent?.includes(label));
+        const button = [...dom.window.document.querySelectorAll('button')].find(node => node.getAttribute('aria-label') === label || node.textContent?.includes(label));
         assert.ok(button, `missing ${label}`);
         button.click();
     });
@@ -42,18 +42,18 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         await click('View details');
         assert.ok(query('.connections-detail-card .connections-status.is-connected'));
         assert.equal(query('.connections-confirm'), null);
-        await click('Remove connection');
+        await click('Remove from Helm Web');
         assert.ok(query('.connections-confirm'));
         assert.equal(requests, 0);
         await click('Keep connection');
         assert.equal(query('.connections-confirm'), null);
-        await click('Back to Vessels');
+        await click('Back');
         await click('Add Vessel');
         await enter('input', 'New host');
         await enter('textarea', 'private invitation');
         await click('How do I get an invitation');
         assert.match(query('.connections-guide')!.textContent!, /pair-invite/);
-        await click('Back to adding');
+        await click('Back');
         assert.equal((query('input') as HTMLInputElement).value, 'New host');
         assert.equal((query('textarea') as HTMLTextAreaElement).value, 'private invitation');
         await click('Existing credential');

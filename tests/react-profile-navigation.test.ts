@@ -49,7 +49,7 @@ test('profile navigation preserves unsaved name/model and keeps the current step
         assert.match(view.text(),/Other model/);
         await view.click('Reasoning & service');
         assert.equal(document.querySelector('[data-slot=slider-thumb]')!.getAttribute('aria-valuemax'),'1','reasoning follows selected model support');
-        await view.click('Done');await view.click('Save profile');
+        await view.click('Back');await view.click('Save profile');
         const saved=view.commands.find(command=>command.op==='save_profile');
         assert.equal(saved.profile.name,'My draft');assert.equal(saved.profile.model,'other');assert.equal(saved.profile.reasoning_effort,null);assert.equal(saved.profile.service_tier,null);
         assert.equal(view.actions.length,0,'saving a profile never changes the voyage');
@@ -105,7 +105,7 @@ test('connection renewal while in a picker retains the unsaved profile and model
         await view.click('Profile');await view.click('Actions for Everyday');await view.click('Edit');
         await view.fill('Profile name','Keep this draft');await view.click('Model');
         await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('.setup-choice')].find(item=>item.textContent?.startsWith('Other model'))!.click());
-        await view.click('Reasoning & service');await view.renew();await view.click('Done');
+        await view.click('Reasoning & service');await view.renew();await view.click('Back');
         assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'Keep this draft');assert.match(view.text(),/Other model/);
         await view.click('Save profile');assert.equal(view.commands.find(command=>command.op==='save_profile').profile.model,'other');
         assert.equal(view.actions.length,0);

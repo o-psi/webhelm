@@ -53,7 +53,7 @@ test('selected React browser uses shared controls, live revision fences and deta
         await click('Browser');
         await act(async()=>{dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await tick();});
         assert.equal(dom.window.document.activeElement?.textContent,'Browser','Escape restores the discoverable action');
-        await click('Browser'); await click('Close ×');
+        await click('Browser'); await click('Close panel');
         assert.equal(dom.window.document.querySelector('.browser-next-mirror'),null);
         await click('Browser');
         await act(async()=>root.unmount()); await tick();

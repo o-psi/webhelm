@@ -5,6 +5,7 @@ import {Card} from './components/ui/card';
 import {Badge} from './components/ui/badge';
 import {Dialog, DialogContent, DialogTitle} from './components/ui/dialog';
 import {Alert,AlertDescription} from './components/ui/alert';
+import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import React, {useEffect, useRef, useState} from 'react';
 
 type Vessel = {id: string; name: string; vessel_id: string; endpoint?: string};
@@ -150,7 +151,7 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
             {screen === 'list' && <>
                 <p className="connections-intro">These computers run your voyages. Provider credentials stay on each Vessel.</p>
                 {(data.pairings || []).length > 0 && <section className="connections-pending" aria-label="Pending pairings"><h3>Needs confirmation</h3>
-                    {(data.pairings || []).map(pairing => <div key={pairing.id} className="connections-pending-row"><div><strong>{pairing.name}</strong><small>The original pairing is still pending. Check it before adding another.</small></div><Button variant="ghost" type="button" disabled={busy || uncertain} onClick={()=>void send(`/connections/pair/${encodeURIComponent(pairing.id)}/retry`, {})}>Check connection</Button></div>)}
+                    {(data.pairings || []).map(pairing => <div key={pairing.id} className="connections-pending-row"><div><strong>{pairing.name}</strong><small>The original pairing is still pending. Retry that pairing only after reviewing its status.</small></div><Button variant="outline" type="button" disabled={busy || uncertain} onClick={()=>void send(`/connections/pair/${encodeURIComponent(pairing.id)}/retry`, {})}>Retry original pairing</Button></div>)}
                 </section>}
                 {count ? <div className="connections-grid">{data.vessels.map(vessel => <Card role="article" className="connections-card px-4" key={vessel.id}>
                     <div className="connections-card-top"><span className="connections-server" aria-hidden="true">▣</span><Badge variant="outline" className={`connections-status ${states[vessel.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(vessel.id)}</Badge></div>
@@ -160,7 +161,7 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
                 {count >= 64 && <p>Connection limit reached. Remove a Vessel before adding another.</p>}
             </>}
             {screen === 'add' && <>
-                <div className="connections-method" aria-label="Connection method"><Button variant={method === 'invitation' ? 'secondary' : 'outline'} type="button" aria-pressed={method === 'invitation'} disabled={busy} onClick={()=>setMethod('invitation')}>New invitation</Button><Button variant={method === 'credential' ? 'secondary' : 'outline'} type="button" aria-pressed={method === 'credential'} disabled={busy} onClick={()=>setMethod('credential')}>Existing credential</Button></div>
+                <div className="connections-method" aria-label="Connection method"><Button variant={method === 'invitation' ? 'secondary' : 'outline'} type="button" aria-pressed={method === 'invitation'} disabled={busy} onClick={()=>setMethod('invitation')}>New invitation</Button><Collapsible open={method==='credential'} onOpenChange={open=>setMethod(open?'credential':'invitation')}><CollapsibleTrigger asChild><Button variant="ghost" type="button" disabled={busy}>Existing credential (advanced)</Button></CollapsibleTrigger><CollapsibleContent><p>Import an existing grant only when moving an established Vessel connection. Importing replaces this Web account’s saved connection.</p></CollapsibleContent></Collapsible></div>
                 <form id="vessel-add-form" onSubmit={event=>{event.preventDefault();void send(method === 'invitation' ? '/connections/pair' : '/connections', {name, [method]: secret});}}>
                     <label>Name<Input ref={nameField} required maxLength={100} value={name} onChange={event=>setName(event.target.value)} placeholder="e.g. My workstation" disabled={busy} autoComplete="off"/></label>
                     <label>{method === 'invitation' ? 'Invitation JSON' : 'Connection credential JSON'}<Textarea required maxLength={16384} rows={5} value={secret} onChange={event=>method === 'invitation' ? setInvitation(event.target.value) : setCredential(event.target.value)} placeholder={method === 'invitation' ? 'Paste the private invitation from your Vessel' : 'Paste an existing Vessel connection credential'} disabled={busy} autoComplete="off" spellCheck={false}/></label>
@@ -176,12 +177,12 @@ export function Connections({bootstrap, states = {}, onReconnect, onClose}: {
             {screen === 'details' && selected && <div className="connections-details"><div className="connections-detail-card"><span className={`connections-status ${states[selected.id]?.connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{statusLabel(selected.id)}</span><dl><div><dt>Address</dt><dd>{selected.endpoint || 'Not available'}</dd></div><div><dt>Vessel ID</dt><dd>{selected.vessel_id}</dd></div></dl></div>
                 {!states[selected.id]?.connected && onReconnect && <Button variant="ghost" type="button" onClick={onReconnect}>Reconnect Vessels</Button>}
                 <section className="connections-danger"><h3>Remove from Helm Web</h3><p>Removing this connection stops new browser access through this Web account. It does not stop voyages or revoke the underlying Vessel grant used by other clients.</p>
-                    {!confirmRemove ? <Button variant="ghost" type="button" onClick={()=>setConfirmRemove(true)}>Remove connection…</Button> : <div className="connections-confirm" role="group" aria-label={`Confirm removing ${selected.name}`}><p>Remove <strong>{selected.name}</strong> from this Web account?</p><Button variant="ghost" type="button" disabled={busy} onClick={()=>setConfirmRemove(false)}>Keep connection</Button><Button variant="destructive" type="button" className="connections-remove" disabled={busy || uncertain} onClick={()=>void send(`/connections/${encodeURIComponent(selected.id)}`, {confirm_disconnect: 1}, 'DELETE')}>Remove {selected.name}</Button></div>}
+                    {!confirmRemove ? <Button variant="destructive" type="button" onClick={()=>setConfirmRemove(true)}>Remove from Helm Web…</Button> : <div className="connections-confirm" role="group" aria-label={`Confirm removing ${selected.name}`}><p>Remove <strong>{selected.name}</strong> from this Web account?</p><Button variant="outline" type="button" disabled={busy} onClick={()=>setConfirmRemove(false)}>Keep connection</Button><Button variant="destructive" type="button" className="connections-remove" disabled={busy || uncertain} onClick={()=>void send(`/connections/${encodeURIComponent(selected.id)}`, {confirm_disconnect: 1}, 'DELETE')}>Remove {selected.name}</Button></div>}
                 </section>
             </div>}
         </div>
-        <footer className="connections-footer">
-            {screen === 'list' ? <Button variant="ghost" type="button" onClick={close}>Done</Button> : screen === 'add' ? <><Button variant="ghost" type="button" onClick={back} disabled={busy}>Back</Button><Button variant="default" className="connections-primary" type="submit" form="vessel-add-form" disabled={busy || uncertain || !name.trim() || !secret.trim()}>{busy ? 'Connecting…' : 'Connect Vessel'}</Button></> : <Button variant="ghost" type="button" onClick={back} disabled={busy}>{screen === 'guide' ? 'Back to adding' : 'Back to Vessels'}</Button>}
-        </footer>
+        {(screen === 'list' || screen === 'add') && <footer className="connections-footer">
+            {screen === 'list' ? <Button variant="ghost" type="button" onClick={close}>Done</Button> : <Button variant="default" className="connections-primary" type="submit" form="vessel-add-form" disabled={busy || uncertain || !name.trim() || !secret.trim()}>{busy ? 'Connecting…' : 'Connect Vessel'}</Button>}
+        </footer>}
     </DialogContent></Dialog>;
 }

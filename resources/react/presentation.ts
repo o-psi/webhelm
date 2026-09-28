@@ -4,11 +4,16 @@ export function cardStatus(item: any, connected: boolean, snapshot: any = null) 
     if (!connected) return {label: 'Offline', tone: 'muted', animated: false};
     const state = item.state;
     if (state === 'cleanup_unconfirmed') return {label: 'Cleanup pending', tone: 'warning', animated: false};
-    if (['unavailable', 'stopped', 'relinquished', 'suspended'].includes(state)) {
+    if (['unavailable', 'stopped', 'relinquished'].includes(state)) {
         return {label: state[0].toUpperCase() + state.slice(1), tone: state === 'unavailable' ? 'error' : 'muted', animated: false};
     }
     if (!snapshot && item.catalogue?.stale) return {label: 'Cached', tone: 'muted', animated: false};
     const run = snapshot ? snapshot.run?.state : item.catalogue?.summary?.run_state;
+    if (state === 'suspended') {
+        if (!run || run === 'idle') return {label: 'Suspended', tone: 'muted', animated: false};
+        const outcome = run[0].toUpperCase() + run.slice(1).replaceAll('_', ' ');
+        return {label: `Last run ${outcome.toLocaleLowerCase()}`, detail: 'Suspended process', tone: ['failed','interrupted'].includes(run) ? 'error' : 'muted', animated: false};
+    }
     const label = run || state || 'unknown';
     const tone = ['running', 'starting', 'live'].includes(label) ? 'active'
         : ['cancelling', 'blocked', 'waiting'].includes(label) ? 'warning'
@@ -16,6 +21,13 @@ export function cardStatus(item: any, connected: boolean, snapshot: any = null) 
         : ['completed', 'succeeded'].includes(label) ? 'success' : 'muted';
     return {label: label[0].toUpperCase() + label.slice(1).replaceAll('_', ' '), tone,
         animated: ['running', 'starting', 'live', 'cancelling'].includes(label)};
+}
+
+export function filterVoyages(voyages: any[], vessel = 'all', state = 'current') {
+    return voyages.filter(voyage => (vessel === 'all' || voyage.connection.id === vessel)
+        && (state === 'all' || (state === 'current' ? !voyage.catalogue?.summary?.archived : state === 'active' ? voyage.active : state === 'archived'
+            ? Boolean(voyage.catalogue?.summary?.archived) : state === 'available'
+                ? !voyage.active && !voyage.catalogue?.summary?.archived : false)));
 }
 
 // Catalogue metadata is display-only, never evidence of runtime liveness.

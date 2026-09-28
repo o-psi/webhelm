@@ -15,7 +15,7 @@ test('profiles editor saves, duplicates, defaults and deletes without mutating v
  try{await act(async()=>root.render(React.createElement(Settings,{fleet:{connections:new Map([['c',connection]])},workspace:{} as any,tenant:'test',onClose(){},onCreated(){}})));
  assert.equal([...document.querySelectorAll('label')].some(label=>label.textContent?.startsWith('Model')),false);
  assert.equal(commands.filter(command=>command.op==='account_models').length,0,'choosing a saved profile does not discover models');
- await act(async()=>document.querySelector<HTMLButtonElement>('.setup-row:last-of-type')!.click());
+ await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('.setup-row')].find(button=>button.querySelector('strong')?.textContent==='Profile')!.click());
  const action=async(name:string,label:string)=>{await act(async()=>{const trigger=document.querySelector<HTMLButtonElement>(`[aria-label="Actions for ${name}"]`)!;trigger.dispatchEvent(new dom.window.MouseEvent('pointerdown',{bubbles:true,button:0}));});const menu=document.querySelector(`[role="menu"][aria-label="Actions for ${name}"]`)!;await act(async()=>[...menu.querySelectorAll('button')].find(button=>button.textContent===label)!.click());};
  assert.ok(document.querySelector('header [aria-label="Create profile"]'),'create stays in the fixed header');
  await action('Everyday','Duplicate');assert.match(document.body.textContent!,/Reasoning & service/);await click('Save profile');assert.equal(catalogue.profiles.length,2);assert.equal(catalogue.profiles[1].name,'Everyday copy');

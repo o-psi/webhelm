@@ -75,6 +75,19 @@ test('unknown-after-restart receipt remains blocking and never replays', async (
     assert.equal(f.storage.length, 1); assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!), false);
     f.workspace.close();
 });
+test('automatic receipt observation stops after three exact reads without replay', async () => {
+    const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
+    f.workspace.draft(key, 'Keep this draft'); f.mode('unknown'); await f.workspace.act(key, 'submit');
+    f.mode('unknown_after_restart');
+    for (let attempt = 0; attempt < 4; attempt++) await f.workspace.observePending(key);
+    assert.equal(f.commands.filter(command => command.op === 'receipt').length, 3);
+    assert.equal(f.commands.filter(command => command.op === 'submit').length, 1);
+    assert.equal(f.workspace.tabs.get(key)?.draft, 'Keep this draft');
+    assert.equal(f.storage.length, 1);
+    f.mode('accepted'); await f.workspace.reconcile(key);
+    assert.equal(f.storage.length, 0);
+    f.workspace.close();
+});
 test('stale snapshot cannot authorize commands', async () => {
     const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
     const tab = f.workspace.tabs.get(key)!; tab.freshAt = Date.now() - 36000; f.workspace.draft(key, 'Hello');

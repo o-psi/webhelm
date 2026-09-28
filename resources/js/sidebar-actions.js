@@ -55,9 +55,24 @@ async function inspect(connection, id) {
 }
 export function sidebarActions(root, {changed = () => {}, modal = name => window.Flux.modal(name)} = {}) {
     const $ = id => root.querySelector(`#sidebar-${id}`);
-    let epoch = 0, current = null, sending = false;
+    let epoch = 0, current = null, sending = false, receiptTimer = null;
     const status = text => { $('action-status').textContent = text; };
-    function invalidate() { epoch++; current = null; if ($('submit')) $('submit').disabled = true; }
+    function stopReceiptObservation() { if (receiptTimer !== null) { clearTimeout(receiptTimer); receiptTimer = null; } }
+    function pendingFor(connection,item) { return connection.journal.entries().some(entry=>entry.session_id===item.session_id && entry.sidebar_action); }
+    function observeReceipts(mine,remaining=3) {
+        stopReceiptObservation();
+        if(mine!==epoch || !current || !pendingFor(current.connection,current.item)) return;
+        receiptTimer=setTimeout(async()=>{
+            receiptTimer=null;
+            if(mine!==epoch || !current) return;
+            if(sending) { observeReceipts(mine,remaining); return; }
+            await reconcile();
+            if(mine!==epoch || !current || !pendingFor(current.connection,current.item)) return;
+            if(remaining>1) observeReceipts(mine,remaining-1);
+            else status('Receipt remains unresolved. Check pending receipt later; the command was not replayed.');
+        },1500);
+    }
+    function invalidate() { stopReceiptObservation(); epoch++; current = null; if ($('submit')) $('submit').disabled = true; }
     function bind(node, connection, item) {
         const row = node.querySelector('[data-voyage-row]'), menu = node.querySelector('[data-flux-menu]');
         let loaded = null, ticket = 0;
@@ -92,16 +107,17 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
         return (nextConnection, nextItem) => { connection = nextConnection; item = nextItem; };
     }
     async function open(connection,item,action) {
-        const mine = ++epoch; current = null;
+        stopReceiptObservation(); const mine = ++epoch; current = null;
         await modal('sidebar-action').show();
         if (mine !== epoch) return;
         bindListeners();
         if (!$('submit')) throw new Error('Action dialog unavailable.');
         $('submit').disabled=true;
-        $('action-title').textContent=({access:'Access modes',archive:'Archive / Restore',cancel:'Cancel run'})[action] || action[0].toUpperCase()+action.slice(1);
+        $('action-title').textContent=({access:'Access mode',archive:'Archive or restore',cancel:'Cancel run',details:'Voyage details'})[action] || action[0].toUpperCase()+action.slice(1);
         $('action-target').textContent=`${item.name || item.session_id} · ${connection.name} · ${item.session_id}`;
         for (const name of ['name','access','branch','retain','confirm']) $(`${name}-field`).hidden=true;
-        $('action-details').hidden=true; $('confirm').value=''; $('reconcile').hidden=false;
+        $('details-summary').hidden=true; $('details-advanced').hidden=true; $('access-review').hidden=true; $('confirm').value='';
+        $('reconcile').hidden=!pendingFor(connection,item);
         status('Loading fresh voyage state…');
         try {
             const view = await inspect(connection,item.session_id);
@@ -110,10 +126,20 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             const reason=actionReason(action,view,connection);
             status(reason || descriptions[action]);
             $('submit').hidden=action==='details';
-            $('submit').textContent=action==='archive' ? (archived(view) ? 'Restore' : 'Archive') : 'Confirm';
-            if (action==='details') { $('action-details').hidden=false; $('action-details').textContent=JSON.stringify({process:view.process,snapshot:view.snapshot,error:view.error},null,2); }
+            $('submit').textContent=action==='archive' ? (archived(view) ? 'Restore voyage' : 'Archive voyage') : ({rename:'Rename voyage',access:'Save access mode',branch:'Create branch',cancel:'Request cancellation',compact:'Compact context',clear:'Clear conversation',delete:'Delete voyage'})[action] || 'Confirm';
+            if (action==='details') {
+                $('details-summary').hidden=false; $('details-advanced').hidden=false;
+                const values={name:view.snapshot?.name||item.name||item.session_id,process:view.process.state||'Unknown',run:view.snapshot?.run?.state||'No current run',access:view.snapshot?.access||'Unavailable',workspace:view.snapshot?.workspace||view.process.workspace||'Unavailable'};
+                for(const [key,value] of Object.entries(values)) $('details-'+key).textContent=key==='process'||key==='run'?String(value).replaceAll('_',' '):String(value);
+                const snapshot=view.snapshot;
+                $('action-details').textContent=JSON.stringify({
+                    process:{session_id:view.process.session_id,incarnation:view.process.incarnation,state:view.process.state,archive:view.process.archive,workspace:view.process.workspace},
+                    snapshot:snapshot&&{session_id:snapshot.session_id,revision:snapshot.revision,lifecycle:snapshot.lifecycle,run:snapshot.run&&{run_id:snapshot.run.run_id,state:snapshot.run.state,failure_summary:snapshot.run.failure_summary},pending_cleanup_run:snapshot.pending_cleanup_run,cleanup:snapshot.cleanup,access:snapshot.access,workspace:snapshot.workspace,message_offset:snapshot.message_offset,loaded_message_count:snapshot.messages?.length},
+                    error:view.error,
+                },null,2);
+            }
             if (['rename','branch'].includes(action)) { $('name-field').hidden=false; $('name').value=action==='rename' ? view.snapshot?.name || item.name || '' : ''; }
-            if (action==='access') { $('access-field').hidden=false; $('access').value=view.snapshot?.access || 'approval'; }
+            if (action==='access') { $('access-field').hidden=false; $('access-review').hidden=false; $('access').value=view.snapshot?.access || 'approval'; updateAccessReview(); }
             if (action==='compact') $('retain-field').hidden=false;
             if (action==='branch' && !reason) {
                 $('branch-field').hidden=false; $('branch').replaceChildren(new Option('Full conversation',''));
@@ -121,8 +147,16 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
                 await loadBranchPoints();
             }
             if (['clear','delete','compact'].includes(action)) { $('confirm-field').hidden=false; $('confirm-label').textContent=`Type ${action==='compact' ? 'COMPACT' : action.toUpperCase()} to confirm`; }
-            $('submit').disabled=Boolean(reason);
+            $('submit').disabled=Boolean(reason || action==='access' && $('access').value===view.snapshot?.access);
+            if(pendingFor(connection,item)) observeReceipts(mine);
         } catch(error) { if(mine===epoch) {status(error.message); $('submit').disabled=true;} }
+    }
+    function updateAccessReview() {
+        if(!current || current.action!=='access') return;
+        const labels={'read-only':'Read only',approval:'Approval',unrestricted:'Full access'};
+        const currentMode=labels[current.view.snapshot?.access]||'Unknown',nextMode=labels[$('access').value]||'Unknown';
+        $('access-summary').textContent=`Current: ${currentMode}. Proposed: ${nextMode}. This changes future tool authority for this voyage on ${current.connection.name}. Configured roots and host limits still apply.`;
+        $('submit').disabled=Boolean(actionReason('access',current.view,current.connection) || $('access').value===current.view.snapshot?.access);
     }
     async function loadBranchPoints() {
         const target=current;
@@ -160,7 +194,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             if (['rename','branch'].includes(action)) { fields.name=$('name').value.trim() || null; if(fields.name && new TextEncoder().encode(fields.name).length>256) throw new Error('Name exceeds 256 UTF-8 bytes.'); if(action==='rename' && !fields.name) throw new Error('Enter a name.'); }
             if (action==='compact') { fields.retain=Number($('retain').value); fields.preserve_canonical=true; if(!Number.isInteger(fields.retain)||fields.retain<0||fields.retain>4294967295||!$('retain').value) throw new Error('Enter a valid message count.'); }
             if (action==='branch') { fields.branch_id=uuid(); fields.through_message=$('branch').value===''?null:Number($('branch').value); if(fields.through_message!==null && (!Number.isSafeInteger(fields.through_message)||fields.through_message<0||!target.branchIndices?.has(fields.through_message))) throw new Error('Invalid branch boundary.'); }
-            if (action==='access') fields.access=$('access').value;
+            if (action==='access') { fields.access=$('access').value; if(fields.access===view.snapshot?.access) throw new Error('Choose a different access mode.'); }
             if (['clear','delete'].includes(action)) fields.confirm_session_id=item.session_id;
             const fresh=await inspect(connection,item.session_id);
             if(mine!==epoch || current!==target || fresh.client!==view.client) throw new Error('Selection or connection changed; nothing sent. Reopen the action.');
@@ -191,7 +225,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             if(mine===epoch) {status(action==='branch'?`Branch created: ${fields.branch_id}`:action==='cancel'?'Cancellation requested; cleanup may still be pending.':'Action confirmed by Vessel.'); current=null;}
             changed();
         } catch(error) { if(mine===epoch) status(error.message); }
-        finally { sending=false; if(mine===epoch && current) $('submit').disabled=Boolean(actionReason(action,view,connection)); }
+        finally { sending=false; if(mine===epoch) { $('reconcile').hidden=!pendingFor(connection,item); if(current) $('submit').disabled=Boolean(actionReason(action,view,connection) || action==='access' && $('access').value===view.snapshot?.access); if(current&&pendingFor(connection,item)) observeReceipts(mine); } }
     }
     async function reconcile() {
         if(!current || sending) return;
@@ -219,7 +253,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             }
             changed();
         } catch(error) { if(mine===epoch) status(`Outcome still uncertain: ${error.message}`); }
-        finally {sending=false;}
+        finally {sending=false; if(mine===epoch) $('reconcile').hidden=!pendingFor(connection,item);}
     }
     let boundForm = null;
     function bindListeners() {
@@ -227,6 +261,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
         if (!form || form === boundForm) return;
         boundForm = form;
         $('branch-more').addEventListener('click',()=>loadBranchPoints().catch(error=>{status(error.message); $('submit').disabled=true;}));
+        $('access').addEventListener('change',updateAccessReview);
         form.addEventListener('submit',execute);
         $('reconcile').addEventListener('click',reconcile);
         $('dismiss').addEventListener('click',()=>{invalidate();modal('sidebar-action').close();});
