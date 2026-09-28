@@ -204,29 +204,18 @@ test('post-upload changed revision or active run never silently submits',async()
  }
 });
 
-test('pictures during an active run queue once and send after observed completion',async()=>{
+test('pictures steer the active run rather than queueing a new turn',async()=>{
  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
  const tab=f.workspace.tabs.get(key)!;tab.snapshot.run={state:'running',run_id:'r'};
- await f.workspace.attach(key,[new File(['picture'],'photo.png',{type:'image/png'})]);
- f.workspace.draft(key,'Here?');await f.workspace.act(key,'submit');await f.workspace.act(key,'submit');
- assert.equal(tab.queuedPictureSend,true);assert.equal(f.commands.some(c=>c.op==='submit_content'),false);
- f.workspace.draft(key,'changed');assert.equal(tab.draft,'Here?');
- const original=f.connection.client.exchange.bind(f.connection.client);let uploads=0;
+ const original=f.connection.client.exchange.bind(f.connection.client);
  f.connection.client.exchange=async(payload:any)=>{
-  if(payload.command.op==='upload_image'){uploads++;return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7}}};}
+  if(payload.command.op==='upload_image')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7}}};
+  if(payload.command.op==='snapshot')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{session_id:'a',revision:2,messages:[],run:{state:'running',run_id:'r'}}}};
   return original(payload);
  };
- await f.workspace.refresh(key);await new Promise(resolve=>setTimeout(resolve,10));
- assert.equal(uploads,1);assert.equal(f.commands.filter(c=>c.op==='submit_content').length,1);
- assert.equal(tab.queuedPictureSend,false);assert.equal(tab.pictures.length,0);assert.equal(tab.draft,'');
- await f.workspace.refresh(key);assert.equal(f.commands.filter(c=>c.op==='submit_content').length,1);f.workspace.close();
-});
-
-test('cancelling queued pictures preserves draft and prevents later auto-send',async()=>{
- const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
- const tab=f.workspace.tabs.get(key)!;tab.snapshot.run={state:'running'};
+ await f.workspace.refresh(key);await new Promise(resolve=>setTimeout(resolve,0));
  await f.workspace.attach(key,[new File(['picture'],'photo.png',{type:'image/png'})]);
- await f.workspace.act(key,'submit');f.workspace.cancelPictureSend(key);await f.workspace.refresh(key);
- assert.equal(tab.queuedPictureSend,false);assert.equal(tab.pictures.length,1);
- assert.equal(f.commands.some(c=>['submit_content','upload_image','steer'].includes(c.op)),false);f.workspace.close();
+ await f.workspace.act(key,'steer');
+ const command=f.commands.find(c=>c.op==='steer');assert.ok(command,tab.notice);assert.equal(command.run_id,'r');assert.equal(command.parts[0].attachment.id,'artifact');
+ assert.equal(f.commands.some(c=>c.op==='submit_content'),false);assert.equal(tab.pictures.length,0);f.workspace.close();
 });

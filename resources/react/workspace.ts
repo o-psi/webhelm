@@ -4,7 +4,7 @@ import {preparePicture, MAX_PICTURE_BYTES, MAX_PICTURES} from './prepare-picture
 
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
 export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any};
-export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]; queuedPictureSend?: boolean};
+export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]};
 // Transport state outlives React renders and selected tabs. No prompt is persisted.
 export class Workspace {
     tabs = new Map<string, Tab>();
@@ -24,16 +24,7 @@ export class Workspace {
         if (!this.tabs.has(key)) this.tabs.set(key, {key, vessel, session, title, draft: '', snapshot: null, incarnation: null, stale: true, busy: false, notice: '', freshAt: 0, decisions: [], pictures: []});
         this.changed(); void this.refresh(key); return key;
     }
-    draft(key: string, value: string) { const tab = this.tabs.get(key); if (tab && !tab.queuedPictureSend) { tab.draft = value; this.changed(); } }
-    cancelPictureSend(key: string) { const tab=this.tabs.get(key); if(tab){tab.queuedPictureSend=false;tab.notice='Queued send cancelled. Draft retained.';this.changed();} }
-    private sendQueuedPictures(tab: Tab) {
-        if (!tab.queuedPictureSend || this.closed || !this.actionable(tab) || !this.permitted(tab,'submit')) return;
-        const snapshot=tab.snapshot;
-        if (!['completed','failed','cancelled','interrupted','idle'].includes(snapshot.run?.state || 'idle') || snapshot.pending_cleanup_run || snapshot.recovery_pending || snapshot.lifecycle?.archived || snapshot.lifecycle?.deleted) return;
-        // Consume the queued intent before dispatch; failure or uncertainty never requeues it.
-        tab.queuedPictureSend=false;
-        void this.act(tab.key,'submit');
-    }
+    draft(key: string, value: string) { const tab = this.tabs.get(key); if (tab) { tab.draft = value; this.changed(); } }
     pending(tab: Tab) { return this.connections().get(tab.vessel)?.journal?.entries().filter((entry: any) => entry.session_id === tab.session) || []; }
     actionable(tab: Tab) {
         try { return Boolean(this.connections().get(tab.vessel)?.client && tab.snapshot && !tab.stale && !tab.busy && Date.now() - tab.freshAt < 35000 && !this.pending(tab).length); }
@@ -85,12 +76,11 @@ export class Workspace {
             finally { this.changed(); }
         })();
         this.reads.set(key, task);
-        try { await task; } finally { this.reads.delete(key); if(this.queued.delete(key) && !this.closed) void this.refresh(key); else this.sendQueuedPictures(tab); }
+        try { await task; } finally { this.reads.delete(key); if(this.queued.delete(key) && !this.closed) void this.refresh(key); }
     }
     async act(key: string, op: string, fields: Record<string, unknown> = {}) {
         const tab = this.tabs.get(key);
         if (!tab || !this.actionable(tab) || !this.permitted(tab,op)) return;
-        if (tab.queuedPictureSend && ['submit','steer'].includes(op)) return;
         if (tab.snapshot.lifecycle?.archived || tab.snapshot.lifecycle?.deleted || (tab.snapshot.pending_cleanup_run && !['cancel','respond','set_access','steer'].includes(op) && !['running','starting','cancelling'].includes(tab.snapshot.run?.state))) { tab.notice='Voyage lifecycle or cleanup blocks this action. Review its status.'; this.changed(); return; }
         const connection = this.connections().get(tab.vessel)!;
         const client = connection.client;
@@ -100,20 +90,13 @@ export class Workspace {
             fields = {prompt: draft};
         }
         const pictures = [...tab.pictures];
-        if (pictures.length && ['submit','steer'].includes(op) && ['accepted','running','awaiting_decision','cancel_requested','starting','cancelling'].includes(tab.snapshot.run?.state)) {
-            if (!this.permitted(tab,'submit')) return;
-            tab.queuedPictureSend=true;
-            tab.notice='Pictures queued to send after the current run finishes. Keep this page open.';
-            this.changed(); return;
-        }
-        if (pictures.length && op === 'steer') op='submit';
         const origin = structuredClone(tab.snapshot), incarnation = tab.incarnation;
         let command: any;
         let stage: 'upload' | 'submit' = 'upload';
         this.epochs.set(key, (this.epochs.get(key) || 0) + 1);
         tab.busy = true; this.changed();
         try {
-            if (op === 'submit' && pictures.length) {
+            if (['submit','steer'].includes(op) && pictures.length) {
                 const content: any[] = draft ? [{type: 'text', text: draft}] : [];
                 for (const picture of pictures) {
                     if (!picture.attachment) {
@@ -133,9 +116,14 @@ export class Workspace {
                 // so one click remains one admission even across a process wake-up.
                 const current = voyageResult(await client.exchange(request('snapshot', {session_id:tab.session})), tab.session).result;
                 if (this.closed || this.connections().get(tab.vessel)?.client !== client || this.tabs.get(key) !== tab) throw new Error('Voyage connection changed while preparing pictures.');
-                if (current?.session_id !== tab.session || current.revision !== origin.revision) throw new Error('Conversation changed while preparing pictures. Review the updated conversation before sending.');
-                if (current.lifecycle?.archived || current.lifecycle?.deleted || current.pending_cleanup_run || current.recovery_pending || ['accepted','running','awaiting_decision','cancel_requested','starting','cancelling'].includes(current.run?.state)) throw new Error('Voyage is not ready for a new message. Draft retained.');
-                op = 'submit_content'; fields = {content};
+                if (op === 'steer') {
+                    if (current?.session_id !== tab.session || current.run?.run_id !== origin.run?.run_id || current.recovery_pending || !['accepted','running','awaiting_decision'].includes(current.run?.state)) throw new Error('The addressed run finished while preparing pictures. Draft retained.');
+                    fields = {prompt:draft, parts:content};
+                } else {
+                    if (current?.session_id !== tab.session || current.revision !== origin.revision) throw new Error('Conversation changed while preparing pictures. Review the updated conversation before sending.');
+                    if (current.lifecycle?.archived || current.lifecycle?.deleted || current.pending_cleanup_run || current.recovery_pending || ['accepted','running','awaiting_decision','cancel_requested','starting','cancelling'].includes(current.run?.state)) throw new Error('Voyage is not ready for a new message. Draft retained.');
+                    op = 'submit_content'; fields = {content};
+                }
             }
             if (tab.incarnation !== incarnation || tab.snapshot.revision !== origin.revision) throw new Error('Voyage changed while preparing attachments. Nothing submitted.');
             command = mutation(op, origin, incarnation, fields);
@@ -163,7 +151,7 @@ export class Workspace {
         finally { tab.busy = false; if (stage === 'submit') tab.stale = true; this.changed(); await this.refresh(key); }
     }
     async attach(key: string, files: File[], guard?: () => boolean) {
-        const tab = this.tabs.get(key); if (!tab || tab.busy || tab.queuedPictureSend || this.closed || guard && !guard()) return false;
+        const tab = this.tabs.get(key); if (!tab || tab.busy || this.closed || guard && !guard()) return false;
         let success = true;
         tab.busy = true; this.changed();
         try {
@@ -182,7 +170,7 @@ export class Workspace {
         return success;
     }
     removePicture(key: string, id: string) {
-        const tab = this.tabs.get(key); if (!tab || tab.busy || tab.queuedPictureSend) return;
+        const tab = this.tabs.get(key); if (!tab || tab.busy) return;
         tab.pictures = tab.pictures.filter(picture => { if (picture.id !== id) return true; URL.revokeObjectURL(picture.url); return false; }); this.changed();
     }
     async artifact(key: string, attachment: any) {
