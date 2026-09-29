@@ -162,6 +162,27 @@ test('history paging and expansion preserve canonical indices across refresh',as
  f.connection.client.exchange=async(payload:any)=>{const c=payload.command;if(c.op==='history')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{revision:1,message_offset:c.offset,next_offset:2,messages:[{message_index:0,role:'user',content:'first'},{message_index:1,role:'assistant',content:'second'}]}}};if(c.op==='message_chunk')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{data:JSON.stringify({role:'assistant',content:'complete'}),has_more:false,total_bytes:50,next_offset:50}}};return original(payload);};
  await f.workspace.earlier(key);assert.deepEqual(tab.snapshot.messages.map((m:any)=>m.message_index),[0,1,2]);await f.workspace.expand(key,2);assert.equal(tab.snapshot.messages[2].content,'complete');await f.workspace.refresh(key);assert.equal(tab.snapshot.message_offset,0);assert.equal(tab.snapshot.messages[2].content,'complete');f.workspace.close();
 });
+test('a failed automatic history read clears its notice after the page loads',async()=>{
+ const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
+ const tab=f.workspace.tabs.get(key)!;
+ tab.snapshot.message_offset=1;
+ tab.snapshot.messages=[{message_index:1,role:'assistant',content:'recent'}];
+ const exchange=f.connection.client.exchange.bind(f.connection.client);
+ let fail=true;
+ f.connection.client.exchange=async(payload:any)=>{
+  if(payload.command.op==='history')return fail
+   ? {protocol:1,outcome_unknown:true,error:'observation unavailable'}
+   : {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{revision:1,next_offset:1,messages:[{message_index:0,role:'user',content:'earlier'}]}}};
+  return exchange(payload);
+ };
+ await f.workspace.earlier(key);
+ assert.equal(tab.notice,'Earlier messages are temporarily unavailable. Helm Web will retry.');
+ fail=false;
+ await f.workspace.earlier(key);
+ assert.equal(tab.notice,'');
+ assert.equal(tab.snapshot.message_offset,0);
+ f.workspace.close();
+});
 test('image submission uses promoted attachment and separate durable mutation receipt',async()=>{
  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
  const original=f.connection.client.exchange.bind(f.connection.client);const uploads:any[]=[];

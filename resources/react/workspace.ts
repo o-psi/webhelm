@@ -9,6 +9,7 @@ export type Tab = {key: string; vessel: string; session: string; title: string; 
 const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const statusReadNotice='Voyage status unavailable. Check the Vessel connection.';
+const historyReadNotice='Earlier messages are temporarily unavailable. Helm Web will retry.';
 const settledNotice=(op:string,status:string)=>status==='not_applied'?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
 // Transport state outlives React renders and selected tabs. No prompt is persisted.
 export class Workspace {
@@ -287,7 +288,8 @@ export class Workspace {
             }
             if (tab.snapshot !== snapshot) throw new Error('History changed. Refresh before loading earlier messages.');
             tab.snapshot = {...snapshot, messages: [...messages, ...snapshot.messages], message_offset: start};
-        } catch (error) { tab.notice = error instanceof Error ? error.message : 'History unavailable.'; }
+            if (tab.notice === historyReadNotice) tab.notice = '';
+        } catch { if (!this.pending(tab).length) tab.notice = historyReadNotice; }
         finally { tab.busy = false; this.changed(); }
     }
     async expand(key: string, index: number) {
