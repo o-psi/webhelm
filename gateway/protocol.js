@@ -7,6 +7,15 @@ const uint = v => Number.isSafeInteger(v) && v >= 0;
 const text = v => typeof v === 'string' && v.length > 0 && v.length <= 4096 && !v.includes('\0');
 const nullableText = v => v === null || text(v);
 const account = v => exact(v, ['account_id','connection_id','identity_generation','connection_revision','transport']) && uuid(v.account_id) && uuid(v.connection_id) && uint(v.identity_generation) && uint(v.connection_revision) && ['openai_responses','openai_chat','chatgpt_oauth','anthropic'].includes(v.transport);
+const goalLimits = value => exact(value,['runs','tokens','elapsed_ms','no_progress_runs'])
+  && [['runs',1000],['tokens',10000000],['elapsed_ms',86400000],['no_progress_runs',10]].every(([key,max])=>uint(value[key])&&value[key]>=(key==='elapsed_ms'?1000:1)&&value[key]<=max);
+const goalObjective = value => typeof value === 'string' && value.trim().length>0 && Buffer.byteLength(value)<=8192 && !/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/.test(value);
+function goalAction(value) {
+  if(!object(value))return false;
+  if(value.action==='set')return exact(value,['action','objective','limits','replace_goal_id','continue_automatically'])&&goalObjective(value.objective)&&goalLimits(value.limits)&&(value.replace_goal_id===null||uuid(value.replace_goal_id))&&typeof value.continue_automatically==='boolean';
+  if(value.action==='edit')return exact(value,['action','goal_id','objective','limits'])&&uuid(value.goal_id)&&goalObjective(value.objective)&&goalLimits(value.limits);
+  return ['pause','resume','clear'].includes(value.action)&&exact(value,['action','goal_id'])&&uuid(value.goal_id);
+}
 function accountCommand(c) {
   if (c.op === 'update_prepare') return exact(c,['op','operation_id','channel']) && uuid(c.operation_id) && ['stable','nightly'].includes(c.channel);
   if (['update_status','update_discard'].includes(c.op)) return exact(c,['op','operation_id']) && uuid(c.operation_id);
@@ -28,6 +37,7 @@ function accountCommand(c) {
   return false;
 }
 const fields = {
+  goal_read: [], goal_update: ['command_id','expected_revision','expires_at_ms','action'],
   capabilities: [], catalogue: [], inspect: ['session_id'], snapshot: [], decisions: [],
   history: ['offset', 'limit'], message_chunk: ['index', 'offset', 'limit', 'expected_revision'],
   run_output: ['run_id', 'offset', 'limit'], receipt: ['command_id'],
@@ -62,6 +72,7 @@ export function validCommand(f) {
     if (k === 'incarnation' && !live && v === null) return true;
     if (k.endsWith('_id') || k === 'incarnation') return uuid(v);
     if (k === 'content') return validParts(v);
+    if (k === 'action' && c.op==='goal_update') return goalAction(v);
     if (k === 'name') return c.op === 'branch' && v === null || text(v);
     if (k === 'through_message') return v === null || uint(v);
     if (k === 'archived') return typeof v === 'boolean';

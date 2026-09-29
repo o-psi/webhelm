@@ -318,6 +318,15 @@ CSRF, connection-management feedback and logout. Archived Flux presentation
 fixtures are historical and are excluded from the active suite. Use
 `node tests/browser-layout-browser.mjs` after building for desktop/mobile Chromium
 checks, then verify the authenticated production root in the shared browser.
+For Persistent Goals (#378), the runtime checkout also owns an offline real-process
+journey: `python3 voyage/tests/goals.py --bin-dir target/debug --only web --web-root /absolute/path/to/webhelm`.
+It uses this repository's existing production build, Playwright and Chromium,
+an isolated paired Vessel and supervised Voyage, and the real browser socket
+protocol through a fixture TLS proxy. It checks Web/TUI canonical state, conflicting
+reviews, reconnect and confirmed Clear without inference. It does not certify
+production OAuth or TLS deployment. `tests/goal-protocol.test.mjs` keeps the
+retained gateway validator aligned with the runtime browser-command allowlist;
+the production console continues to use direct Vessel sockets.
 
 ## Laravel Boost (local AI development)
 
