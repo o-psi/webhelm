@@ -162,6 +162,11 @@ try {
     const conversation=page.locator('.conversation:not([hidden])');
     await page.screenshot({path:`${output}/${label}-before-model.png`});
     check(await conversation.getByRole('button',{name:'Previous user message'}).count()===1,`${label}: turn navigation is missing`);
+    // The synthetic fixture has no prior scroll restoration. Move to the last
+    // user turn before asserting previous-turn navigation.
+    await conversation.locator('.transcript').evaluate(element=>{element.scrollTop=element.scrollHeight;});
+    await conversation.getByRole('button',{name:'Previous user message'}).waitFor({state:'visible'});
+    await page.waitForFunction(() => !document.querySelector('.conversation:not([hidden]) [aria-label="Previous user message"]')?.disabled);
     const beforeTurn=await conversation.locator('.transcript').evaluate(element=>element.scrollTop);
     await conversation.getByRole('button',{name:'Previous user message'}).click();
     check(await conversation.locator('.transcript').evaluate(element=>element.scrollTop)<beforeTurn,`${label}: previous turn did not move the transcript`);
