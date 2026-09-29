@@ -118,7 +118,7 @@ function VesselMaintenance({connection, releases, tenant, onReconnect}: {connect
     }, [connection, connection?.client, reload]);
 
     return <Card className="connections-maintenance" role="region" aria-label="Vessel maintenance">
-        <CardHeader><div className="flex items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><RefreshCwIcon className="size-4" aria-hidden="true"/></span><div className="space-y-1"><CardTitle><h3>Software updates</h3></CardTitle><CardDescription>Review a verified build before choosing to install it.</CardDescription></div></div></CardHeader>
+        <CardHeader><div className="flex items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><RefreshCwIcon className="size-4" aria-hidden="true"/></span><div className="space-y-1"><CardTitle><h3>Software updates</h3></CardTitle><CardDescription>Choose a channel and install its latest published version.</CardDescription></div></div></CardHeader>
         <CardContent className="space-y-4">
             {notice && <Alert role="status"><AlertDescription>{notice}</AlertDescription></Alert>}
             {caps && <VesselUpdate connection={connection} caps={caps} releases={releases} tenant={tenant} onRefresh={()=>setReload(value=>value+1)}/>}
