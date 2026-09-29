@@ -6,144 +6,157 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {VesselUpdateMarkup} from '../resources/react/VesselUpdate.tsx';
 
-const settle=async()=>{for(let i=0;i<10;i++)await new Promise(r=>setTimeout(r,2));};
-function fixture(t) {
- const dom=new JSDOM('<div id="helm-client" data-tenant-id="update-test">'+renderToStaticMarkup(React.createElement(VesselUpdateMarkup))+'</div>',{url:'https://helm.example'});
+const latest={stable:{phase:'published',version:'v1.0.3'},nightly:{phase:'published',version:'1.0.4-nightly.20260928.1.1'}};
+const releaseInfo=(channel:string)=>latest[channel as keyof typeof latest];
+const settle=async()=>{for(let i=0;i<15;i++)await new Promise(r=>setTimeout(r,2));};
+const reply=(result:any)=>({protocol:1,error:null,outcome_unknown:false,result});
+const id='10000000-0000-4000-8000-000000000001';
+const hash='a'.repeat(64);
+function fixture(t:any, installed='1.0.2') {
+ const dom=new JSDOM('<div id="helm-client" data-tenant-id="update-test">'+renderToStaticMarkup(React.createElement(VesselUpdateMarkup,{installed}))+'</div>',{url:'https://helm.example'});
  t.after(()=>dom.window.close());
  for(const key of ['window','document','localStorage','Event'])globalThis[key]=dom.window[key];
- const root=document.querySelector('#helm-client');
- return {root,$:id=>root.querySelector(`#${id}`)};
+ const root=document.querySelector('#helm-client')!;
+ return {root,$:(id:string)=>root.querySelector(`#${id}`) as HTMLElement};
 }
-const reply=result=>({protocol:1,error:null,outcome_unknown:false,result});
-test('prepare requires a separate exact approval and lost apply reply is only observed',async t=>{
- const {root,$}=fixture(t),seen=[];let record={phase:'idle'},loseApply=false;
- const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:async({command})=>{
-   seen.push(command);
-   if(command.op==='capabilities')return reply({vessel_id:'identity',version:'next',running_release:'a'.repeat(64),features:['execution_profiles']});
-   if(command.op==='update_prepare')record={operation_id:command.operation_id,channel:command.channel,phase:'ready',version:'next',release_id:'a'.repeat(64),description:'pinned source',services:['voyage-vessel.service']};
-   if(command.op==='update_apply'){assert.equal(command.release_id,'a'.repeat(64));record={...record,phase:'complete'};if(loseApply)throw Error('Disconnected');}
-   return reply(structuredClone(record));
- }}};
- let resumed=0;const controller=vesselUpdate(root,{show:()=>{},resume:()=>{resumed++;}});
- controller.bind(c,{remote_updates:true,scope:'owner',version:'old'});
- $('update-channel').value='nightly';$('update-check').click();await settle();
- assert.equal(seen.filter(c=>c.op==='update_prepare').length,1);
- assert.equal(seen.some(c=>c.op==='update_apply'),false);
- assert.equal($('update-review').hidden,false);
- assert.match($('update-status').textContent,/Build prepared for review/);
- loseApply=true;$('update-approve').click();$('update-approve').click();await settle();
- assert.equal(seen.filter(c=>c.op==='update_apply').length,1);
- assert.equal($('update-continue').hidden,false);
- assert.equal($('update-current').textContent,'next');
- assert.match($('update-status').textContent,/Reconnected to the verified Vessel version/);
- controller.bind(c,{remote_updates:true,scope:'owner'});$('setup-update-open').click();await settle();
- assert.equal(seen.filter(c=>c.op==='update_apply').length,1,'reopening observes the receipt without reapplying');
- $('update-continue').click();assert.equal(resumed,1);
-});
-test('reload observes the saved operation before allowing another preparation',async t=>{
- const {root,$}=fixture(t),seen=[];let resolve;
- localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:'saved-operation'}));
- const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:({command})=>{seen.push(command);return new Promise(r=>{resolve=r;});}}};
- const update=vesselUpdate(root,{show:()=>{},resume:()=>{}});
- update.bind(c,{remote_updates:true,scope:'owner',version:'old'});
- assert.equal($('update-source').hidden,true);
- assert.equal($('update-continue').hidden,true);
- $('update-check').click();
- assert.deepEqual(seen,[{op:'update_status',operation_id:'saved-operation'}]);
- resolve(reply({operation_id:'saved-operation',phase:'ready',release_id:'a'.repeat(64),version:'next'}));await settle();
- assert.equal($('update-review').hidden,false);
- assert.equal($('update-source').hidden,true);
- assert.match($('update-status').textContent,/Build prepared for review/);
- assert.equal(seen.some(command=>command.op==='update_apply'),false);
-});
-test('expired prepared review cannot approve and offers a fresh preparation path',async t=>{
- const {root,$}=fixture(t),seen=[];
- let record={operation_id:'saved-operation',phase:'ready',release_id:'a'.repeat(64),version:'v1.0.2',expires_at:Math.floor(Date.now()/1000)-1};
- localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:record.operation_id}));
- const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:async({command})=>{
-   seen.push(command.op);
-   if(command.op==='update_discard')record={...record,phase:'discarded'};
-   return reply(structuredClone(record));
- }}};
- const update=vesselUpdate(root,{show:()=>{},resume:()=>{}});
- update.bind(c,{remote_updates:true,scope:'owner',version:'1.0.2'});await settle();
- assert.equal($('update-approve').disabled,true);
- assert.match($('update-status').textContent,/review expired.*prepare a fresh build/i);
- assert.match($('update-discard').textContent,/Discard expired review/);
- $('update-approve').click();assert.equal(seen.includes('update_apply'),false);
- $('update-discard').click();await settle();
- assert.equal($('update-source').hidden,false);
- assert.equal(seen.includes('update_apply'),false);
-});
-test('rejected approval remains visible after status confirms the review is still ready',async t=>{
- const {root,$}=fixture(t),seen=[];
- const record={operation_id:'saved-operation',phase:'ready',release_id:'a'.repeat(64),version:'v1.0.2',expires_at:Math.floor(Date.now()/1000)+1800};
- localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:record.operation_id}));
- const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:async({command})=>{
-   seen.push(command.op);
-   if(command.op==='update_apply')return {protocol:1,error:'refused',outcome_unknown:false,result:null};
-   return reply(structuredClone(record));
- }}};
- const update=vesselUpdate(root,{show:()=>{},resume:()=>{}});
- update.bind(c,{remote_updates:true,scope:'owner',version:'1.0.2'});await settle();
- $('update-approve').click();await settle();
- assert.equal(seen.filter(op=>op==='update_apply').length,1);
- assert.match($('update-status').textContent,/could not confirm.*review is still ready/i);
- assert.equal($('update-review').hidden,false);
-});
-test('a historical completed update does not block a fresh review or falsely verify another release',async t=>{
- const {root,$}=fixture(t),seen=[];
- let record={operation_id:'older-update',phase:'complete',release_id:'a'.repeat(64),version:'older'};
- const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:async({command})=>{
-   seen.push(command);
-   if(command.op==='capabilities')return reply({vessel_id:'identity',version:'current',running_release:'b'.repeat(64),features:['execution_profiles']});
-   if(command.op==='update_prepare')record={operation_id:command.operation_id,phase:'ready',release_id:'c'.repeat(64),version:'next'};
-   return reply(structuredClone(record));
- }}};
- const update=vesselUpdate(root,{show:()=>{},resume:()=>assert.fail('unverified continuation')});
- update.bind(c,{remote_updates:true,scope:'owner',version:'current'});
- $('setup-update-open').click();await settle();
- assert.equal($('update-source').hidden,false);
- assert.equal($('update-continue').hidden,true);
- assert.match($('update-status').textContent,/does not match its reviewed release/);
- $('update-check').click();await settle();
- assert.equal(seen.filter(command=>command.op==='update_prepare').length,1);
- assert.equal(seen.some(command=>command.op==='update_apply'),false);
- assert.equal($('update-review').hidden,false);
-});
-test('switching Vessel drops stale update replies and owner-only controls stay unavailable',async t=>{
- const {root,$}=fixture(t);let resolve;
- const c={id:'a',vessel_id:'a',name:'A',client:{exchange:()=>new Promise(r=>{resolve=r;})}};
- const update=vesselUpdate(root,{show:()=>{},resume:()=>{}});
- update.bind(c,{remote_updates:true,scope:'owner'});$('update-check').click();
- update.bind({id:'b',vessel_id:'b',name:'B'},{remote_updates:false,scope:'workspaces'});
- resolve(reply({phase:'ready',release_id:'b'.repeat(64),version:'wrong Vessel'}));await settle();
- assert.equal($('update-review').hidden,true);
- assert.match($('update-status').textContent,/account owner/);
- assert.match($('update-vessel-name').textContent,/B/);
+const controls=(t:any, root:any, resume=()=>{})=>{
+ const controller=vesselUpdate(root,{show:()=>{},resume,releaseInfo});
+ t.after(()=>controller.dispose());
+ return controller;
+};
+const vessel=(exchange:any)=>({id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange}});
+const capabilities=(version='1.0.2')=>({remote_updates:true,scope:'owner',version});
+
+test('channel starts on the installed channel and displays its latest version',async t=>{
+ const {root,$}=fixture(t,'1.0.4-nightly.20260927.1.1');
+ const update=controls(t,root);
+ update.bind(vessel(async()=>reply({phase:'idle'})),capabilities('1.0.4-nightly.20260927.1.1'));
+ assert.equal(($('update-channel') as HTMLSelectElement).value,'nightly');
+ assert.match($('update-selected-version').textContent!,/1\.0\.4-nightly\.20260928/);
+ assert.equal(($('update-check') as HTMLButtonElement).disabled,false);
 });
 
-test('update transport only accepts fixed typed requests and projects owner capability',async()=>{
+test('one click prepares and applies only the exact selected version',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];
+ let record:any={phase:'idle'};
+ const c=vessel(async({command}:any)=>{
+   seen.push(command);
+   if(command.op==='update_prepare')record={operation_id:command.operation_id,channel:command.channel,phase:'ready',version:'1.0.3',release_id:hash,expires_at:Math.floor(Date.now()/1000)+1800,description:'Verified build'};
+   if(command.op==='update_apply')record={...record,phase:'complete'};
+   if(command.op==='capabilities')return reply({vessel_id:'identity',version:'1.0.3',running_release:hash,features:['execution_profiles']});
+   return reply(structuredClone(record));
+ });
+ let resumed=0;const update=controls(t,root,()=>{resumed++;});
+ update.bind(c,capabilities());
+ assert.match($('update-selected-version').textContent!,/v1\.0\.3/);
+ $('update-check').click();await settle();
+ assert.equal(seen.filter(x=>x.op==='update_prepare').length,1);
+ assert.equal(seen.filter(x=>x.op==='update_apply').length,1);
+ assert.equal(seen.find(x=>x.op==='update_apply').release_id,hash);
+ assert.equal($('update-continue').hidden,false);
+ assert.match($('update-status').textContent!,/Reconnected to the verified Vessel version/);
+ update.bind(c,capabilities('1.0.3'));await settle();
+ assert.equal(seen.filter(x=>x.op==='update_apply').length,1,'reopening never repeats approval');
+ $('update-continue').click();assert.equal(resumed,1);
+});
+
+test('a changed prepared version stops before installation',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];
+ let record:any={phase:'idle'};
+ const c=vessel(async({command}:any)=>{
+   seen.push(command);
+   if(command.op==='update_prepare')record={operation_id:command.operation_id,channel:'stable',phase:'ready',version:'1.0.4',release_id:hash,expires_at:Math.floor(Date.now()/1000)+1800};
+   return reply(structuredClone(record));
+ });
+ const update=controls(t,root);update.bind(c,capabilities());$('update-check').click();await settle();
+ assert.equal(seen.filter(x=>x.op==='update_apply').length,0);
+ assert.match($('update-status').textContent!,/different build/);
+ assert.equal($('update-review').hidden,false);
+});
+
+test('a lost apply reply is observed and never retried automatically',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];
+ let record:any={phase:'idle'};
+ const c=vessel(async({command}:any)=>{
+   seen.push(command);
+   if(command.op==='update_prepare')record={operation_id:command.operation_id,channel:'stable',phase:'ready',version:'v1.0.3',release_id:hash,expires_at:Math.floor(Date.now()/1000)+1800};
+   if(command.op==='update_apply')throw Error('Disconnected');
+   return reply(structuredClone(record));
+ });
+ const update=controls(t,root);update.bind(c,capabilities());$('update-check').click();await settle();
+ assert.equal(seen.filter(x=>x.op==='update_apply').length,1);
+ assert.match($('update-status').textContent!,/approval was not repeated/i);
+ $('update-refresh').click();await settle();
+ assert.equal(seen.filter(x=>x.op==='update_apply').length,1);
+});
+
+test('one click replaces an expired prepared build and continues',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];
+ let record:any={operation_id:id,phase:'ready',channel:'stable',version:'v1.0.2',release_id:hash,expires_at:Math.floor(Date.now()/1000)-1};
+ localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:id}));
+ const c=vessel(async({command}:any)=>{
+   seen.push(command);
+   if(command.op==='update_discard')record={...record,phase:'discarded'};
+   if(command.op==='update_prepare')record={operation_id:command.operation_id,channel:'stable',phase:'ready',version:'v1.0.3',release_id:hash,expires_at:Math.floor(Date.now()/1000)+1800};
+   if(command.op==='update_apply')record={...record,phase:'applying'};
+   return reply(structuredClone(record));
+ });
+ const update=controls(t,root);update.bind(c,capabilities());await settle();
+ assert.match($('update-status').textContent!,/no longer valid/);
+ $('update-check').click();await settle();
+ assert.deepEqual(seen.filter(x=>x.op!=='update_status').map(x=>x.op),['update_discard','update_prepare','update_apply']);
+ assert.equal(seen.find(x=>x.op==='update_apply').release_id,hash);
+});
+
+test('reload observes a saved ready build without reusing a previous click',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];
+ const record={operation_id:id,phase:'ready',channel:'stable',version:'v1.0.3',release_id:hash,expires_at:Math.floor(Date.now()/1000)+1800};
+ localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:id}));
+ const c=vessel(async({command}:any)=>{seen.push(command);return reply(record);});
+ const update=controls(t,root);update.bind(c,capabilities());await settle();
+ assert.equal(seen.filter(x=>x.op==='update_apply').length,0);
+ assert.equal($('update-review').hidden,false);
+ $('update-check').click();await settle();
+ assert.equal(seen.filter(x=>x.op==='update_apply').length,1);
+});
+
+test('an installed current channel version disables Update',t=>{
+ const {root,$}=fixture(t,'1.0.3');
+ const update=controls(t,root);update.bind(vessel(async()=>reply({phase:'idle'})),capabilities('1.0.3'));
+ assert.equal(($('update-check') as HTMLButtonElement).disabled,true);
+ assert.match($('update-check').textContent!,/Already up to date/);
+});
+
+test('switching Vessel drops stale replies and owner-only controls stay unavailable',async t=>{
+ const {root,$}=fixture(t);let resolve:any;
+ const c={id:'a',vessel_id:'a',name:'A',client:{exchange:()=>new Promise(r=>{resolve=r;})}};
+ const update=controls(t,root);update.bind(c,capabilities());$('update-check').click();
+ update.bind({id:'b',vessel_id:'b',name:'B'},{remote_updates:false,scope:'workspaces'});
+ resolve(reply({phase:'ready',release_id:hash,version:'wrong Vessel'}));await settle();
+ assert.equal($('update-review').hidden,true);
+ assert.match($('update-status').textContent!,/account owner/);
+ assert.match($('update-vessel-name').textContent!,/B/);
+});
+
+test('update transport accepts only fixed typed requests and owner capability',async()=>{
  const {validCommand,restrictCapabilities}=await import('../gateway/protocol.js');
- const id='10000000-0000-4000-8000-000000000001';
- const frame=command=>({type:'command',request_id:id,request:{protocol:1,command}});
- for(const command of [{op:'update_prepare',operation_id:id,channel:'nightly'},{op:'update_status',operation_id:id},{op:'update_apply',operation_id:id,release_id:'a'.repeat(64)},{op:'update_discard',operation_id:id}]) {
+ const frame=(command:any)=>({type:'command',request_id:id,request:{protocol:1,command}});
+ for(const command of [{op:'update_prepare',operation_id:id,channel:'nightly'},{op:'update_status',operation_id:id},{op:'update_apply',operation_id:id,release_id:hash},{op:'update_discard',operation_id:id}]) {
    assert.equal(validCommand(frame(command)),true);
    assert.equal(validCommand(frame({...command,url:'https://untrusted.example/program'})),false);
    assert.equal(validCommand(frame({...command,command:'anything'})),false);
  }
  assert.equal(validCommand(frame({op:'update_prepare',operation_id:id,channel:'arbitrary'})),false);
  assert.equal(validCommand(frame({op:'update_apply',operation_id:id,release_id:'changed'})),false);
- const caps={protocol:1,vessel_id:id,scope:'workspaces',features:[],remote_updates:true,running_release:'a'.repeat(64)};
+ const caps={protocol:1,vessel_id:id,scope:'workspaces',features:[],remote_updates:true,running_release:hash};
  assert.equal(restrictCapabilities(caps,id).remote_updates,false);
  assert.equal(restrictCapabilities({...caps,scope:'owner'},id).remote_updates,true);
 });
 
-test('disposed update controls ignore late replies and cannot dispatch again',async t=>{
+test('disposed controls ignore late replies and dispatch nothing else',async t=>{
  const {root,$}=fixture(t);let resolve:any;const seen:string[]=[];
- const connection={id:'a',vessel_id:'a',name:'A',client:{exchange:({command}:any)=>{seen.push(command.op);return new Promise(r=>{resolve=r;});}}};
- const controller=vesselUpdate(root,{show:()=>{},resume:()=>{}});
- controller.bind(connection,{remote_updates:true,scope:'owner'});$('update-check').click();controller.dispose();
- resolve(reply({phase:'ready',version:'late',release_id:'a'.repeat(64)}));await settle();
- $('update-check').click();$('update-refresh').click();assert.deepEqual(seen,['update_prepare']);assert.equal($('update-review').hidden,true);
+ const c=vessel(({command}:any)=>{seen.push(command.op);return new Promise(r=>{resolve=r;});});
+ const update=controls(t,root);update.bind(c,capabilities());$('update-check').click();update.dispose();
+ resolve(reply({phase:'ready',channel:'stable',version:'v1.0.3',release_id:hash}));await settle();
+ $('update-check').click();$('update-refresh').click();assert.deepEqual(seen,['update_prepare']);
 });
