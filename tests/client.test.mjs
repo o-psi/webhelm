@@ -68,7 +68,7 @@ test('native subscriptions correlate events and unsubscribe without command repl
     const socket = new Socket(), client = new VesselSocket(socket,()=>{}), seen=[];
     const stop = client.subscribe(session,incarnation,42,event=>seen.push(event));
     const frame=socket.frames[0];
-    assert.deepEqual(frame.request,{protocol:1,subscriptions:[{session_id:session,incarnation,after:42}]});
+    assert.deepEqual(frame.request,{protocol:1,subscriptions:[{session_id:session,incarnation,after:42,projection:'public-v2'}]});
     assert.equal(frame.type,'subscribe');
     socket.receive({type:'event',subscription_id:'other',event:{cursor:43}});
     socket.receive({type:'event',subscription_id:frame.request_id,event:{cursor:43}});

@@ -48,7 +48,7 @@ export class ConversationStream {
         if (!this.valid || event.protocol !== 1 || event.session_id !== this.session || event.incarnation !== this.incarnation || event.error != null || event.outcome_unknown !== false) return fail();
         const page = event.result;
         if (!page || !['public-v1','public-v2'].includes(page.projection) || page.replay_gap || !Number.isSafeInteger(page.cursor) || !Number.isSafeInteger(page.latest_cursor) || page.cursor > page.latest_cursor || !Array.isArray(page.events)) return fail();
-        if (page.cursor < this.cursor) return fail();
+        if (page.cursor <= this.cursor) return 'duplicate';
         let cursor = this.cursor, changed = false, refresh = false;
         for (const item of page.events) {
             if (!Number.isSafeInteger(item.cursor) || item.cursor > page.cursor || item.session_id !== this.session) return fail();
@@ -57,7 +57,10 @@ export class ConversationStream {
             if (page.projection === 'public-v1') { refresh = true; continue; }
             if (!Number.isSafeInteger(item.revision) || !snapshot || item.revision < snapshot.revision) continue;
             const payload = item.payload;
-            if ((item.kind === 'message_created' || item.kind === 'message_finalized') && Number.isSafeInteger(payload?.message_index) && payload.message?.message_index === payload.message_index && Array.isArray(snapshot.messages)) {
+            if (item.kind === 'message_created' && Number.isSafeInteger(payload?.message_index)) {
+                // Creation has only an index; finalized supplies the public projection.
+                continue;
+            } else if (item.kind === 'message_finalized' && Number.isSafeInteger(payload?.message_index) && payload.message?.message_index === payload.message_index && Array.isArray(snapshot.messages)) {
                 const messages = snapshot.messages;
                 const index = messages.findIndex(message => message.message_index === payload.message_index);
                 if (index >= 0) messages[index] = payload.message;
@@ -65,9 +68,13 @@ export class ConversationStream {
                 else return fail();
                 changed = true;
             } else if (item.kind === 'text_delta' && item.run_id === snapshot.run?.run_id && Number.isSafeInteger(payload?.offset) && typeof payload.text === 'string') {
-                const text = snapshot.run.live_text || '';
-                if (new TextEncoder().encode(text).length !== payload.offset) return fail();
-                snapshot.run.live_text = text + payload.text;
+                const run = snapshot.run, partial = run.partial_text;
+                if (typeof partial !== 'string' || run.partial_text_truncated || new TextEncoder().encode(partial).length !== payload.offset || run.partial_text_bytes !== payload.offset) return fail();
+                run.partial_text = partial + payload.text;
+                run.partial_text_bytes += new TextEncoder().encode(payload.text).length;
+                if (run.stream_reconciled && Number.isSafeInteger(run.live_text_offset) && payload.offset >= run.live_text_offset && typeof run.live_text === 'string' && !run.live_text_truncated) {
+                    run.live_text += payload.text;
+                }
                 changed = true;
             } else refresh = true;
         }
