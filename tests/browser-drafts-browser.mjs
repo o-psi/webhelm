@@ -85,7 +85,7 @@ try{
     await page.reload();await ready(page);assert.equal(await editor(page).inputValue(),'Potentially delivered');await page.getByText('This draft may already have been sent. Check the conversation before sending it again.',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),2);
     await page.screenshot({path:`${output}/${width}-restored.png`});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-    await page.evaluate(()=>document.documentElement.classList.add('dark'));await page.screenshot({path:`${output}/${width}-restored-dark.png`});
+    await page.evaluate(()=>document.documentElement.classList.add('dark'));await page.waitForFunction(()=>{const probe=document.createElement('span');probe.style.color='var(--foreground)';document.body.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return getComputedStyle(document.querySelector('.conversation:not([hidden]) textarea')).color===expected;});await page.screenshot({path:`${output}/${width}-restored-dark.png`});
     assert.equal(await editor(page).inputValue(),'Potentially delivered');
     await page.goto(origin);const composer=page.getByRole('form',{name:'New voyage composer'});
     await composer.locator('textarea').fill('New voyage draft');await composer.locator('input[type="file"]').setInputFiles({name:'new.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII=','base64')});await composer.getByRole('button',{name:'Remove new.png'}).waitFor();
