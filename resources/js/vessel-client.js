@@ -88,7 +88,8 @@ export class VesselSocket {
         const id = uuid();
         this.subscriptions.set(id, onEvent);
         try {
-            this.socket.send(JSON.stringify({type:'subscribe', request_id:id, request:{protocol:1, subscriptions:[{session_id:session,incarnation,after,projection}]}}));
+            // Null omits the field for Voyage owners that predate projection negotiation.
+            this.socket.send(JSON.stringify({type:'subscribe', request_id:id, request:{protocol:1, subscriptions:[{session_id:session,incarnation,after,...(projection === null ? {} : {projection})}]}}));
         } catch (error) { this.subscriptions.delete(id); throw error; }
         return () => {
             if (!this.subscriptions.delete(id) || this.socket.readyState !== 1) return;

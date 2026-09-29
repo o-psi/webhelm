@@ -79,3 +79,10 @@ test('native subscriptions correlate events and unsubscribe without command repl
     assert.throws(()=>client.subscribe(session,incarnation,-1,()=>{}));
     client.close();assert.equal(client.subscriptions.size,0);
 });
+
+test('legacy observation request omits the projection field', () => {
+    const socket=new Socket(),client=new VesselSocket(socket,()=>{});
+    const stop=client.subscribe(session,incarnation,42,()=>{},null);
+    assert.deepEqual(socket.frames[0].request,{protocol:1,subscriptions:[{session_id:session,incarnation,after:42}]});
+    stop();client.close();
+});

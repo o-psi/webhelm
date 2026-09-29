@@ -17,6 +17,7 @@ export class Workspace {
     private streams = new Map<string, {client: any; incarnation: string; stream: ConversationStream; stop: () => void}>();
     private observedClients = new Map<string, any>();
     private eventRetryAt = new Map<string, number>();
+    private legacyEvents = new Set<string>();
     private listeners = new Set<() => void>();
     private closed = false;
     private queued = new Set<string>();
@@ -85,7 +86,7 @@ export class Workspace {
                 if (currentStream?.stream.valid && currentStream.incarnation === envelope.incarnation && Number.isSafeInteger(snapshot.observation_cursor) && snapshot.observation_cursor < currentStream.stream.cursor) {
                     return;
                 }
-                if (tab.incarnation && tab.incarnation !== envelope.incarnation) this.eventRetryAt.delete(key);
+                if (tab.incarnation && tab.incarnation !== envelope.incarnation) { this.eventRetryAt.delete(key); this.legacyEvents.delete(key); }
                 Object.assign(tab, {snapshot, scope:caps.scope, rights:caps.rights||[], incarnation: envelope.incarnation, title: snapshot.name || tab.title, decisions: Array.isArray(decisions) ? decisions : [], stale: false, freshAt: Date.now()});
                 this.observedClients.set(key, client);
                 if (tab.notice === statusReadNotice) tab.notice = '';
@@ -97,6 +98,7 @@ export class Workspace {
                 if (!this.streams.has(key)) stream.seed(snapshot, envelope.incarnation);
                 if (stream.valid && client.subscribe && !this.streams.has(key) && Date.now() >= (this.eventRetryAt.get(key) || 0)) {
                     try {
+                        const legacy = this.legacyEvents.has(key);
                         const stop = client.subscribe(tab.session, envelope.incarnation, stream.cursor, (event: any) => {
                             if (this.closed || this.connections().get(tab.vessel)?.client !== client || this.streams.get(key)?.stream !== stream) return;
                             const action = stream.accept(event, tab.snapshot);
@@ -105,14 +107,18 @@ export class Workspace {
                             if (action === 'resync') {
                                 this.streams.get(key)?.stop();
                                 this.streams.delete(key);
-                                // Keep canonical reads flowing while a failed stream backs off.
-                                this.eventRetryAt.set(key, Date.now() + 30000);
+                                // A live owner from before projection negotiation may reject
+                                // the new field. Try the exact legacy request once; then back off.
+                                if (!legacy && event?.outcome_unknown === true) {
+                                    this.legacyEvents.add(key);
+                                    this.eventRetryAt.delete(key);
+                                } else this.eventRetryAt.set(key, Date.now() + 30000);
                                 if (event?.error != null || event?.outcome_unknown !== false) tab.freshAt = 0;
                                 else tab.stale = true;
                                 this.changed();
                             }
                             void this.refresh(key);
-                        });
+                        }, legacy ? null : 'public-v2');
                         this.streams.set(key, {client, incarnation: envelope.incarnation, stream, stop});
                     } catch { this.eventRetryAt.set(key, Date.now() + 30000); }
                 }
@@ -339,5 +345,5 @@ export class Workspace {
         await this.reconcile(key);
         for (const entry of entries) if (!this.pending(tab).some((pending: any) => pending.command_id === entry.command_id)) this.autoReceiptReads.delete(entry.command_id);
     }
-    close() { this.tabs.forEach(tab => tab.pictures.forEach(picture => URL.revokeObjectURL(picture.url))); this.closed = true; this.streams.forEach(stream => stream.stop()); this.streams.clear(); this.observedClients.clear(); this.eventRetryAt.clear(); this.autoReceiptReads.clear(); this.listeners.clear(); }
+    close() { this.tabs.forEach(tab => tab.pictures.forEach(picture => URL.revokeObjectURL(picture.url))); this.closed = true; this.streams.forEach(stream => stream.stop()); this.streams.clear(); this.observedClients.clear(); this.eventRetryAt.clear(); this.legacyEvents.clear(); this.autoReceiptReads.clear(); this.listeners.clear(); }
 }

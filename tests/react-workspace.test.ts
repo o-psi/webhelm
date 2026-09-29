@@ -14,6 +14,7 @@ class Storage {
 function fixture() {
     const storage = new Storage(), commands: any[] = [];
     let mode = 'accepted', subscriptions = 0, revision = 1, cursor = 3, eventListener: ((event: any) => void) | null = null;
+    const projections: Array<string | null | undefined> = [];
     const response = (session: string, result: unknown) => ({protocol: 1, outcome_unknown: false, result: {session_id: session, incarnation: 'incarnation', result}});
     const client = {
         async exchange({command}: any) {
@@ -25,11 +26,11 @@ function fixture() {
             if (mode === 'unknown') throw new Error('Disconnected after dispatch');
             return response(command.session_id, {command_id: command.command_id, status: mode});
         },
-        subscribe(_session: string, _incarnation: string, _after: number, listener: (event: any) => void) { subscriptions++; eventListener = listener; return () => { subscriptions--; if (eventListener === listener) eventListener = null; }; },
+        subscribe(_session: string, _incarnation: string, _after: number, listener: (event: any) => void, projection?: string | null) { subscriptions++; projections.push(projection); eventListener = listener; return () => { subscriptions--; if (eventListener === listener) eventListener = null; }; },
     };
     const connection = {id: 'vessel', name: 'Vessel', client, journal: new IntentJournal(storage, 'tenant:vessel'), voyages: [], status: 'Connected'};
     const workspace = new Workspace(() => new Map([['vessel', connection]]));
-    return {workspace, connection, commands, storage, mode: (value: string) => { mode = value; }, subscriptions: () => subscriptions, emit: (event: any) => eventListener?.(event), advanceSnapshot: () => { revision++; cursor++; }};
+    return {workspace, connection, commands, storage, mode: (value: string) => { mode = value; }, subscriptions: () => subscriptions, projections, emit: (event: any) => eventListener?.(event), advanceSnapshot: () => { revision++; cursor++; }};
 }
 test('tabs retain isolated drafts and subscriptions while selection changes', async () => {
     const f = fixture();
@@ -312,9 +313,14 @@ test('failed events fall back to fresh snapshots without subscription churn', as
  assert.equal(tab.stale,false,'an event transport failure does not invalidate the last confirmed status');
  assert.equal(f.workspace.actionable(tab),false,'actions wait for the next confirmed snapshot');
  await f.workspace.refresh(key);
+ await new Promise(resolve=>setImmediate(resolve));
  assert.equal(tab.stale,false,'a confirmed snapshot restores status after the failed event');
- assert.equal(f.subscriptions(),0,'the failed observation is released');
- assert.equal(f.workspace.needsRefresh(key),true,'canonical polling continues while events are unavailable');
+ assert.equal(f.subscriptions(),1,'one legacy observation replaces the failed v2 subscription');
+ assert.deepEqual(f.projections,['public-v2',null]);
+ f.emit({protocol:1,session_id:'a',incarnation:'incarnation',result:null,error:'command outcome unknown',outcome_unknown:true});
+ await f.workspace.refresh(key);
+ assert.equal(f.subscriptions(),0,'a failed legacy observation is released');
+ assert.equal(f.workspace.needsRefresh(key),true,'canonical polling continues while both event formats are unavailable');
  f.workspace.connectionChanged();await f.workspace.refresh(key);
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(tab.stale,false,'catalogue updates must not mark a confirmed read stale when the client is unchanged');
@@ -326,6 +332,7 @@ test('failed events fall back to fresh snapshots without subscription churn', as
  (f.workspace as any).eventRetryAt.set(key,Date.now()-1);
  await f.workspace.refresh(key);
  assert.equal(f.subscriptions(),1,'observation retry resumes after the bounded delay');
+ assert.deepEqual(f.projections,['public-v2',null,null],'legacy retry does not oscillate to v2 for the same owner');
  f.workspace.close();
 });
 
