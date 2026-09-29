@@ -84,7 +84,7 @@ $periodEnd = time() + 30 * 86400;
 $invoice = ['id' => 'in_basicone', 'status' => 'paid', 'paid' => true, 'currency' => 'usd',
     'amount_paid' => 300, 'customer' => 'cus_basicone', 'subscription' => 'sub_basicone',
     'lines' => ['has_more' => false, 'data' => [[
-        'price' => ['id' => 'price_basicmonth'], 'quantity' => 1,
+        'price' => ['id' => 'price_basicmonth'], 'quantity' => 1, 'amount' => 300,
         'period' => ['start' => $periodStart, 'end' => $periodEnd],
     ]]]];
 $event = static fn(string $id, string $type, array $object): array => [
@@ -118,10 +118,16 @@ $proInvoice = $invoice;
 $proInvoice['id'] = 'in_proone';
 $proInvoice['amount_paid'] = 900;
 $proInvoice['lines']['data'][0]['price']['id'] = 'price_promonth';
+$proInvoice['lines']['data'][0]['amount'] = 1200;
+$proInvoice['lines']['data'][0]['parent']['subscription_item_details']['proration'] = true;
 $proInvoice['lines']['data'][0]['period']['start'] = time() - 30;
+$proInvoice['lines']['data'][] = ['price' => ['id' => 'price_basicmonth'],
+    'quantity' => 1, 'amount' => -300,
+    'parent' => ['subscription_item_details' => ['proration' => true]],
+    'period' => ['start' => time() - 30, 'end' => $periodEnd]];
 $receive($event('evt_proupgrade', 'invoice.paid', $proInvoice));
 checkBilling($tenant->fresh()->effectivePlan() === WebPlan::Pro && $entitlements->limit($tenant->fresh()) === 64,
-    'paid Stripe price change grants Pro without new checkout');
+    'paid proration grants Pro without new checkout');
 for ($i = 10; $i < 19; $i++) {
     $entitlements->saveConnection($tenant->fresh(), 'Vessel '.$i, 'https://vessel.example',
         $credential + ['vessel_id' => (string) Str::uuid()]);
@@ -130,6 +136,19 @@ $ordered = VesselConnection::where('tenant_id', $tenant->id)->orderBy('created_a
 $priority = array_merge(array_slice($ordered, -2), array_slice($ordered, 0, -2));
 $entitlements->setRetentionOrder($tenant, $priority);
 checkBilling($entitlements->retainedConnectionIds($tenant->fresh())[0] === $priority[0], 'retention priority saved');
+$state = ['id' => 'sub_basicone', 'customer' => 'cus_basicone',
+    'items' => ['has_more' => false, 'data' => [['price' => ['id' => 'price_basicmonth'], 'quantity' => 1]]]];
+$stateEvent = $event('evt_immediatedowngrade', 'customer.subscription.updated', $state);
+$receive($stateEvent);
+checkBilling($entitlements->limit($tenant->fresh()) === 16
+    && VesselConnection::where('tenant_id', $tenant->id)->count() === 16,
+    'signed price decrease enforces Basic without waiting for a charge');
+$staleState = $state;
+$staleState['items']['data'][0]['price']['id'] = 'price_promonth';
+$staleEvent = $event('evt_staleplan', 'customer.subscription.updated', $staleState);
+$staleEvent['created'] = $stateEvent['created'] - 1;
+$receive($staleEvent);
+checkBilling($entitlements->limit($tenant->fresh()) === 16, 'out-of-order older price update cannot restore Pro');
 $basicRenewal = $invoice;
 $basicRenewal['id'] = 'in_basicrenewal';
 $basicRenewal['lines']['data'][0]['period']['start'] = time() - 10;

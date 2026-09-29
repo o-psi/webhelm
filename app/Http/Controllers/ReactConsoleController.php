@@ -30,6 +30,8 @@ class ReactConsoleController extends Controller
                 'connectionError' => $request->session()->has('errors') ? 'Connection not confirmed. Check your saved Vessels before trying a new invitation.' : null,
                 'tenantId' => $request->user()->tenant_id,
                 'principalId' => $request->user()->tenant->principal_id,
+                'accountName' => $request->user()->name,
+                'accountEmail' => $request->user()->email,
                 'plan' => $tenant->effectivePlan()->value,
                 'billingEnabled' => $billing->enabled(),
                 'billingCheckoutUrl' => route('billing.checkout', absolute: false),

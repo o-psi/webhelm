@@ -32,8 +32,13 @@ updater and browser adapters retain their focused behavior; these components
 do not own execution or transport state.
 
 React owns voyage navigation, drafts, history, run status, settings, decisions,
-attachments and connection management. Shared transport/intent journals retain
-exact command identities across the cutover. Browser viewing, account enrollment,
+attachments and connection management.
+The sidebar account menu opens a global Settings modal with HelmWeb Account and
+Appearance pages. HelmWeb Account shows the current plan, Vessel usage and Stripe
+checkout or billing portal controls; Manage Vessels retains connection ordering
+for strict downgrades. Voyage setup remains a separate modal for execution profiles.
+Shared transport/intent journals retain exact command identities across the
+cutover. Browser viewing, account enrollment,
 advanced voyage actions and the reviewed updater use explicitly disposed adapters.
 No unknown command is automatically replayed. Provider credentials remain on Vessels.
 
@@ -134,7 +139,8 @@ with one unit per checkout and no adjustable quantity. Configure each link URL,
 Stripe customer portal link and set `HELM_STRIPE_PORTAL_URL` to its
 `https://billing.stripe.com/...` URL. Register the public endpoint
 `POST /billing/stripe/webhook` in Stripe for `checkout.session.completed`,
-`invoice.paid`, and `customer.subscription.deleted`; set its signing secret in
+`invoice.paid`, `customer.subscription.updated`, and
+`customer.subscription.deleted`; set its signing secret in
 `HELM_STRIPE_WEBHOOK_SECRET`. Match `HELM_STRIPE_LIVE_MODE` to the Stripe mode.
 Keep this secret and the production `.env` private. Stripe handles checkout,
 payment methods, invoicing and cancellation; Laravel derives access only from
@@ -145,6 +151,10 @@ matching checkout binds them. Verify the four links, webhook delivery, upgrade,
 expiry and cancellation in Stripe test mode before enabling live mode. A second
 active subscription is not automatically assigned to an account; resolve duplicate
 charges in Stripe if one is created externally.
+For immediate upgrades in the customer portal, configure Stripe to invoice the
+proration immediately. Laravel grants the higher limit after that invoice is paid.
+An observed price decrease lowers the limit immediately, even if Stripe applies a
+credit rather than collecting a new payment. Keep portal quantity adjustment off.
 
 ## Deployment
 

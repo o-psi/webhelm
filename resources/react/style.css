@@ -299,4 +299,6 @@
 .new-voyage-secondary{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-height:38px;padding:4px 4px 0}.new-voyage-account{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted-foreground);font-size:11px}.new-voyage-secondary [data-slot="button"]{font-size:12px}.new-voyage-hint{display:block;padding:0 6px;color:var(--muted-foreground);font-size:11px;line-height:1.4}
 @media(max-width:639px){.new-voyage-context{grid-template-columns:1fr;margin:0 8px;gap:7px}.new-voyage-secondary{flex-wrap:wrap}.new-voyage-account{flex-basis:100%}.new-voyage-secondary [data-slot="button"]{flex:1}.new-voyage-primary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.new-voyage-inference{display:contents}.new-voyage-choice{width:100%;max-width:none}.new-voyage-choice [data-slot="native-select-wrapper"]{width:100%}.new-voyage-send-actions{grid-column:2;justify-content:flex-end}.new-voyage-content h1{font-size:28px}}
 
+.settings-dialog.web-settings-dialog[data-state=open]{display:block;width:min(760px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:90dvh;overflow:hidden;padding:0}.web-settings-dialog>header{margin:0}.web-settings-dialog p{margin-bottom:0}
+
 }

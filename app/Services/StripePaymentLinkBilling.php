@@ -84,6 +84,7 @@ final class StripePaymentLinkBilling
             match ($event['type']) {
                 'checkout.session.completed' => $this->bindCheckout($object, $entitlements),
                 'invoice.paid' => $this->recordPaidInvoice($object, $event, $entitlements),
+                'customer.subscription.updated' => $this->recordSubscriptionState($object, $event, $entitlements),
                 'customer.subscription.deleted' => $this->recordEnding($object, $event, $entitlements),
                 default => null,
             };
@@ -176,7 +177,7 @@ final class StripePaymentLinkBilling
             if (!is_string($priceId) || $this->planForPrice($priceId) === null) {
                 continue;
             }
-            if (($line['parent']['subscription_item_details']['proration'] ?? false) === true) {
+            if (($line['amount'] ?? 0) <= 0) {
                 continue;
             }
             $recognized[] = [$priceId, $line];
@@ -223,6 +224,41 @@ final class StripePaymentLinkBilling
         }
     }
 
+    private function recordSubscriptionState(array $subscription, array $event, TenantEntitlements $entitlements): void
+    {
+        $subscriptionId = $subscription['id'] ?? null;
+        $customerId = $subscription['customer'] ?? null;
+        $items = $subscription['items']['data'] ?? null;
+        $created = $event['created'] ?? null;
+        if (!is_string($subscriptionId) || !str_starts_with($subscriptionId, 'sub_')
+            || !is_string($customerId) || !str_starts_with($customerId, 'cus_')
+            || !is_array($items) || count($items) !== 1 || ($subscription['items']['has_more'] ?? false) !== false
+            || !is_int($created) || $created <= 0) {
+            return;
+        }
+        $priceId = $items[0]['price']['id'] ?? null;
+        if (!is_string($priceId) || !$this->planForPrice($priceId) || ($items[0]['quantity'] ?? null) !== 1) {
+            return;
+        }
+        $existing = DB::table('billing_subscription_states')->where('subscription_id', $subscriptionId)->lockForUpdate()->first();
+        $existingPlan = $existing ? $this->planForPrice($existing->price_id) : null;
+        if ($existing && ($existing->event_created > $created
+            || ($existing->event_created === $created
+                && $existingPlan && $existingPlan->vesselLimit() <= $this->planForPrice($priceId)->vesselLimit()))) {
+            return;
+        }
+        DB::table('billing_subscription_states')->updateOrInsert(
+            ['subscription_id' => $subscriptionId],
+            ['customer_id' => $customerId, 'price_id' => $priceId, 'event_created' => $created,
+                'created_at' => $existing?->created_at ?? now(), 'updated_at' => now()],
+        );
+        $tenant = Tenant::where('stripe_subscription_id', $subscriptionId)
+            ->where('stripe_customer_id', $customerId)->lockForUpdate()->first();
+        if ($tenant) {
+            $this->applyLatestPaidPeriod($tenant, $entitlements);
+        }
+    }
+
     public function applyLatestPaidPeriod(Tenant $tenant, TenantEntitlements $entitlements): void
     {
         if (!$tenant->stripe_subscription_id || !$tenant->stripe_customer_id) {
@@ -240,16 +276,25 @@ final class StripePaymentLinkBilling
         if (!$plan) {
             return;
         }
+        $effectivePriceId = $period->price_id;
+        $state = DB::table('billing_subscription_states')
+            ->where('subscription_id', $tenant->stripe_subscription_id)
+            ->where('customer_id', $tenant->stripe_customer_id)->first();
+        if ($state && ($statePlan = $this->planForPrice($state->price_id))
+            && $statePlan->vesselLimit() < $plan->vesselLimit()) {
+            $plan = $statePlan;
+            $effectivePriceId = $state->price_id;
+        }
         $ending = DB::table('billing_subscription_endings')
             ->where('subscription_id', $tenant->stripe_subscription_id)->first();
         $end = min($period->ends_at, $ending?->ended_at ?? $period->ends_at);
-        if ($tenant->plan === $plan && $tenant->stripe_price_id === $period->price_id
+        if ($tenant->plan === $plan && $tenant->stripe_price_id === $effectivePriceId
             && $tenant->paid_through_at?->timestamp === $end
             && $tenant->stripe_ended_at?->timestamp === ($ending?->ended_at)) {
             return;
         }
         $tenant->forceFill([
-            'plan' => $plan, 'stripe_price_id' => $period->price_id,
+            'plan' => $plan, 'stripe_price_id' => $effectivePriceId,
             'paid_through_at' => CarbonImmutable::createFromTimestampUTC($end),
             'stripe_ended_at' => $ending ? CarbonImmutable::createFromTimestampUTC($ending->ended_at) : null,
         ])->save();

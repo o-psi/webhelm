@@ -32,11 +32,6 @@ function endpointHost(endpoint?: string): string {
     catch { return endpoint; }
 }
 
-function CheckoutButton({url, plan, interval, label}: {url:string; plan:'basic'|'pro'; interval:'month'|'year'; label:string}) {
-    const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
-    return <form action={url} method="post"><input type="hidden" name="_token" value={token}/><input type="hidden" name="plan" value={plan}/><input type="hidden" name="interval" value={interval}/><Button variant={interval==='year'?'default':'outline'} size="sm" type="submit">{label}</Button></form>;
-}
-
 function bootstrapFrom(html: string): Bootstrap {
     const page = new DOMParser().parseFromString(html, 'text/html');
     const value = page.querySelector<HTMLElement>('#helm-react')?.dataset.bootstrap;
@@ -135,10 +130,10 @@ function VesselMaintenance({connection, releases, tenant, onReconnect}: {connect
     </Card>;
 }
 
-export function Connections({bootstrap, states = {}, connections, tenant, onReconnect, onClose}: {
+export function Connections({bootstrap, states = {}, connections, tenant, onReconnect, onAccountSettings, onClose}: {
     bootstrap: Bootstrap; states?: Record<string, Status>;
     connections: Map<string, any>; tenant: string;
-    onReconnect?: () => void; onClose: () => void;
+    onReconnect?: () => void; onAccountSettings?: () => void; onClose: () => void;
 }) {
     const releases=usePublishedReleases();
     const initialMethod = bootstrap.connectionForm === 'import' ? 'credential' : 'invitation';
@@ -260,9 +255,7 @@ export function Connections({bootstrap, states = {}, connections, tenant, onReco
         <div className="connections-body">
             {screen === 'list' && <>
                 <p className="connections-intro">These computers run your voyages. Provider credentials stay on each Vessel.</p>
-                <Card className="mb-3 gap-2 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="capitalize">{data.billingEnabled ? `${data.plan || 'free'} plan` : 'Vessel connections'}</strong><p className="text-sm text-muted-foreground">{count} of {limit} Vessel connections used{data.billingEnabled && data.paidThrough && data.plan !== 'free' ? ` · Paid through ${new Date(data.paidThrough).toLocaleDateString()}` : ''}</p></div></div></Card>
-                {data.billingEnabled && data.plan === 'free' && data.billingCheckoutUrl && <section className="mb-3 grid gap-2 sm:grid-cols-2" aria-label="WebHelm plans">{([['basic',16,3,30],['pro',64,9,90]] as const).map(([plan,capacity,monthly,annual])=><Card key={plan} className="gap-2 p-3"><h3 className="text-sm font-semibold capitalize">{plan} · {capacity} Vessels</h3><p className="text-xs text-muted-foreground">${monthly}/month or ${annual}/year. Annual is 10 months’ price.</p><div className="flex flex-wrap gap-2"><CheckoutButton url={data.billingCheckoutUrl!} plan={plan} interval="month" label="Monthly"/><CheckoutButton url={data.billingCheckoutUrl!} plan={plan} interval="year" label="Annual"/></div></Card>)}</section>}
-                {data.billingEnabled && data.plan !== 'free' && data.billingPortalUrl && <p className="mb-3 text-sm"><a className="underline underline-offset-2" href={data.billingPortalUrl} target="_blank" rel="noopener noreferrer">Manage billing in Stripe <ExternalLinkIcon className="inline size-3" aria-hidden="true"/></a></p>}
+                <Card className="mb-3 gap-2 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="capitalize">{data.billingEnabled ? `${data.plan || 'free'} plan` : 'Vessel connections'}</strong><p className="text-sm text-muted-foreground">{count} of {limit} Vessel connections used</p></div>{onAccountSettings && <Button variant="outline" size="sm" type="button" onClick={onAccountSettings}>HelmWeb Account</Button>}</div></Card>
                 <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" role="status" aria-label="Published release checks"><span>Stable: {releaseSummary(releases.stable)}</span><span>Development: {releaseSummary(releases.nightly)}</span></div>
                 {count > 1 && <Collapsible className="mb-3"><CollapsibleTrigger asChild><Button variant="outline" type="button">Choose which Vessels stay if your plan limit falls<ChevronDownIcon aria-hidden="true"/></Button></CollapsibleTrigger><CollapsibleContent className="mt-2 space-y-2"><p className="text-xs text-muted-foreground">Vessels at the top are kept first. Any beyond the new limit are disconnected at the cutoff; running voyages remain on their hosts.</p><ol className="space-y-1">{data.vessels.map((vessel,index)=><li key={vessel.id} className="flex items-center gap-2 rounded-md border px-2 py-1"><span className="min-w-0 flex-1 truncate text-sm">{index+1}. {vessel.name}</span><Button variant="ghost" size="icon" type="button" aria-label={`Move ${vessel.name} up`} disabled={index===0 || busy} onClick={()=>movePriority(index,-1)}><ArrowUpIcon aria-hidden="true"/></Button><Button variant="ghost" size="icon" type="button" aria-label={`Move ${vessel.name} down`} disabled={index===count-1 || busy} onClick={()=>movePriority(index,1)}><ArrowDownIcon aria-hidden="true"/></Button></li>)}</ol><Button variant="secondary" type="button" disabled={!priorityChanged || busy || uncertain} onClick={()=>void send('/connections/retention',{vessels:data.vessels.map(vessel=>vessel.id)})}>Save order</Button></CollapsibleContent></Collapsible>}
                 {count ? <div className="connections-grid" data-single={count===1 || undefined}>{data.vessels.map(vessel => <VesselOverviewCard key={vessel.id} vessel={vessel} connection={connections.get(vessel.id)} status={statusLabel(vessel.id)} releases={releases} onView={()=>viewDetails(vessel.id)}/>)}</div> : <div className="connections-empty"><span aria-hidden="true"><ServerIcon/></span><h3>No Vessels yet</h3><p>Add a computer you control to start a voyage from Helm Web.</p><Button variant="default" type="button" onClick={openAdd}>Add your first Vessel</Button></div>}

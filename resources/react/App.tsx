@@ -1,4 +1,4 @@
-import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuLabel,DropdownMenuRadioGroup,DropdownMenuRadioItem,DropdownMenuTrigger} from './components/ui/dropdown-menu';
+import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuLabel,DropdownMenuTrigger} from './components/ui/dropdown-menu';
 import {NativeSelect} from './components/ui/native-select';
 import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';
@@ -15,6 +15,7 @@ import {Connections} from './Connections';
 import {ImagePart,Output} from './MessageParts';
 import {VoyageActions} from './VoyageActions';
 import {Settings} from './Settings';
+import {WebSettings,type WebSettingsPage} from './WebSettings';
 import {InferenceControls} from './InferenceControls';
 import {NewVoyage,type NewVoyageMessage,type RecoveryDraft} from './NewVoyage';
 import {completeNewVoyage} from './new-voyage-delivery';
@@ -27,7 +28,7 @@ import {Workspace, type Tab} from './workspace';
 import {voyageLocation, voyagePath} from './voyage-url';
 import workingStatuses from '../../shared/helm/assets/working-statuses.json';
 
-type Bootstrap = {tenantId: string; vessels: any[]; ticketUrl: string; connectionsUrl: string; logoutUrl: string; plan?: string; vesselLimit?: number; paidThrough?: string | null; billingEnabled?: boolean; billingCheckoutUrl?: string; billingPortalUrl?: string | null};
+type Bootstrap = {tenantId: string; vessels: any[]; ticketUrl: string; connectionsUrl: string; logoutUrl: string; accountName?: string; accountEmail?: string; plan?: string; vesselLimit?: number; paidThrough?: string | null; billingEnabled?: boolean; billingCheckoutUrl?: string; billingPortalUrl?: string | null};
 const csrf = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
 function content(value: unknown): string {
     if (typeof value === 'string') return value;
@@ -226,6 +227,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     }, [runtime]);
     const [manage,setManage] = useState(()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('manage-vessels'));
     const [settings,setSettings] = useState<{tab?:Tab}|null>(null);
+    const [webSettingsPage,setWebSettingsPage] = useState<WebSettingsPage|null>(null);
     const [newDraftReset,setNewDraftReset]=useState(0),[profileReload,setProfileReload]=useState(0);
     const [recovery,setRecovery]=useState<RecoveryDraft|null>(null);
     const [mobile,setMobile] = useState(false);
@@ -294,7 +296,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
                     </DropdownMenu></div>
                     {connections.some((connection:any)=>!connection.client)&&<Button variant="ghost" size="icon" className="icon-button" aria-label="Reconnect Vessels" title="Reconnect Vessels" onClick={()=>fleet.reconnect()}><RefreshCwIcon aria-hidden="true"/></Button>}
                     <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="icon-button" aria-label="Account and appearance"><UserRoundIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent portalContainer={mobilePortal} side="top" align="end" className="w-48"><DropdownMenuLabel>Appearance</DropdownMenuLabel><DropdownMenuRadioGroup value={appearance} onValueChange={setAppearance}>{['light','dark','system'].map(mode=><DropdownMenuRadioItem key={mode} value={mode}>{mode}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup><DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Vessel connections</DropdownMenuItem><DropdownMenuItem onSelect={()=>{if([...workspace.tabs.values()].some(tab=>tab.draft.trim()||tab.pictures.length))setLogoutReview(true);else logoutForm.current?.requestSubmit();}}>Sign out</DropdownMenuItem></DropdownMenuContent>
+                        <DropdownMenuContent portalContainer={mobilePortal} side="top" align="end" className="w-48"><DropdownMenuLabel>Settings</DropdownMenuLabel><DropdownMenuItem onSelect={()=>{setMobile(false);setWebSettingsPage('account');}}>HelmWeb Account</DropdownMenuItem><DropdownMenuItem onSelect={()=>{setMobile(false);setWebSettingsPage('appearance');}}>Appearance</DropdownMenuItem><DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Vessel connections</DropdownMenuItem><DropdownMenuItem onSelect={()=>{if([...workspace.tabs.values()].some(tab=>tab.draft.trim()||tab.pictures.length))setLogoutReview(true);else logoutForm.current?.requestSubmit();}}>Sign out</DropdownMenuItem></DropdownMenuContent>
                     </DropdownMenu>
                     <form ref={logoutForm} action={bootstrap.logoutUrl} method="post" hidden><Input type="hidden" name="_token" value={csrf()}/></form>
                 </div>
@@ -311,8 +313,9 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
             {selected && <HostBrowser key={selected.key} tab={selected} client={fleet.connections.get(selected.vessel)?.client} workspace={workspace}/> }
             {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})} onRecover={()=>recoverInNewVoyage(tab)} connection={fleet.connections.get(tab.vessel)} voyage={fleet.connections.get(tab.vessel)?.voyages.find((item:any)=>item.session_id===tab.session)}/>)}
         </main>
-        {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} connections={fleet.connections} tenant={bootstrap.tenantId} onReconnect={()=>fleet.reconnect()} onClose={()=>setManage(false)}/>}
+        {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} connections={fleet.connections} tenant={bootstrap.tenantId} onReconnect={()=>fleet.reconnect()} onAccountSettings={()=>{setManage(false);setWebSettingsPage('account');}} onClose={()=>setManage(false)}/>}
         {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} profileOnly={!settings.tab} tenant={bootstrap.tenantId} onClose={()=>{setSettings(null);setProfileReload(value=>value+1);}} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}
+        {webSettingsPage&&<WebSettings account={bootstrap} page={webSettingsPage} onPageChange={setWebSettingsPage} appearance={appearance} onAppearanceChange={setAppearance} onManageVessels={()=>{setWebSettingsPage(null);setManage(true);}} onClose={()=>setWebSettingsPage(null)}/>}
         <Dialog open={logoutReview} onOpenChange={setLogoutReview}><DialogContent><DialogHeader><DialogTitle>Sign out with unsent work?</DialogTitle><DialogDescription>Unsent message drafts and prepared pictures in this browser will be lost. Your voyages continue on their Vessels.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" type="button" onClick={()=>setLogoutReview(false)}>Keep working</Button><Button variant="destructive" type="button" onClick={()=>logoutForm.current?.requestSubmit()}>Sign out</Button></DialogFooter></DialogContent></Dialog>
     </div>;
 }

@@ -15,6 +15,7 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     const oldFetch = globalThis.fetch;
     let requests = 0;
+    let accountOpens = 0;
     const commands: string[] = [];
     const connection = {id: 'c', name: 'Workstation', vessel_id: 'v', client: {async exchange({command}: any) {
         commands.push(command.op);
@@ -48,6 +49,7 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
                 pairings: [{id: 'p', name: 'Laptop'}], plan: 'free', vesselLimit: 8,
                 billingEnabled: true, billingCheckoutUrl: '/billing/checkout'},
             states: {c: {connected: true, status: 'Connected'}}, connections: new Map([['c', connection]]), tenant: 'test', onClose: () => {},
+            onAccountSettings: () => { accountOpens++; },
         })));
         assert.match(query('.connections-card')!.textContent!, /Connected/);
         assert.match(query('.connections-card')!.textContent!, /vessel.example/);
@@ -55,9 +57,9 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.match(query('.connections-dialog')!.textContent!, /Stable: v1\.0\.2/);
         assert.match(query('.connections-dialog')!.textContent!, /Development: 1\.0\.3-nightly/);
         assert.match(query('.connections-dialog')!.textContent!, /1 of 8 Vessel connections used/);
-        assert.match(query('.connections-dialog')!.textContent!, /\$3\/month or \$30\/year/);
-        assert.match(query('.connections-dialog')!.textContent!, /\$9\/month or \$90\/year/);
-        assert.equal(query('form[action="/billing/checkout"] input[name="plan"]')?.getAttribute('value'), 'basic');
+        assert.equal(query('.connections-dialog form[action="/billing/checkout"]'), null);
+        await click('HelmWeb Account');
+        assert.equal(accountOpens, 1);
         assert.doesNotMatch(query('.connections-card')!.textContent!, /New release/,'newer development build does not mark a stable Vessel');
         assert.equal(query('.connections-pending'), null);
         assert.doesNotMatch(query('.connections-dialog')!.textContent!, /Laptop|Needs confirmation/);
