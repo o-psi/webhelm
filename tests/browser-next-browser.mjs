@@ -103,6 +103,8 @@ try{
   await page.locator('.browser-next[data-state="agent"]').waitFor({timeout:5000});
   await frame.getByRole('textbox',{name:'Your name'}).click();
   await page.locator('.browser-next[data-state="human"]').waitFor({timeout:5000});
+  await page.waitForFunction(()=>window.viewer?.session?.canInput &&
+    document.querySelector('.browser-next-mirror iframe')?.contentDocument?.activeElement?.id==='site-input',null,{timeout:5000});
   await page.keyboard.type('First click focused');
   await page.waitForFunction(()=>window.fixtureCommands.some(c=>c.action==='input'&&c.input?.type==='fill'&&c.input.text==='First click focused'),null,{timeout:5000}).catch(async error=>{
    console.error('FOCUS',JSON.stringify(await page.evaluate(()=>({state:document.querySelector('.browser-next')?.dataset.state,pending:window.viewer?.session?.busy,
