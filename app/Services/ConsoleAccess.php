@@ -21,10 +21,15 @@ final class ConsoleAccess {
         $payload = base64_decode($session->payload, true);
         $data = config('session.serialization') === 'json' ? json_decode($payload ?: '', true) : @unserialize($payload ?: '', ['allowed_classes'=>false]);
         $fresh = VesselConnection::where('tenant_id', $connection->tenant_id)->find($connection->id);
+        $tenant = $user?->tenant;
+        if ($tenant && app(StripePaymentLinkBilling::class)->enabled()) {
+            app(StripePaymentLinkBilling::class)->applyLatestPaidPeriod($tenant, app(TenantEntitlements::class));
+        }
         return is_array($data) && ($data['helm_operator_until'] ?? 0) > time()
             && (int) ($data[auth()->getName()] ?? 0) === (int) $user->id
             && $fresh && $fresh->revision === $connection->revision && $fresh->endpoint === $connection->endpoint
-            && $fresh->credential === $connection->credential;
+            && $fresh->credential === $connection->credential
+            && $tenant && app(TenantEntitlements::class)->permits($tenant, $fresh);
     }
     public static function ticket(Request $request, string $vessel): array {
         abort_unless(self::authenticated($request), 401);

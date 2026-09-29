@@ -1,6 +1,6 @@
 <?php
 use App\Livewire\Landing;
-use App\Http\Controllers\{ConsoleAuthController,OAuthController,VesselConnectionController,GatewayController};
+use App\Http\Controllers\{BillingCheckoutController,ConsoleAuthController,OAuthController,StripeWebhookController,VesselConnectionController,GatewayController};
 use App\Http\Middleware\{ConsoleHeaders,ConsoleOperator};
 use Illuminate\Support\Facades\Route;
 Route::get('/landing', Landing::class)->name('home');
@@ -12,6 +12,11 @@ Route::post('/console/gateway/authorize',[GatewayController::class,'authorizeTic
     \Illuminate\Session\Middleware\StartSession::class,
     \Illuminate\View\Middleware\ShareErrorsFromSession::class,
 ]);
+Route::post('/billing/stripe/webhook', StripeWebhookController::class)->withoutMiddleware([
+    \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+    \Illuminate\Session\Middleware\StartSession::class,
+    \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+])->middleware('throttle:60,1');
 Route::middleware(ConsoleHeaders::class)->group(function () {
     Route::view('/console/login','console.login')->name('console.login');
     Route::get('/auth/{provider}',[OAuthController::class,'redirect'])->name('oauth.redirect')->middleware('throttle:20,1');
@@ -24,8 +29,10 @@ Route::middleware([ConsoleOperator::class,ConsoleHeaders::class])->group(functio
     Route::get('/voyages/{vessel}/{session}', \App\Http\Controllers\ReactConsoleController::class)
         ->whereUuid('vessel')->whereUuid('session')->name('console.voyage');
     Route::post('/console/ticket',[ConsoleAuthController::class,'ticket'])->name('console.ticket')->middleware('throttle:console-tickets');
+    Route::post('/billing/checkout', BillingCheckoutController::class)->name('billing.checkout')->middleware('throttle:10,1');
     Route::get('/connections',[VesselConnectionController::class,'index'])->name('connections');
     Route::post('/connections',[VesselConnectionController::class,'store'])->name('connections.store')->middleware('throttle:10,1');
     Route::post('/connections/pair',[VesselConnectionController::class,'pair'])->name('connections.pair')->middleware('throttle:10,1');
+    Route::post('/connections/retention',[VesselConnectionController::class,'retention'])->name('connections.retention')->middleware('throttle:10,1');
     Route::delete('/connections/{id}',[VesselConnectionController::class,'destroy'])->name('connections.destroy');
 });

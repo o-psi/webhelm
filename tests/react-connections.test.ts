@@ -44,7 +44,9 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     });
     try {
         await React.act(async () => root.render(React.createElement(Connections, {
-            bootstrap: {vessels: [{id: 'c', name: 'Workstation', vessel_id: 'v', endpoint: 'https://vessel.example'}], pairings: [{id: 'p', name: 'Laptop'}]},
+            bootstrap: {vessels: [{id: 'c', name: 'Workstation', vessel_id: 'v', endpoint: 'https://vessel.example'}],
+                pairings: [{id: 'p', name: 'Laptop'}], plan: 'free', vesselLimit: 8,
+                billingEnabled: true, billingCheckoutUrl: '/billing/checkout'},
             states: {c: {connected: true, status: 'Connected'}}, connections: new Map([['c', connection]]), tenant: 'test', onClose: () => {},
         })));
         assert.match(query('.connections-card')!.textContent!, /Connected/);
@@ -52,6 +54,10 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.match(query('.connections-card')!.textContent!, /Version 1\.0\.2/);
         assert.match(query('.connections-dialog')!.textContent!, /Stable: v1\.0\.2/);
         assert.match(query('.connections-dialog')!.textContent!, /Development: 1\.0\.3-nightly/);
+        assert.match(query('.connections-dialog')!.textContent!, /1 of 8 Vessel connections used/);
+        assert.match(query('.connections-dialog')!.textContent!, /\$3\/month or \$30\/year/);
+        assert.match(query('.connections-dialog')!.textContent!, /\$9\/month or \$90\/year/);
+        assert.equal(query('form[action="/billing/checkout"] input[name="plan"]')?.getAttribute('value'), 'basic');
         assert.doesNotMatch(query('.connections-card')!.textContent!, /New release/,'newer development build does not mark a stable Vessel');
         assert.equal(query('.connections-pending'), null);
         assert.doesNotMatch(query('.connections-dialog')!.textContent!, /Laptop|Needs confirmation/);

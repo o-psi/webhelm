@@ -27,7 +27,7 @@ import {Workspace, type Tab} from './workspace';
 import {voyageLocation, voyagePath} from './voyage-url';
 import workingStatuses from '../../shared/helm/assets/working-statuses.json';
 
-type Bootstrap = {tenantId: string; vessels: any[]; ticketUrl: string; connectionsUrl: string; logoutUrl: string};
+type Bootstrap = {tenantId: string; vessels: any[]; ticketUrl: string; connectionsUrl: string; logoutUrl: string; plan?: string; vesselLimit?: number; paidThrough?: string | null; billingEnabled?: boolean; billingCheckoutUrl?: string; billingPortalUrl?: string | null};
 const csrf = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
 function content(value: unknown): string {
     if (typeof value === 'string') return value;

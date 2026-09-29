@@ -109,6 +109,43 @@ Laravel application skeleton, with its original framework configuration and
 migrations. Console authentication routes fail closed (404) until explicitly
 configured. OAuth sign-in creates a personal tenant with no inherited connections.
 
+## Web account plans and Stripe setup
+
+Free permits 8 connected Vessels. Basic permits 16 at $3 per month or $30 per
+year; Pro permits 64 at $9 per month or $90 per year. These limits govern Helm
+Web connections only. Vessel grants and running Voyages remain owned by their
+hosts. An expired or ended paid subscription falls back to Free. Helm Web stops
+issuing new browser credentials for Vessels above the current limit immediately;
+the next console or connection action removes those excess Helm Web connections.
+Already issued Vessel browser credentials may live for up to 120 seconds, plus
+up to 3 seconds to close an open socket. Helm Web does not revoke host grants.
+
+Billing and plan enforcement remain disabled until `HELM_BILLING_ENABLED=true`
+and all Stripe settings in `.env.example` are configured. Until then, existing
+accounts retain the prior 64-connection ceiling. Before enabling, inspect tenants
+with more than 8 connections and put the Vessels they should retain at the top
+of Manage Vessels. Enabling billing will remove other saved connections on their
+next console visit; the credentials cannot be recovered from Helm Web afterward.
+Take a private database backup before that switch.
+
+Create four **recurring subscription** Stripe Payment Links for the prices above,
+with one unit per checkout and no adjustable quantity. Configure each link URL,
+`plink_` ID and `price_` ID in the matching `HELM_STRIPE_*` variables. Create a
+Stripe customer portal link and set `HELM_STRIPE_PORTAL_URL` to its
+`https://billing.stripe.com/...` URL. Register the public endpoint
+`POST /billing/stripe/webhook` in Stripe for `checkout.session.completed`,
+`invoice.paid`, and `customer.subscription.deleted`; set its signing secret in
+`HELM_STRIPE_WEBHOOK_SECRET`. Match `HELM_STRIPE_LIVE_MODE` to the Stripe mode.
+Keep this secret and the production `.env` private. Stripe handles checkout,
+payment methods, invoicing and cancellation; Laravel derives access only from
+signed paid invoice periods associated with a checkout started by that tenant.
+Checkout completion alone never grants access. Webhook retries are idempotent.
+Stripe may deliver events out of order, so invoice periods are recorded until the
+matching checkout binds them. Verify the four links, webhook delivery, upgrade,
+expiry and cancellation in Stripe test mode before enabling live mode. A second
+active subscription is not automatically assigned to an account; resolve duplicate
+charges in Stripe if one is created externally.
+
 ## Deployment
 
 The public Helm Web origin runs in Proxmox CT 106, the dedicated unprivileged
