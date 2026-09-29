@@ -9,6 +9,7 @@ import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './com
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from './components/ui/dialog';
 import {ArrowDownIcon,ArrowUpIcon,CheckIcon,ChevronDownIcon,ChevronRightIcon,CopyIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
 import {HostBrowser} from './HostBrowser';
+import {GoalPanel} from './Goal';
 import React, {useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ToolGroup,threadRows,toolTrigger} from './ToolGroup';
 import {Connections} from './Connections';
@@ -188,6 +189,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
             {(run?.reasoning_previews||[]).map((preview:any,index:number)=><Collapsible className="tool-entry" key={index}><CollapsibleTrigger asChild><Button variant="ghost" className={toolTrigger} type="button"><ChevronRightIcon className="tool-chevron" aria-hidden="true"/><span className="tool-summary-text">{preview.kind==='summary'?'Reasoning summary':'Provider thinking'} · {preview.finalized?'finalized disclosure':'streaming · provisional'}</span></Button></CollapsibleTrigger><CollapsibleContent><pre>{preview.text}</pre>{preview.truncated&&<small>Preview truncated</small>}</CollapsibleContent></Collapsible>)}
             <RunStatus tab={tab}/>
         </div>{(turnNavigation.previous||turnNavigation.next||showJump)&&<div className="jump-anchor"><div className="turn-navigation" role="group" aria-label="Conversation navigation"><Button variant="ghost" size="icon-sm" type="button" aria-label="Previous user message" title="Previous user message" disabled={!turnNavigation.previous} onClick={()=>jumpTurn('previous')}><ArrowUpIcon aria-hidden="true"/></Button><Button variant="ghost" size="icon-sm" type="button" aria-label="Next user message" title="Next user message" disabled={!turnNavigation.next} onClick={()=>jumpTurn('next')}><ArrowDownIcon aria-hidden="true"/></Button>{showJump&&<Button variant="ghost" size="sm" className="jump-latest" type="button" onClick={() => {following.current=true;tab.following=true;setShowJump(false);scroll.current?.scrollTo({top:scroll.current.scrollHeight});}}>Latest<ArrowDownIcon aria-hidden="true"/></Button>}</div></div>}</div>
+        <GoalPanel tab={tab} workspace={workspace}/>
         <Decisions tab={tab} workspace={workspace}/>
         <Composer tab={tab} workspace={workspace} onSettings={onSettings} onRecover={onRecover} connection={active?connection:null} voyage={active?voyage:null}/>
     </section>;

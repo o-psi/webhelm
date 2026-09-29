@@ -74,6 +74,20 @@ the unresolved receipt. The conversation provides response copying (fetching
 complete canonical text when the visible projection is truncated), user-turn
 navigation, and a compact sidebar for scanning long voyage lists.
 
+Voyages that expose canonical Goal state show a Goal panel above the composer.
+It reads the objective, status, usage, limits and recorded model assessment from
+the executing Voyage. Owner connections can set, edit, pause, resume and clear;
+replacing an existing Goal requires confirmation of that specific Goal. Edits
+retain usage and pause continuation. Automatic continuation requires explicit
+consent and finite limits; token accounting is not a strict billing cap. Pause
+stops future continuation; Stop run requests cancellation of current execution.
+Goal drafts stay in memory, and the browser's recovery journal retains command
+identity without the objective. Lost responses are observed by exact receipt,
+never resent. Goal metadata events trigger an authenticated canonical refresh.
+Older runtimes without Goal state do not show these controls. Coordinated runtime,
+TUI and release qualification is tracked in
+[#378](https://github.com/o-psi/helm.vessel.voyage/issues/378).
+
 helm.vessel.voyage. Foleybridge.Software presents Helm, Vessel, and Voyage
 as a product suite for running coding agents across machines the user controls.
 Product copy presents Helm Web and the Linux terminal client as two interfaces

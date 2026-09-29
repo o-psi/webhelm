@@ -1,3 +1,4 @@
+import {assertGoalReview,validateGoalAction,goalReceipt,type GoalAction,type GoalReview} from './goals';
 import {uuid, request, voyageResult, mutation, resolved, receiptStatus} from '../js/vessel-client.js';
 import {ConversationStream} from '../js/conversation-stream.js';
 import {preparePicture, MAX_PICTURE_BYTES, MAX_PICTURES} from './prepare-picture';
@@ -6,10 +7,11 @@ import {inspectionRequest,inventorySupports,type InspectionScope} from './inspec
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
 export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any};
 export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]; scrollTop?: number; following?: boolean};
-const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision'} as Record<string,string>)[op]||'action';
+const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision',goal_update:'goal change'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const statusReadNotice='Voyage status unavailable. Check the Vessel connection.';
-const settledNotice=(op:string,status:string)=>status==='not_applied'?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
+const notApplied=(status:string)=>['not_applied','not_admitted','rejected'].includes(status);
+const settledNotice=(op:string,status:string)=>notApplied(status)?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
 // Transport state outlives React renders and selected tabs. No prompt is persisted.
 export class Workspace {
     tabs = new Map<string, Tab>();
@@ -48,6 +50,7 @@ export class Workspace {
         catch { return false; }
     }
     permitted(tab: Tab, op: string) {
+        if(op==='goal_update')return tab.scope==='owner';
         const right = op==='respond'?'decide':op==='cancel'?'cancel':op==='set_account_inference'?'account_use':'execute';
         return tab.scope==='owner'||Boolean(tab.rights?.includes(right));
     }
@@ -133,10 +136,19 @@ export class Workspace {
         this.reads.set(key, task);
         try { await task; } finally { this.reads.delete(key); if(this.queued.delete(key) && !this.closed) void this.refresh(key); }
     }
+    async goalUpdate(key:string,review:GoalReview,action:GoalAction){
+        const tab=this.tabs.get(key);
+        if(!tab||!this.actionable(tab,'goal_update')||!this.permitted(tab,'goal_update'))throw new Error('Goal controls require a fresh owner connection and resolved receipts.');
+        const current=assertGoalReview(review,tab.snapshot,tab.incarnation);
+        validateGoalAction(current,action);
+        const active=['accepted','running','awaiting_decision','cancel_requested','starting','cancelling'].includes(tab.snapshot.run?.state);
+        if(action.action!=='pause'&&(active||tab.snapshot.pending_cleanup_run))throw new Error('Wait for the run and its cleanup before changing the goal.');
+        return this.act(key,'goal_update',{action});
+    }
     async act(key: string, op: string, fields: Record<string, unknown> = {}, onReceipt?: (value:any)=>void) {
         const tab = this.tabs.get(key);
         if (!tab || !this.actionable(tab,op) || !this.permitted(tab,op)) return;
-        if (tab.snapshot.lifecycle?.archived || tab.snapshot.lifecycle?.deleted || (tab.snapshot.pending_cleanup_run && !['cancel','respond','set_access','steer'].includes(op) && !['running','starting','cancelling'].includes(tab.snapshot.run?.state))) { tab.notice='Voyage lifecycle or cleanup blocks this action. Review its status.'; this.changed(); return; }
+        if (tab.snapshot.lifecycle?.archived || tab.snapshot.lifecycle?.deleted || (tab.snapshot.pending_cleanup_run && !['cancel','respond','set_access','steer'].includes(op) && !(op==='goal_update'&&(fields.action as GoalAction)?.action==='pause') && !['running','starting','cancelling'].includes(tab.snapshot.run?.state))) { tab.notice='Voyage lifecycle or cleanup blocks this action. Review its status.'; this.changed(); return; }
         const connection = this.connections().get(tab.vessel)!;
         const client = connection.client;
         const draft = tab.draft;
@@ -186,17 +198,19 @@ export class Workspace {
             stage = 'submit';
             connection.journal.prepare(command.command);
             const response = await client.exchange(command);
-            const known = resolved(response, command.command.command_id, tab.session);
+            const basicKnown = resolved(response, command.command.command_id, tab.session);
+            const goalKnown = op!=='goal_update'||Boolean(response.error)||notApplied(receiptStatus(response))||goalReceipt(response.result?.result,{state:origin.goal,action:fields.action as GoalAction,command:command.command.command_id});
+            const known = basicKnown&&goalKnown;
             if (known && receiptStatus(response) !== 'unknown_after_restart') connection.journal.settle(command.command.command_id);
             const status = receiptStatus(response);
             if (known && status === 'unknown_after_restart') tab.receiptStates[command.command.command_id] = status;
-            if(known&&!response.error&&status!=='not_applied'&&status!=='unknown_after_restart')onReceipt?.(response.result?.result);
-            tab.notice = response.error ? `Vessel refused: ${response.error}` : !known || status === 'unknown_after_restart' ? uncertainNotice(op) : status === 'not_applied' ? settledNotice(op,status) : '';
+            if(known&&!response.error&&!notApplied(status)&&status!=='unknown_after_restart')onReceipt?.(response.result?.result);
+            tab.notice = response.error ? `Vessel refused: ${response.error}` : !known || status === 'unknown_after_restart' ? uncertainNotice(op) : notApplied(status) ? settledNotice(op,status) : '';
             if (known && !response.error && ['accepted', 'queued', 'applied'].includes(status) && ['submit', 'steer', 'submit_content'].includes(op)) {
                 if (tab.draft === draft) tab.draft = '';
                 tab.pictures = tab.pictures.filter(picture => !pictures.includes(picture)); pictures.forEach(picture => URL.revokeObjectURL(picture.url));
             }
-            return Boolean(known && !response.error && !['not_applied','unknown_after_restart'].includes(status));
+            return Boolean(known && !response.error && !notApplied(status) && status!=='unknown_after_restart');
         } catch (error) {
             const reason = error instanceof Error ? error.message : 'Unexpected error';
             if (stage === 'upload' && !command) {
@@ -326,7 +340,7 @@ export class Workspace {
             let lastSettled:{op:string;status:string}|null=null;
             for (const entry of this.pending(tab)) {
                 const response = await connection.client.exchange(request('receipt', {session_id: tab.session, command_id: entry.command_id}));
-                if (resolved(response, entry.command_id, tab.session, true)) {
+                if (resolved(response, entry.command_id, tab.session, true) && (entry.op!=='goal_update'||receiptStatus(response)==='unknown_after_restart'||notApplied(receiptStatus(response))||goalReceipt(response.result?.result))) {
                     const status=receiptStatus(response);
                     if (status === 'unknown_after_restart') tab.receiptStates[entry.command_id] = status;
                     else {

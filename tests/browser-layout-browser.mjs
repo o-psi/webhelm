@@ -52,6 +52,7 @@ try {
         // controls and event handling are the unmodified production bundle.
         const binding={incarnation:'i',browser_id:'fixture-browser',attachment_id:'fixture-attachment',capture_epoch:1,controller_epoch:1};
         let mode='agent';
+        let goal={revision:0,goal:null};
         let updateRecord={phase:'idle'};
         class Socket extends EventTarget {
             readyState=0;protocol='voyage.vessel.v1';
@@ -68,7 +69,12 @@ try {
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
                 else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
-                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1,observation_cursor:5,messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
+                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1+goal.revision,observation_cursor:5+goal.revision,goal,messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
+                else if(c.op==='goal_update'){
+                    if(c.action.action!=='set')throw Error('Unexpected Goal action');
+                    goal={revision:goal.revision+1,goal:{id:c.command_id,session_id:c.session_id,objective:c.action.objective,status:c.action.continue_automatically?'active':'paused',continuation_authorized:c.action.continue_automatically,limits:c.action.limits,usage:{runs:0,input_tokens:0,output_tokens:0,elapsed_ms:0,no_progress_runs:0,unmeasured_runs:0},stop_reason:'user_paused'}};
+                    result={session_id:c.session_id,incarnation:'i',result:{command_id:c.command_id,status:'applied',goal_revision:goal.revision,goal_id:c.command_id}};
+                }
                 else if(c.op==='decisions')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:[]};
                 else if(c.op==='host_browser'){
                     if(c.operation.action==='control'){mode=c.operation.mode;binding.controller_epoch++;}
@@ -171,6 +177,26 @@ try {
     await page.locator('.voyage-card').click();
     if(label==='mobile')await page.locator('.mobile-navigation').waitFor({state:'hidden'});
     const conversation=page.locator('.conversation:not([hidden])');
+    await page.getByRole('button',{name:'Set goal',exact:true}).click();
+    const goalDialog=page.getByRole('dialog',{name:'Set goal',exact:true});
+    await goalDialog.getByRole('textbox',{name:'Objective',exact:true}).fill('Verify the synthetic output <script>plain text</script>');
+    check(!await goalDialog.getByRole('checkbox').isChecked(),`${label}: continuation consent was preselected`);
+    check(await goalDialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Goal form overflows horizontally`);
+    await goalDialog.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
+    await page.screenshot({path:`${output}/${label}-goal-review.png`});
+    await goalDialog.getByRole('button',{name:'Save paused goal',exact:true}).click();
+    await page.getByRole('button',{name:'Goal · Paused',exact:true}).waitFor();
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='goal_update').length===1),`${label}: Goal set was not exactly once`);
+    check(await page.evaluate(()=>window.fixtureCommands.find(c=>c.op==='goal_update').action.continue_automatically===false),`${label}: paused Goal acquired continuation`);
+    await page.getByRole('button',{name:'Goal · Paused',exact:true}).click();
+    const goalView=page.getByRole('dialog',{name:'Voyage goal',exact:true});
+    check(await goalView.getByText('Verify the synthetic output <script>plain text</script>',{exact:true}).isVisible(),`${label}: canonical Goal objective missing`);
+    check(await goalView.locator('script').count()===0,`${label}: Goal objective executed as HTML`);
+    await goalView.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
+    await page.screenshot({path:`${output}/${label}-goal-state.png`});
+    await page.keyboard.press('Escape');
+    check(await page.getByRole('button',{name:'Goal · Paused',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Goal close lost focus`);
+
     await page.screenshot({path:`${output}/${label}-before-model.png`});
     check(await conversation.getByRole('button',{name:'Previous user message'}).count()===1,`${label}: turn navigation is missing`);
     // The synthetic fixture has no prior scroll restoration. Move to the last

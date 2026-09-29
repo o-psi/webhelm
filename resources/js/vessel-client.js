@@ -25,7 +25,7 @@ export function resolved(response, commandId, sessionId, receipt = false) {
     if (response.error != null) return !receipt;
     const envelope = response.result, value = envelope?.result;
     const matches = envelope?.session_id === sessionId && (value?.command_id === commandId || value?.request?.receipt_id === commandId || value?.record?.request?.receipt_id === commandId);
-    return Boolean(matches && (!receipt || ['accepted', 'requested', 'already_terminal', 'applied', 'deleted', 'transferred', 'queued', 'not_applied', 'unknown_after_restart'].includes(receiptStatus(response))));
+    return Boolean(matches && (!receipt || ['accepted', 'requested', 'already_terminal', 'applied', 'deleted', 'transferred', 'queued', 'not_applied', 'not_admitted', 'rejected', 'unknown_after_restart'].includes(receiptStatus(response))));
 }
 export class IntentJournal {
     constructor(storage, vesselId) { this.storage = storage; this.key = `helm-web:intent:${vesselId}:`; }
