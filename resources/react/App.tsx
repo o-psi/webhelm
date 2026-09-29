@@ -198,7 +198,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
 export function App({bootstrap}: {bootstrap: Bootstrap}) {
     const [runtime] = useState(() => {
         let workspace: Workspace;
-        const fleet = new VesselFleet(bootstrap.vessels, {tenantId: bootstrap.tenantId, changed: () => workspace.connectionChanged(), ticket: async (vessel: string) => {
+        const fleet = new VesselFleet(bootstrap.vessels, {tenantId: bootstrap.tenantId, changed: () => workspace.connectionChanged(false), ticket: async (vessel: string) => {
             const response = await fetch(bootstrap.ticketUrl, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrf()}, body: JSON.stringify({vessel})});
             if (!response.ok) throw Object.assign(new Error('Vessel authorization unavailable'), {permanent: [401, 403, 404, 419].includes(response.status)});
             return response.json();

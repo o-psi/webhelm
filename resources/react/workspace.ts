@@ -54,18 +54,23 @@ export class Workspace {
         const right = op==='respond'?'decide':op==='cancel'?'cancel':op==='set_account_inference'?'account_use':'execute';
         return tab.scope==='owner'||Boolean(tab.rights?.includes(right));
     }
-    connectionChanged() {
+    connectionChanged(refreshUnchanged = true) {
         for (const tab of this.tabs.values()) {
-            const stream = this.streams.get(tab.key), client = this.connections().get(tab.vessel)?.client;
+            const connection = this.connections().get(tab.vessel), stream = this.streams.get(tab.key), client = connection?.client;
+            const owner = connection?.voyages.find(voyage => voyage.session_id === tab.session);
+            const ownerChanged = Boolean(owner && tab.incarnation && owner.incarnation !== tab.incarnation);
+            const clientChanged = this.observedClients.get(tab.key) !== client;
             if (!client) {
                 tab.stale = true; stream?.stop(); this.streams.delete(tab.key); this.eventRetryAt.delete(tab.key);
-            } else if (this.observedClients.has(tab.key) && this.observedClients.get(tab.key) !== client) {
+            } else if (ownerChanged || (this.observedClients.has(tab.key) && clientChanged)) {
                 // Ticket renewal replaces an authenticated socket before the old
                 // one drains. Keep the last confirmed status visible while the
                 // replacement is read, but fence actions until that read lands.
                 tab.freshAt = 0; stream?.stop(); this.streams.delete(tab.key); this.eventRetryAt.delete(tab.key);
             }
-            if (client) void this.refresh(tab.key);
+            // Sidebar metadata updates are independent of transcript delivery.
+            // Explicit action callbacks still request a fresh canonical review.
+            if (client && (refreshUnchanged || clientChanged || ownerChanged || tab.stale)) void this.refresh(tab.key);
         }
         this.changed();
     }

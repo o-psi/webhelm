@@ -384,3 +384,33 @@ test('subscription setup failure keeps a confirmed read and obsolete read notice
  assert.match(tab.notice,/can’t confirm whether your message/,'action notices survive a successful read');
  f.workspace.close();
 });
+
+
+test('sidebar metadata updates retain healthy transcript without snapshot reads', async () => {
+ const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
+ await new Promise(resolve=>setImmediate(resolve));
+ const before=f.commands.length;
+ for(let i=0;i<10;i++) f.workspace.connectionChanged(false);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(f.commands.length,before,'metadata notifications must not amplify into full transcript reads');
+ assert.equal(f.subscriptions(),1);
+ f.workspace.connectionChanged();await f.workspace.refresh(key);
+ assert.ok(f.commands.slice(before).some(command=>command.op==='snapshot'),'explicit action callbacks still refresh canonical authority');
+ f.workspace.close();
+});
+
+test('catalogued owner replacement fences the previous incarnation immediately', async () => {
+ const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
+ await new Promise(resolve=>setImmediate(resolve));
+ const tab=f.workspace.tabs.get(key)!;
+ (f.connection.voyages as any[]).push({session_id:'a',incarnation:'replacement'});
+ let release!:()=>void;
+ const pending=new Promise<void>(resolve=>{release=resolve;});
+ const exchange=f.connection.client.exchange.bind(f.connection.client);
+ f.connection.client.exchange=async(payload:any)=>{if(payload.command.op==='snapshot')await pending;return exchange(payload);};
+ f.workspace.connectionChanged(false);
+ assert.equal(f.workspace.actionable(tab),false);
+ assert.equal(f.subscriptions(),0);
+ release();await f.workspace.refresh(key);
+ f.workspace.close();
+});
