@@ -107,6 +107,13 @@ test('React voyage details observe an exact pending receipt without replay',asyn
  assert.match(dom.window.document.querySelector('#sidebar-access-summary')!.textContent!,/Current: Approval. Proposed: Read only.*Vessel/);
  assert.equal(dom.window.document.querySelector<HTMLButtonElement>('#sidebar-submit')!.disabled,false);
  assert.equal(commands.includes('set_access'),false);
+ let outerSubmits=0;dom.window.document.querySelector('#mount')!.addEventListener('submit',()=>outerSubmits++);
+ connection.journal.prepare=(command:any)=>pending.push(command);
+ const originalExchange=connection.client.exchange;
+ connection.client.exchange=async(request:any)=>request.command.op==='set_access'?(commands.push('set_access'),{protocol:1,outcome_unknown:false,result:{session_id:'s',incarnation:'i',result:{command_id:request.command.command_id,status:'applied'}}}):originalExchange(request);
+ await act(async()=>{dom.window.document.querySelector('#sidebar-action-form')!.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));});
+ assert.equal(commands.filter(command=>command==='set_access').length,1);
+ assert.equal(outerSubmits,0,'saving a voyage action cannot submit an enclosing chat composer');
  await act(async()=>root.unmount());assert.equal(dom.window.document.querySelector('[data-slot=dialog-content]'),null);
  }finally{Object.assign(globalThis,saved);dom.window.close();}
 });

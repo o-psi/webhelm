@@ -188,7 +188,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
         return response;
     }
     async function execute(event) {
-        event.preventDefault(); if (!current || sending) return;
+        event.preventDefault(); event.stopPropagation(); if (!current || sending) return;
         const target=current, {connection,item,action,view,mine}=target;
         sending=true; $('submit').disabled=true;
         try {
