@@ -5,7 +5,7 @@ import {inspectionRequest,inventorySupports,type InspectionScope} from './inspec
 
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
 export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any};
-export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]};
+export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]; scrollTop?: number; following?: boolean};
 const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const settledNotice=(op:string,status:string)=>status==='not_applied'?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
@@ -13,7 +13,7 @@ const settledNotice=(op:string,status:string)=>status==='not_applied'?`Your ${ac
 export class Workspace {
     tabs = new Map<string, Tab>();
     private reads = new Map<string, Promise<void>>();
-    private streams = new Map<string, {client: any; stop: () => void}>();
+    private streams = new Map<string, {client: any; incarnation: string; stream: ConversationStream; stop: () => void}>();
     private listeners = new Set<() => void>();
     private closed = false;
     private queued = new Set<string>();
@@ -55,6 +55,10 @@ export class Workspace {
         }
         this.changed();
     }
+    needsRefresh(key: string) {
+        const tab = this.tabs.get(key), stream = this.streams.get(key);
+        return Boolean(tab && (tab.stale || !stream?.stream.valid || !stream.client || Date.now() - tab.freshAt > 30000));
+    }
     async refresh(key: string): Promise<void> {
         if (this.closed) return;
         if (this.reads.has(key)) { this.queued.add(key); return this.reads.get(key); }
@@ -72,18 +76,27 @@ export class Workspace {
                 try { if(caps.scope==='owner'||caps.rights?.includes('decide')) decisions = voyageResult(await client.exchange(request('decisions', {session_id: tab.session})), tab.session, envelope.incarnation).result; } catch { /* History and decision authority are independent. */ }
                 if (this.closed || this.connections().get(tab.vessel)?.client !== client || tab.busy || (this.epochs.get(key) || 0) !== epoch) return;
                 if (tab.snapshot?.revision === snapshot.revision && tab.incarnation === envelope.incarnation) { snapshot.messages = tab.snapshot.messages; snapshot.message_offset = tab.snapshot.message_offset; }
+                const currentStream = this.streams.get(key);
+                if (currentStream?.stream.valid && currentStream.incarnation === envelope.incarnation && Number.isSafeInteger(snapshot.observation_cursor) && snapshot.observation_cursor < currentStream.stream.cursor) {
+                    return;
+                }
                 Object.assign(tab, {snapshot, scope:caps.scope, rights:caps.rights||[], incarnation: envelope.incarnation, title: snapshot.name || tab.title, decisions: Array.isArray(decisions) ? decisions : [], stale: false, freshAt: Date.now()});
-                this.streams.get(key)?.stop(); this.streams.delete(key);
-                const stream = new ConversationStream(); stream.seed(snapshot, envelope.incarnation);
-                if (stream.valid && client.subscribe) {
+                const existing = this.streams.get(key);
+                if (existing && (existing.client !== client || existing.incarnation !== envelope.incarnation || !existing.stream.valid)) {
+                    existing.stop(); this.streams.delete(key);
+                }
+                const stream = this.streams.get(key)?.stream || new ConversationStream();
+                if (!this.streams.has(key)) stream.seed(snapshot, envelope.incarnation);
+                if (stream.valid && client.subscribe && !this.streams.has(key)) {
                     const stop = client.subscribe(tab.session, envelope.incarnation, stream.cursor, (event: any) => {
                         if (this.closed || this.connections().get(tab.vessel)?.client !== client) return;
-                        const action = stream.accept(event);
+                        const action = stream.accept(event, tab.snapshot);
                         if (action === 'duplicate') return;
+                        if (action === 'append') { tab.freshAt = Date.now(); this.changed(); return; }
                         if (action === 'resync') { tab.stale = true; this.changed(); }
                         void this.refresh(key);
                     });
-                    this.streams.set(key, {client, stop});
+                    this.streams.set(key, {client, incarnation: envelope.incarnation, stream, stop});
                 }
             } catch (error) { tab.stale = true; tab.notice = error instanceof Error ? error.message : 'Read failed.'; }
             finally { this.changed(); }

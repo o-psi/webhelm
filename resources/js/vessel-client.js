@@ -83,12 +83,12 @@ export class VesselSocket {
             catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
         });
     }
-    subscribe(session, incarnation, after, onEvent) {
+    subscribe(session, incarnation, after, onEvent, projection = 'public-v2') {
         if (this.socket.readyState !== 1 || this.subscriptions.size >= 16 || !Number.isSafeInteger(after) || after < 0) throw new Error('Observation unavailable.');
         const id = uuid();
         this.subscriptions.set(id, onEvent);
         try {
-            this.socket.send(JSON.stringify({type:'subscribe', request_id:id, request:{protocol:1, subscriptions:[{session_id:session,incarnation,after}]}}));
+            this.socket.send(JSON.stringify({type:'subscribe', request_id:id, request:{protocol:1, subscriptions:[{session_id:session,incarnation,after,projection}]}}));
         } catch (error) { this.subscriptions.delete(id); throw error; }
         return () => {
             if (!this.subscriptions.delete(id) || this.socket.readyState !== 1) return;

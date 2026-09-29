@@ -243,3 +243,13 @@ test('pictures steer the active run rather than queueing a new turn',async()=>{
  const command=f.commands.find(c=>c.op==='steer');assert.ok(command,tab.notice);assert.equal(command.run_id,'r');assert.equal(command.parts[0].attachment.id,'artifact');
  assert.equal(f.commands.some(c=>c.op==='submit_content'),false);assert.equal(tab.pictures.length,0);f.workspace.close();
 });
+
+test('refresh retains the same subscription across canonical reads', async () => {
+ const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
+ assert.equal(f.subscriptions(),1);
+ await f.workspace.refresh(key);
+ assert.equal(f.subscriptions(),1,'canonical status reads must not tear down the subscription');
+ assert.equal(f.workspace.needsRefresh(key),false);
+ f.workspace.close();
+ assert.equal(f.subscriptions(),0);
+});

@@ -118,11 +118,14 @@ export function RunStatus({tab}: {tab: Tab}) {
 }
 
 export function Conversation({tab, workspace, active, onSettings, onRecover, connection, voyage}: {tab: Tab; workspace: Workspace; active: boolean; onSettings:()=>void; onRecover?:()=>void; connection?:any; voyage?:any}) {
-    const run = tab.snapshot?.run, scroll = useRef<HTMLDivElement>(null), following = useRef(true);
-    const loadingHistory = useRef(false), retryHistoryAt = useRef(0);
+    const run = tab.snapshot?.run, scroll = useRef<HTMLDivElement>(null), following = useRef(tab.following ?? true);
+    const loadingHistory = useRef(false), retryHistoryAt = useRef(0), wasActive = useRef(active);
     const [showJump,setShowJump] = useState(false);
     const [turnNavigation,setTurnNavigation]=useState({previous:false,next:false});
-    useEffect(() => {if(active && following.current && scroll.current) scroll.current.scrollTop=scroll.current.scrollHeight;},[active,tab.snapshot]);
+    useEffect(() => {if(active && scroll.current) {
+        if (active && !wasActive.current && tab.scrollTop !== undefined) scroll.current.scrollTop = following.current ? scroll.current.scrollHeight : tab.scrollTop;
+        wasActive.current = active;
+    }},[active,tab.snapshot]);
     const turnPositions=()=>{
         const container=scroll.current;
         if(!container)return [];
@@ -139,7 +142,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
         const positions=turnPositions(),top=container.scrollTop;
         const target=direction==='previous'?positions.filter(position=>position<top-40).at(-1):positions.find(position=>position>top+40);
         if(target==null)return;
-        following.current=false;container.scrollTo({top:target,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+        following.current=false;tab.following=false;container.scrollTo({top:target,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
         updateTurnNavigation();
     };
     const loadNearTop = () => {
@@ -148,7 +151,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
         // Preload within one eighth of the visible transcript; also fill short histories.
         if (el.scrollTop > el.clientHeight / 8 && el.scrollHeight > el.clientHeight) return;
         loadingHistory.current = true;
-        following.current = false;
+        following.current = false; tab.following = false;
         const height = el.scrollHeight, top = el.scrollTop;
         void workspace.earlier(tab.key).then(() => {
             if (tab.snapshot?.message_offset === offset) retryHistoryAt.current = Date.now() + 3000;
@@ -176,14 +179,14 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
     const location=[connection?.name,tab.snapshot?.workspace].filter(Boolean).join(' · ');
     return <section className="conversation" hidden={!active} aria-label={tab.title}>
         <header className="conversation-header"><div className="conversation-title"><h1 title={tab.title}>{tab.title}</h1>{location&&<p title={location}>{location}</p>}</div>{headerStatus&&<span className="status-label" data-status-tone={headerStatus.tone} data-animated={headerStatus.animated||undefined}><i aria-hidden="true"/>{headerStatus.label}</span>}</header>
-        <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {const el=scroll.current!;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;setShowJump(!following.current);loadNearTop();}}><div className="thread">
+        <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {const el=scroll.current!;tab.scrollTop=el.scrollTop;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;tab.following=following.current;setShowJump(!following.current);loadNearTop();}}><div className="thread">
             {!tab.snapshot && <p className="empty">Waiting for a current Vessel snapshot…</p>}
             {threadRows(tab.snapshot?.messages||[]).map(row=>row.entries?<ToolGroup key={row.key} entries={row.entries} running={['running','starting','cancelling'].includes(run?.state)} messageStart={run?.message_start} decisions={tab.decisions.length>0} renderMessage={renderMessage}/>:<React.Fragment key={row.key}>{renderMessage(row.message)}</React.Fragment>)}
             <Output tab={tab} workspace={workspace}/>
             <RunStatus tab={tab}/>
             {(run?.tool_previews || []).filter((preview:any)=>!(tab.snapshot?.messages||[]).some((message:any)=>message.tool_calls?.some((call:any)=>call.id===preview.call_id))).map((preview:any,index:number) => <Collapsible className="tool-entry" key={index}><CollapsibleTrigger asChild><Button variant="ghost" className={toolTrigger} type="button"><ChevronRightIcon className="tool-chevron" aria-hidden="true"/><span className="tool-summary-text">Tool preview · {preview.name || 'Tool'}</span></Button></CollapsibleTrigger><CollapsibleContent><pre>{content(preview.arguments)}</pre></CollapsibleContent></Collapsible>)}
             {(run?.reasoning_previews||[]).map((preview:any,index:number)=><Collapsible className="tool-entry" key={index}><CollapsibleTrigger asChild><Button variant="ghost" className={toolTrigger} type="button"><ChevronRightIcon className="tool-chevron" aria-hidden="true"/><span className="tool-summary-text">{preview.kind==='summary'?'Reasoning summary':'Provider thinking'} · {preview.finalized?'finalized disclosure':'streaming · provisional'}</span></Button></CollapsibleTrigger><CollapsibleContent><pre>{preview.text}</pre>{preview.truncated&&<small>Preview truncated</small>}</CollapsibleContent></Collapsible>)}
-        </div>{(turnNavigation.previous||turnNavigation.next||showJump)&&<div className="jump-anchor"><div className="turn-navigation" role="group" aria-label="Conversation navigation"><Button variant="ghost" size="icon-sm" type="button" aria-label="Previous user message" title="Previous user message" disabled={!turnNavigation.previous} onClick={()=>jumpTurn('previous')}><ArrowUpIcon aria-hidden="true"/></Button><Button variant="ghost" size="icon-sm" type="button" aria-label="Next user message" title="Next user message" disabled={!turnNavigation.next} onClick={()=>jumpTurn('next')}><ArrowDownIcon aria-hidden="true"/></Button>{showJump&&<Button variant="ghost" size="sm" className="jump-latest" type="button" onClick={() => {following.current=true;setShowJump(false);scroll.current?.scrollTo({top:scroll.current.scrollHeight});}}>Latest<ArrowDownIcon aria-hidden="true"/></Button>}</div></div>}</div>
+        </div>{(turnNavigation.previous||turnNavigation.next||showJump)&&<div className="jump-anchor"><div className="turn-navigation" role="group" aria-label="Conversation navigation"><Button variant="ghost" size="icon-sm" type="button" aria-label="Previous user message" title="Previous user message" disabled={!turnNavigation.previous} onClick={()=>jumpTurn('previous')}><ArrowUpIcon aria-hidden="true"/></Button><Button variant="ghost" size="icon-sm" type="button" aria-label="Next user message" title="Next user message" disabled={!turnNavigation.next} onClick={()=>jumpTurn('next')}><ArrowDownIcon aria-hidden="true"/></Button>{showJump&&<Button variant="ghost" size="sm" className="jump-latest" type="button" onClick={() => {following.current=true;tab.following=true;setShowJump(false);scroll.current?.scrollTo({top:scroll.current.scrollHeight});}}>Latest<ArrowDownIcon aria-hidden="true"/></Button>}</div></div>}</div>
         <Decisions tab={tab} workspace={workspace}/>
         <Composer tab={tab} workspace={workspace} onSettings={onSettings} onRecover={onRecover} connection={active?connection:null} voyage={active?voyage:null}/>
     </section>;
@@ -218,7 +221,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         return () => window.removeEventListener('popstate', changed);
     }, []);
     useEffect(() => {
-        fleet.start(); const timer = setInterval(() => { fleet.poll(); for (const key of workspace.tabs.keys()) { void workspace.refresh(key); void workspace.observePending(key); } workspace.changed(); }, 5000);
+        fleet.start(); const timer = setInterval(() => { fleet.poll(); for (const key of workspace.tabs.keys()) { if (workspace.needsRefresh(key)) void workspace.refresh(key); void workspace.observePending(key); } workspace.changed(); }, 5000);
         return () => { clearInterval(timer); workspace.close(); fleet.close(); };
     }, [runtime]);
     const [manage,setManage] = useState(()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('manage-vessels'));

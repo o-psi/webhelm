@@ -41,3 +41,26 @@ test('DOM previews preserve disclosure, bound UTF-8 and reconcile finalized/cano
     assert.equal(root.children.length,1);assert.match(root.textContent,/finalized disclosure/);
     renderPreviews(root,null);assert.equal(root.hidden,true);assert.equal(root.children.length,0);
 });
+
+test('public-v2 appends UTF-8 deltas and canonical messages at sparse cursors without a snapshot', () => {
+    const stream = new ConversationStream(); stream.seed(snapshot,'incarnation');
+    const state={revision:3,observation_cursor:10,messages:[],run:{run_id:'run',live_text:'é'}};
+    const page=(cursor,kind,payload,revision=3)=>({protocol:1,session_id:'session',incarnation:'incarnation',error:null,outcome_unknown:false,result:{projection:'public-v2',cursor,latest_cursor:cursor+4,has_more:false,replay_gap:false,events:[{cursor,session_id:'session',revision,run_id:'run',kind,payload}]}});
+    assert.equal(stream.accept(page(17,'text_delta',{offset:2,text:'!'}),state),'append');
+    assert.equal(state.run.live_text,'é!');
+    assert.equal(stream.accept(page(17,'text_delta',{offset:2,text:'!'}),state),'duplicate');
+    const message={message_index:0,role:'assistant',content:'é!'};
+    assert.equal(stream.accept(page(25,'message_finalized',{message_index:0,message}),state),'append');
+    assert.deepEqual(state.messages,[message]);
+    assert.equal(stream.accept(page(31,'text_delta',{offset:0,text:'wrong'}),state),'resync');
+});
+test('public-v2 unknown events, incarnation changes and replay gaps recover through snapshot', () => {
+    const stream=new ConversationStream();stream.seed(snapshot,'incarnation');
+    const state={revision:3,messages:[],run:{run_id:'run'}};
+    const page=event(15);page.result.projection='public-v2';page.result.events[0]={cursor:15,session_id:'session',revision:4,kind:'future',payload:{}};
+    assert.equal(stream.accept(page,state),'refresh');
+    const changed=structuredClone(page);changed.incarnation='replacement';changed.result.cursor=18;changed.result.events[0].cursor=18;
+    assert.equal(stream.accept(changed,state),'resync');
+    stream.seed(snapshot,'incarnation');page.result.replay_gap=true;
+    assert.equal(stream.accept(page,state),'resync');
+});

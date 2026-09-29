@@ -43,23 +43,37 @@ export class ConversationStream {
         this.cursor = snapshot.observation_cursor;
         this.valid = Number.isSafeInteger(this.cursor) && this.cursor >= 0;
     }
-    accept(event) {
+    accept(event, snapshot) {
         const fail = () => { this.valid = false; return 'resync'; };
         if (!this.valid || event.protocol !== 1 || event.session_id !== this.session || event.incarnation !== this.incarnation || event.error != null || event.outcome_unknown !== false) return fail();
         const page = event.result;
-        if (!page || page.projection !== 'public-v1' || page.replay_gap || !Number.isSafeInteger(page.cursor) || !Number.isSafeInteger(page.latest_cursor) || page.cursor > page.latest_cursor || !Array.isArray(page.events)) return fail();
+        if (!page || !['public-v1','public-v2'].includes(page.projection) || page.replay_gap || !Number.isSafeInteger(page.cursor) || !Number.isSafeInteger(page.latest_cursor) || page.cursor > page.latest_cursor || !Array.isArray(page.events)) return fail();
         if (page.cursor < this.cursor) return fail();
-        if (page.cursor === this.cursor) return 'duplicate';
-        // SQLite observation cursors are globally allocated, not session-contiguous.
-        let cursor = this.cursor;
+        let cursor = this.cursor, changed = false, refresh = false;
         for (const item of page.events) {
-            if (!Number.isSafeInteger(item.cursor) || item.cursor <= cursor || item.cursor > page.cursor || item.session_id !== this.session) return fail();
+            if (!Number.isSafeInteger(item.cursor) || item.cursor > page.cursor || item.session_id !== this.session) return fail();
+            if (item.cursor <= cursor) continue;
             cursor = item.cursor;
+            if (page.projection === 'public-v1') { refresh = true; continue; }
+            if (!Number.isSafeInteger(item.revision) || !snapshot || item.revision < snapshot.revision) continue;
+            const payload = item.payload;
+            if ((item.kind === 'message_created' || item.kind === 'message_finalized') && Number.isSafeInteger(payload?.message_index) && payload.message?.message_index === payload.message_index && Array.isArray(snapshot.messages)) {
+                const messages = snapshot.messages;
+                const index = messages.findIndex(message => message.message_index === payload.message_index);
+                if (index >= 0) messages[index] = payload.message;
+                else if (!messages.length || messages.at(-1).message_index + 1 === payload.message_index) messages.push(payload.message);
+                else return fail();
+                changed = true;
+            } else if (item.kind === 'text_delta' && item.run_id === snapshot.run?.run_id && Number.isSafeInteger(payload?.offset) && typeof payload.text === 'string') {
+                const text = snapshot.run.live_text || '';
+                if (new TextEncoder().encode(text).length !== payload.offset) return fail();
+                snapshot.run.live_text = text + payload.text;
+                changed = true;
+            } else refresh = true;
         }
         if (cursor !== page.cursor) return fail();
         this.cursor = cursor;
-        // Existing public-v1 events are invalidations, not appendable text.
-        // Unknown kinds also require canonical recovery rather than guessing.
-        return 'refresh';
+        if (snapshot && changed) snapshot.observation_cursor = cursor;
+        return refresh ? 'refresh' : changed ? 'append' : 'duplicate';
     }
 }
