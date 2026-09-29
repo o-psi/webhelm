@@ -5,6 +5,24 @@ import {createRoot} from 'react-dom/client';
 import {JSDOM} from 'jsdom';
 import {Conversation,CopyResponse} from '../resources/react/App.tsx';
 
+test('live tool preview appears before the working indicator', async () => {
+    const dom = new JSDOM('<div id="mount"></div>', {pretendToBeVisual:true});
+    const saved = {window:globalThis.window, document:globalThis.document, getComputedStyle:globalThis.getComputedStyle, requestAnimationFrame:globalThis.requestAnimationFrame, cancelAnimationFrame:globalThis.cancelAnimationFrame};
+    Object.defineProperty(dom.window,'matchMedia',{value:()=>({matches:false,addEventListener(){},removeEventListener(){}})});
+    Object.assign(globalThis, {window:dom.window, document:dom.window.document, getComputedStyle:dom.window.getComputedStyle.bind(dom.window), requestAnimationFrame:(fn:FrameRequestCallback)=>setTimeout(()=>fn(0),0), cancelAnimationFrame:clearTimeout, IS_REACT_ACT_ENVIRONMENT:true});
+    const root = createRoot(dom.window.document.querySelector('#mount')!);
+    const tab:any = {key:'t', title:'Voyage', snapshot:{messages:[], run:{state:'running', tool_previews:[{call_id:'pending',name:'shell',arguments:'echo hello'}]}}, decisions:[], pictures:[], draft:'', busy:false};
+    const workspace:any = {actionable:()=>false, permitted:()=>false, pending:()=>[]};
+    try {
+        await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:true,onSettings:()=>{}})));
+        const thread = dom.window.document.querySelector('.thread')!;
+        const preview = thread.querySelector('.tool-entry')!;
+        const working = thread.querySelector('.working-indicator')!;
+        assert.match(preview.textContent!, /Tool preview · shell/);
+        assert.ok(preview.compareDocumentPosition(working) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    } finally {await React.act(async()=>root.unmount());Object.assign(globalThis,saved);dom.window.close();}
+});
+
 test('transcript preloads at the top edge, preserves the anchor and avoids duplicate reads', async () => {
     const dom = new JSDOM('<div id="mount"></div>', {pretendToBeVisual:true});
     const saved = {window:globalThis.window, document:globalThis.document, requestAnimationFrame:globalThis.requestAnimationFrame};
