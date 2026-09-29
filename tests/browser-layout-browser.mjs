@@ -94,9 +94,11 @@ try {
         check(await page.getByRole('menuitem',{name:'Manage Vessels'}).isVisible(),'mobile: Vessel menu did not open inside the sheet');
         await page.keyboard.press('Escape');
         await page.getByRole('button',{name:'Account and appearance'}).click();
-        await page.getByRole('menuitemradio',{name:'dark'}).click();
+        await page.getByRole('menuitem',{name:'Appearance'}).click();
+        await page.getByRole('button',{name:'dark',exact:true}).click();
         check(await page.locator('html.dark').count()===1,'mobile: dark appearance did not apply');
-        await page.keyboard.press('Escape');
+        await page.getByRole('button',{name:'Close settings'}).click();
+        await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
         await page.locator('.sidebar').click({position:{x:150,y:400}});
         await page.waitForTimeout(300);
         const selectTheme=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='var(--foreground)';document.body.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {expected,actual:getComputedStyle(document.querySelector('.sidebar [data-slot="native-select"]')).color};});
@@ -104,7 +106,10 @@ try {
         check(Math.abs(lightness(selectTheme.actual)-lightness(selectTheme.expected))<0.02,`mobile: native select foreground ${JSON.stringify(selectTheme)}`);
         await page.screenshot({path:`${output}/${label}-dark-empty.png`});
         await page.getByRole('button',{name:'Account and appearance'}).click();
-        await page.getByRole('menuitemradio',{name:'light'}).click();
+        await page.getByRole('menuitem',{name:'Appearance'}).click();
+        await page.getByRole('button',{name:'light',exact:true}).click();
+        await page.getByRole('button',{name:'Close settings'}).click();
+        await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     }
     await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
@@ -141,7 +146,10 @@ try {
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.getByRole('button',{name:'Account and appearance'}).click();
-    await page.getByRole('menuitemradio',{name:'dark'}).click();
+    await page.getByRole('menuitem',{name:'Appearance'}).click();
+    await page.getByRole('button',{name:'dark',exact:true}).click();
+    await page.getByRole('button',{name:'Close settings'}).click();
+    if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     check(await page.locator('html.dark').count()===1,`${label}: dark appearance did not apply to Vessel maintenance`);
     await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
@@ -156,7 +164,10 @@ try {
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.getByRole('button',{name:'Account and appearance'}).click();
-    await page.getByRole('menuitemradio',{name:'light'}).click();
+    await page.getByRole('menuitem',{name:'Appearance'}).click();
+    await page.getByRole('button',{name:'light',exact:true}).click();
+    await page.getByRole('button',{name:'Close settings'}).click();
+    if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.locator('.voyage-card').click();
     if(label==='mobile')await page.locator('.mobile-navigation').waitFor({state:'hidden'});
     const conversation=page.locator('.conversation:not([hidden])');
