@@ -56,6 +56,41 @@ test('reload observes the saved operation before allowing another preparation',a
  assert.match($('update-status').textContent,/Build prepared for review/);
  assert.equal(seen.some(command=>command.op==='update_apply'),false);
 });
+test('expired prepared review cannot approve and offers a fresh preparation path',async t=>{
+ const {root,$}=fixture(t),seen=[];
+ let record={operation_id:'saved-operation',phase:'ready',release_id:'a'.repeat(64),version:'v1.0.2',expires_at:Math.floor(Date.now()/1000)-1};
+ localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:record.operation_id}));
+ const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:async({command})=>{
+   seen.push(command.op);
+   if(command.op==='update_discard')record={...record,phase:'discarded'};
+   return reply(structuredClone(record));
+ }}};
+ const update=vesselUpdate(root,{show:()=>{},resume:()=>{}});
+ update.bind(c,{remote_updates:true,scope:'owner',version:'1.0.2'});await settle();
+ assert.equal($('update-approve').disabled,true);
+ assert.match($('update-status').textContent,/review expired.*prepare a fresh build/i);
+ assert.match($('update-discard').textContent,/Discard expired review/);
+ $('update-approve').click();assert.equal(seen.includes('update_apply'),false);
+ $('update-discard').click();await settle();
+ assert.equal($('update-source').hidden,false);
+ assert.equal(seen.includes('update_apply'),false);
+});
+test('rejected approval remains visible after status confirms the review is still ready',async t=>{
+ const {root,$}=fixture(t),seen=[];
+ const record={operation_id:'saved-operation',phase:'ready',release_id:'a'.repeat(64),version:'v1.0.2',expires_at:Math.floor(Date.now()/1000)+1800};
+ localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:record.operation_id}));
+ const c={id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange:async({command})=>{
+   seen.push(command.op);
+   if(command.op==='update_apply')return {protocol:1,error:'refused',outcome_unknown:false,result:null};
+   return reply(structuredClone(record));
+ }}};
+ const update=vesselUpdate(root,{show:()=>{},resume:()=>{}});
+ update.bind(c,{remote_updates:true,scope:'owner',version:'1.0.2'});await settle();
+ $('update-approve').click();await settle();
+ assert.equal(seen.filter(op=>op==='update_apply').length,1);
+ assert.match($('update-status').textContent,/could not confirm.*review is still ready/i);
+ assert.equal($('update-review').hidden,false);
+});
 test('a historical completed update does not block a fresh review or falsely verify another release',async t=>{
  const {root,$}=fixture(t),seen=[];
  let record={operation_id:'older-update',phase:'complete',release_id:'a'.repeat(64),version:'older'};

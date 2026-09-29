@@ -3,17 +3,19 @@ import {Button} from './components/ui/button';
 import {Alert,AlertDescription} from './components/ui/alert';
 import React, {useEffect, useRef} from 'react';
 import {vesselUpdate} from '../js/vessel-update.js';
-import {compareReleaseVersions} from '../js/release-channels.js';
+import {compareReleaseVersions,installedReleaseChannel,isNewerOnInstalledChannel} from '../js/release-channels.js';
 
 export type ReleaseCheck = {phase:'checking'|'published'|'none'|'error'; version?:string};
 export type Releases = Record<'stable'|'nightly',ReleaseCheck>;
 
-function releaseDescription(release:ReleaseCheck|undefined, installed?:string) {
+function releaseDescription(channel:'stable'|'nightly',release:ReleaseCheck|undefined, installed?:string) {
     if (!release || release.phase === 'checking') return {version:'Checking…',status:'Reading published releases'};
     if (release.phase === 'error') return {version:'Check unavailable',status:'You can still prepare on the Vessel'};
     if (release.phase === 'none' || !release.version) return {version:'No published build',status:'You can check again later'};
+    const installedChannel=installedReleaseChannel(installed);
+    if (installedChannel && installedChannel!==channel) return {version:release.version,status:'Published on another channel'};
     const comparison = compareReleaseVersions(release.version,installed);
-    return {version:release.version,status:comparison === 1 ? 'Newer release published' : comparison === null ? 'Vessel verifies compatibility on prepare' : 'Installed version is current or newer'};
+    return {version:release.version,status:isNewerOnInstalledChannel(channel,release.version,installed) ? 'Newer release published' : comparison === null ? 'Vessel verifies compatibility on prepare' : 'Installed version is current or newer'};
 }
 
 // The same receipt controller is used across the cutover. It owns this static
@@ -25,7 +27,7 @@ export function VesselUpdateMarkup({releases,installed}: {releases?:Releases; in
         <div className="rounded-lg bg-muted/50 px-4 py-3"><span className="text-xs font-medium text-muted-foreground">Installed version</span><p id="update-current" className="mt-1 break-all font-mono text-sm font-semibold"/></div>
         <div className="grid gap-2 sm:grid-cols-2" role="status" aria-label="Published release channels">
             {(['stable','nightly'] as const).map(channel=>{
-                const description=releaseDescription(releases?.[channel],installed);
+                const description=releaseDescription(channel,releases?.[channel],installed);
                 return <div key={channel} className="min-w-0 rounded-lg border px-3 py-2"><div className="text-xs font-medium text-muted-foreground">{channel==='stable'?'Stable':'Development'}</div><div className="truncate text-sm font-semibold" title={description.version}>{description.version}</div><div className="text-xs text-muted-foreground">{description.status}</div></div>;
             })}
         </div>

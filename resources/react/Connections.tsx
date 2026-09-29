@@ -8,7 +8,7 @@ import {Alert,AlertDescription} from './components/ui/alert';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import {VesselUpdate,type Releases} from './VesselUpdate';
 import {vesselRead} from './settings';
-import {checkReleaseChannel,compareReleaseVersions} from '../js/release-channels.js';
+import {checkReleaseChannel,installedReleaseChannel,isNewerOnInstalledChannel} from '../js/release-channels.js';
 import React, {useEffect, useRef, useState} from 'react';
 import {ArrowLeftIcon,ArrowRightIcon,ChevronDownIcon,ChevronRightIcon,ExternalLinkIcon,PlusIcon,RefreshCwIcon,ServerIcon,XIcon} from 'lucide-react';
 
@@ -82,12 +82,13 @@ function VesselOverviewCard({vessel, connection, status, releases, onView}: {ves
         return () => { alive = false; };
     }, [connection, connection?.client, vessel.vessel_id, connected]);
     const versionLabel = version === undefined ? 'Checking version…' : version ? `Version ${version}` : 'Version unavailable';
-    const newer = version ? (['stable','nightly'] as const).filter(channel=>releases[channel].version && compareReleaseVersions(releases[channel].version,version)===1) : [];
+    const channel = installedReleaseChannel(version);
+    const newer = channel && releases[channel].version && isNewerOnInstalledChannel(channel,releases[channel].version,version);
     const host = endpointHost(vessel.endpoint);
     return <Card role="article" className="connections-card overflow-hidden p-0">
         <button type="button" className="group flex w-full flex-col gap-2 rounded-xl p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring" aria-label={`View details for ${vessel.name}`} onClick={onView}>
             <span className="flex w-full min-w-0 items-center gap-2"><span className="connections-server" aria-hidden="true"><ServerIcon/></span><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{vessel.name}</h3><Badge variant="outline" className={`connections-status ${connected ? 'is-connected' : ''}`}><i aria-hidden="true"/>{status}</Badge></span>
-            <span className="flex w-full min-w-0 items-center gap-2 pl-10 text-xs text-muted-foreground"><span className="max-w-[60%] shrink-0 truncate font-medium text-foreground" title={versionLabel}>{versionLabel}</span>{newer.length>0 && <Badge variant="secondary" title={`Newer published ${newer.join(' and ')} release; the Vessel verifies it on Prepare`}>New release</Badge>}<span aria-hidden="true">·</span><span className="min-w-0 flex-1 truncate" title={host}>{host}</span><ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true"/></span>
+            <span className="flex w-full min-w-0 items-center gap-2 pl-10 text-xs text-muted-foreground"><span className="max-w-[60%] shrink-0 truncate font-medium text-foreground" title={versionLabel}>{versionLabel}</span>{newer && <Badge variant="secondary" title={`Newer published ${channel} release; the Vessel verifies it on Prepare`}>New release</Badge>}<span aria-hidden="true">·</span><span className="min-w-0 flex-1 truncate" title={host}>{host}</span><ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true"/></span>
         </button>
     </Card>;
 }
