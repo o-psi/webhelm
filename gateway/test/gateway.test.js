@@ -281,3 +281,11 @@ test('removed draft commands are rejected; direct session image uploads remain v
   assert.equal(validCommand(frame({op:'drafts',operation:{op:'list'}})),false);
   assert.equal(validCommand(frame({op:'upload_image',session_id:randomUUID(),upload_id:randomUUID(),name:'picture.png',data_base64:'eA=='})),true);
 });
+
+
+test('catalogue changes admit bounded read cursors and reject extra authority',()=>{
+  const read={op:'catalogue_changes',after:null,limit:128,wait_ms:10000};
+  assert.equal(validCommand(command(read)),true);
+  assert.equal(validCommand(command({...read,after:0})),true);
+  for(const extra of [{after:-1},{after:Number.MAX_SAFE_INTEGER+1},{limit:0},{limit:129},{wait_ms:10001},{token:'secret'},{session_id:randomUUID()}]) assert.equal(validCommand(command({...read,...extra})),false);
+});

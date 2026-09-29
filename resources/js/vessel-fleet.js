@@ -62,9 +62,11 @@ export class VesselFleet {
             } catch { throw Object.assign(new Error('Command journal unavailable'), {permanent:true}); }
             const client = new VesselSocket(socket, reason => {
                 if (!current() || connection.client !== client) return;
+                connection.catalogueObserver?.abort();
                 connection.client = null; connection.status = `Offline · ${reason}`;
                 clearTimeout(connection.renewal); this.changed(); this.schedule(connection);
             });
+            connection.catalogueObserver?.abort();
             connection.socket = socket; connection.client = client; connection.opening = null;
             // New reads/commands use the replacement. Already dispatched commands
             // keep receiving replies on the old socket; nothing is replayed.
@@ -76,7 +78,7 @@ export class VesselFleet {
             connection.status = 'Connected';
             connection.renewal = setTimeout(() => this.connect(connection, true), Math.max(1000, auth.expires_at_ms - Date.now() - 30000));
             log(renewing ? 'renewal_ack' : 'connected',{connection:connection.id,generation});
-            this.changed(); await this.catalogue(connection);
+            this.changed(); this.observeCatalogue(connection);
         } catch (error) {
             socket?.close();
             if (!current()) return;
@@ -95,6 +97,73 @@ export class VesselFleet {
         connection.reconnect = setTimeout(() => this.connect(connection), connection.retry);
         connection.retry = Math.min(connection.retry * 2, 15000);
     }
+    async observeCatalogue(connection) {
+        const client = connection.client, generation = connection.generation;
+        const controller = new AbortController();
+        connection.catalogueObserver = controller;
+        const current = () => !this.closed && !controller.signal.aborted
+            && client === connection.client && generation === connection.generation;
+        const read = async command => {
+            const response = await client.exchange(command);
+            if (response.protocol !== 1 || response.error != null || response.outcome_unknown !== false) throw Error('Voyage list unavailable');
+            return response.result;
+        };
+        const hydrate = async () => {
+            const entries = await read(request('catalogue'));
+            if (!Array.isArray(entries) || entries.length > 4096) throw Error('Invalid voyage list');
+            if (current()) { connection.voyages = entries; connection.status = 'Connected'; this.changed(); }
+        };
+        const page = async (after, wait_ms) => {
+            const value = await read(request('catalogue_changes', {after, limit:128, wait_ms}));
+            if (!value || !Number.isSafeInteger(value.cursor) || value.cursor < 0
+                || !Number.isSafeInteger(value.latest_cursor) || value.latest_cursor < value.cursor
+                || typeof value.replay_gap !== 'boolean' || value.has_more !== (value.cursor < value.latest_cursor)
+                || (after === null && !value.replay_gap)
+                || (!value.replay_gap && after !== null && value.cursor < after)
+                || !Array.isArray(value.entries) || value.entries.length > 128
+                || (value.replay_gap && (value.entries.length || value.has_more))
+                || (!value.replay_gap && value.cursor === after && (value.entries.length || value.has_more))
+                || value.entries.some(entry => !entry || typeof entry.session_id !== 'string' || typeof entry.incarnation !== 'string')
+                || new Set(value.entries.map(entry => entry.session_id)).size !== value.entries.length) throw Error('Invalid catalogue change page');
+            return value;
+        };
+        while (current()) {
+            try {
+                const caps = await read(request('capabilities'));
+                if (!current()) return;
+                if (!caps?.features?.includes('catalogue_changes')) {
+                    connection.catalogueObserver = null;
+                    await this.catalogue(connection);
+                    return;
+                }
+                // Checkpoint before hydration: a change racing the full read
+                // remains in the next page. Pages are current projections.
+                let cursor = (await page(null, 0)).cursor;
+                if (!current()) return;
+                await hydrate();
+                while (current()) {
+                    const next = await page(cursor, 8000);
+                    if (!current()) return;
+                    const previousCursor = cursor;
+                    cursor = next.cursor;
+                    if (next.replay_gap) { await hydrate(); continue; }
+                    if (next.entries.length) {
+                        const entries = new Map(connection.voyages.map(entry => [entry.session_id, entry]));
+                        for (const entry of next.entries) entries.set(entry.session_id, entry);
+                        if (entries.size > 4096) throw Error('Voyage list exceeds limit');
+                        connection.voyages = [...entries.values()].sort((a,b) => a.session_id.localeCompare(b.session_id));
+                        connection.status = 'Connected'; this.changed();
+                    }
+                    // Bound request rate even if a peer ignores long-poll waits.
+                    if (cursor === previousCursor) await catalogueDelay(controller.signal, 200);
+                }
+            } catch {
+                if (!current()) return;
+                connection.status = 'Voyage list unavailable'; this.changed();
+                await catalogueDelay(controller.signal, 2000);
+            }
+        }
+    }
     async catalogue(connection) {
         if (!connection.client || connection.polling || Date.now() - connection.lastCatalogue < 10000) return;
         const client = connection.client, generation = connection.generation;
@@ -109,20 +178,30 @@ export class VesselFleet {
             if (generation !== connection.generation || client !== connection.client || this.closed) return;
             connection.status = 'Voyage list unavailable';
         } finally {
-            if (generation === connection.generation) {
+            if (generation === connection.generation && client === connection.client && !this.closed) {
                 connection.polling = false; connection.lastCatalogue = Date.now(); this.changed();
             }
         }
     }
-    poll() { for (const connection of this.connections.values()) this.catalogue(connection); }
+    poll() { for (const connection of this.connections.values()) if (!connection.catalogueObserver) this.catalogue(connection); }
     reconnect() {
         for (const connection of this.connections.values()) { connection.stopped = false; this.connect(connection); }
     }
     close() {
         this.closed = true;
         for (const connection of this.connections.values()) {
+            connection.catalogueObserver?.abort();
             connection.generation++; clearTimeout(connection.reconnect); clearTimeout(connection.renewal); connection.opening?.close(); connection.socket?.close();
             for (const client of connection.draining || []) client.close();
         }
     }
+}
+
+function catalogueDelay(signal, milliseconds) {
+    return new Promise(resolve => {
+        const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
+        const timer = setTimeout(finish, milliseconds);
+        signal.addEventListener('abort', finish, {once:true});
+        if (signal.aborted) finish();
+    });
 }

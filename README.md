@@ -33,6 +33,12 @@ do not own execution or transport state.
 
 React owns voyage navigation, drafts, history, run status, settings, decisions,
 attachments and connection management.
+Vessels advertising `catalogue_changes` supply bounded sidebar updates through
+an independent catalogue observer. It checkpoints before hydration, merges current
+voyage projections, and rehydrates on explicit replay gaps. Socket renewal fences
+late replies from the old connection; admitted commands still drain without replay.
+Older Vessels keep the periodic catalogue fallback during the v1.0.3 transition.
+Catalogue metadata does not carry execution authority or replace transcript events.
 The sidebar account menu opens a global Settings modal with HelmWeb Account and
 Appearance pages. HelmWeb Account shows the current plan, Vessel usage and Stripe
 checkout or billing portal controls; Manage Vessels retains connection ordering

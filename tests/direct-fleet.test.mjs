@@ -7,7 +7,7 @@ import {request} from '../resources/js/vessel-client.js';
 const vessel = '10000000-0000-4000-8000-000000000001';
 const pause = () => new Promise(resolve => setTimeout(resolve, 5));
 async function until(predicate) { for(let i=0;i<100;i++) {if(predicate())return;await pause();} assert.fail('connection did not settle'); }
-function fixture(t, count=1) {
+function fixture(t, count=1, handle=null) {
     const sockets=[], requests=[], store=new Map();
     globalThis.crypto ||= webcrypto;
     globalThis.localStorage={get length(){return store.size;},key:i=>[...store.keys()][i],getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)};
@@ -22,7 +22,9 @@ function fixture(t, count=1) {
             if(frame.type==='authenticate') {
                 assert.deepEqual(Object.keys(frame).sort(),['token','type']);
                 queueMicrotask(()=>this.receive({type:'hello',protocol:1,socket_id:vessel,vessel_id:vessel}));
-            } else if(frame.request.command.op==='catalogue') queueMicrotask(()=>this.reply(frame,[]));
+            } else if(handle?.(this, frame)) return;
+            else if(frame.request.command.op==='capabilities') queueMicrotask(()=>this.reply(frame,{features:[]}));
+            else if(frame.request.command.op==='catalogue') queueMicrotask(()=>this.reply(frame,[]));
         }
         reply(frame,result) {this.receive({type:'reply',request_id:frame.request_id,response:{protocol:1,error:null,outcome_unknown:false,result}});}
         close(){if(this.readyState===3)return;this.readyState=3;const e=new Event('close');e.code=1000;e.reason='';this.dispatchEvent(e);}
@@ -80,4 +82,59 @@ test('closing during bootstrap prevents a late socket and reconnect',async t=>{
     const {fleet,sockets,setMint}=fixture(t);let resolve;
     setMint(()=>new Promise(r=>{resolve=r;}));const connecting=fleet.connect(fleet.connections.get('0'));
     fleet.close();resolve({});await connecting;assert.equal(sockets.length,0);
+});
+
+const entry = (name='Initial') => ({session_id:vessel,incarnation:vessel,state:'live',workspace:'/synthetic',name});
+const page = (cursor, entries=[], extra={}) => ({cursor,latest_cursor:cursor,has_more:false,replay_gap:false,entries,...extra});
+function feedFixture(t) {
+    const pending=[]; let hydration=[entry()];
+    const result=fixture(t,1,(socket,frame)=>{
+        const command=frame.request.command;
+        if(command.op==='capabilities') {queueMicrotask(()=>socket.reply(frame,{features:['catalogue_changes']}));return true;}
+        if(command.op==='catalogue') {queueMicrotask(()=>socket.reply(frame,hydration));return true;}
+        if(command.op==='catalogue_changes') {pending.push({socket,frame});return true;}
+        return false;
+    });
+    return {...result,pending,setHydration:value=>{hydration=value;},answer:(index,value)=>pending[index].socket.reply(pending[index].frame,value)};
+}
+
+test('catalogue checkpoint precedes hydration, changes merge, and gaps rehydrate',async t=>{
+    const {fleet,pending,requests,answer,setHydration}=feedFixture(t);fleet.start();const c=fleet.connections.get('0');
+    await until(()=>pending.length===1);
+    assert.equal(requests.filter(r=>r.frame.request?.command.op==='catalogue').length,0);
+    assert.equal(pending[0].frame.request.command.after,null);
+    answer(0,page(4,[],{replay_gap:true}));
+    await until(()=>pending.length===2);
+    assert.equal(c.voyages[0].name,'Initial');
+    assert.equal(pending[1].frame.request.command.after,4);
+    c.lastCatalogue=0;fleet.poll();
+    assert.equal(requests.filter(r=>r.frame.request?.command.op==='catalogue').length,1);
+    answer(1,page(5,[entry('Changed')]));
+    await until(()=>pending.length===3);
+    assert.equal(c.voyages[0].name,'Changed');
+    assert.equal(c.voyages.length,1);
+    setHydration([entry('Gap recovery')]);answer(2,page(9000,[],{replay_gap:true}));
+    await until(()=>pending.length===4);
+    assert.equal(c.voyages[0].name,'Gap recovery');
+    assert.equal(pending[3].frame.request.command.after,9000);
+});
+
+test('renewed catalogue ignores a delayed old socket page and stops after close',async t=>{
+    const {fleet,pending,answer,setHydration}=feedFixture(t);fleet.start();const c=fleet.connections.get('0');
+    await until(()=>pending.length===1);answer(0,page(1,[],{replay_gap:true}));await until(()=>pending.length===2);
+    setHydration([entry('Replacement')]);await fleet.connect(c,true);
+    await until(()=>pending.length===3);answer(2,page(2,[],{replay_gap:true}));await until(()=>pending.length===4);
+    answer(1,page(100,[entry('Stale old socket')]));await pause();
+    assert.equal(c.voyages[0].name,'Replacement');
+    fleet.close();answer(3,page(101,[entry('After close')]));await pause();
+    assert.equal(c.voyages[0].name,'Replacement');assert.equal(pending.length,4);
+});
+
+test('invalid catalogue cursor and oversized pages preserve the last usable list',async t=>{
+    for(const invalid of [page(0,[entry('Regression')]),page(1,[entry('Unchanged cursor')]),page(2,Array.from({length:129},()=>entry())),page(2,[],{has_more:true}),page(2,[entry('Gap corruption')],{replay_gap:true})]) {
+        const {fleet,pending,answer}=feedFixture(t);fleet.start();const c=fleet.connections.get('0');
+        await until(()=>pending.length===1);answer(0,page(1,[],{replay_gap:true}));await until(()=>pending.length===2);
+        answer(1,invalid);await until(()=>c.status==='Voyage list unavailable');
+        assert.equal(c.voyages[0].name,'Initial');fleet.close();
+    }
 });

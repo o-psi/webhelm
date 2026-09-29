@@ -17,6 +17,7 @@ function goalAction(value) {
   return ['pause','resume','clear'].includes(value.action)&&exact(value,['action','goal_id'])&&uuid(value.goal_id);
 }
 function accountCommand(c) {
+  if (c.op === 'catalogue_changes') return exact(c,['op','after','limit','wait_ms']) && (c.after === null || uint(c.after)) && uint(c.limit) && c.limit >= 1 && c.limit <= 128 && uint(c.wait_ms) && c.wait_ms <= 10000;
   if (c.op === 'update_prepare') return exact(c,['op','operation_id','channel']) && uuid(c.operation_id) && ['stable','nightly'].includes(c.channel);
   if (['update_status','update_discard'].includes(c.op)) return exact(c,['op','operation_id']) && uuid(c.operation_id);
   if (c.op === 'update_apply') return exact(c,['op','operation_id','release_id']) && uuid(c.operation_id) && typeof c.release_id === 'string' && /^[a-f0-9]{64}$/.test(c.release_id);
@@ -100,7 +101,7 @@ export function validReply(f) {
 // view rather than forwarding unknown future execution/credential metadata.
 export function restrictCapabilities(value, vesselId) {
   if (!object(value) || value.protocol !== 1 || value.vessel_id !== vesselId || !Array.isArray(value.features) || !value.features.every(v => typeof v === 'string')) throw Error('invalid capabilities');
-  const features = new Set(['sqlite_catalogue', 'catalogue', 'scoped_catalogue', 'inspect', 'durable_receipts', 'history_paging', 'events', 'duplex_socket', 'decisions', 'grant_revocation', 'revocation', 'provider_accounts', 'execution_profiles', 'account_start', 'start_resolution']);
+  const features = new Set(['sqlite_catalogue', 'catalogue_changes', 'catalogue', 'scoped_catalogue', 'inspect', 'durable_receipts', 'history_paging', 'events', 'duplex_socket', 'decisions', 'grant_revocation', 'revocation', 'provider_accounts', 'execution_profiles', 'account_start', 'start_resolution']);
   const result = { protocol: 1, vessel_id: vesselId, features: value.features.filter(f => features.has(f)) };
   if (typeof value.running_release === 'string' && /^[a-f0-9]{64}$/.test(value.running_release)) result.running_release = value.running_release;
   if (typeof value.remote_updates === 'boolean') result.remote_updates = value.remote_updates && value.scope === 'owner';
