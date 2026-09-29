@@ -70,7 +70,9 @@ export function voyageList(connections: any[], query = '', snapshotFor: (connect
 export function voyageGroup(voyage:any, decisions=0, pendingReceipts=0):'attention'|'working'|'settled' {
     const summary=voyage.catalogue?.summary, snapshot=voyage.observed;
     const run=snapshot?.run?.state??summary?.run_state;
-    if(decisions||pendingReceipts||snapshot?.recovery_pending||snapshot?.pending_cleanup_run||voyage.state==='cleanup_unconfirmed'||['awaiting_decision','waiting','blocked','failed','interrupted'].includes(run))return 'attention';
+    if(decisions||snapshot?.recovery_pending||snapshot?.pending_cleanup_run||voyage.state==='cleanup_unconfirmed'||['awaiting_decision','waiting','blocked','failed','interrupted'].includes(run))return 'attention';
+    if(['starting','running','cancelling','cancel_requested'].includes(run)&&!['suspended','stopped','unavailable','relinquished'].includes(voyage.state))return 'working';
+    if(pendingReceipts)return 'attention';
     if(voyage.active||['starting','running','cancelling','cancel_requested'].includes(run)&&!['suspended','stopped','unavailable','relinquished'].includes(voyage.state))return 'working';
     return 'settled';
 }

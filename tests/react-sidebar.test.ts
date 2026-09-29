@@ -40,4 +40,5 @@ test('attention stays visible while older settled voyages collapse without hidin
  assert.deepEqual(groups.recent.map(v=>v.session_id),['done-1','done-3']);
  assert.deepEqual(groups.settled.map(v=>v.session_id),['done-2']);
  assert.equal(voyageGroup({...all.find(v=>v.session_id==='done-1'),observed:{run:{state:'completed'}}},0,1),'attention','an exact pending receipt promotes the open voyage');
+ assert.equal(voyageGroup({...all.find(v=>v.session_id==='running'),observed:{run:{state:'running'}}},0,1),'working','a pending receipt does not mislabel active work as a human decision');
 });

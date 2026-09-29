@@ -8,6 +8,7 @@ export type Picture = {id: string; name: string; size: number; url: string; base
 export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]; scrollTop?: number; following?: boolean};
 const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
+const statusReadNotice='Voyage status unavailable. Check the Vessel connection.';
 const settledNotice=(op:string,status:string)=>status==='not_applied'?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
 // Transport state outlives React renders and selected tabs. No prompt is persisted.
 export class Workspace {
@@ -81,6 +82,7 @@ export class Workspace {
                     return;
                 }
                 Object.assign(tab, {snapshot, scope:caps.scope, rights:caps.rights||[], incarnation: envelope.incarnation, title: snapshot.name || tab.title, decisions: Array.isArray(decisions) ? decisions : [], stale: false, freshAt: Date.now()});
+                if (tab.notice === statusReadNotice) tab.notice = '';
                 const existing = this.streams.get(key);
                 if (existing && (existing.client !== client || existing.incarnation !== envelope.incarnation || !existing.stream.valid)) {
                     existing.stop(); this.streams.delete(key);
@@ -98,7 +100,7 @@ export class Workspace {
                     });
                     this.streams.set(key, {client, incarnation: envelope.incarnation, stream, stop});
                 }
-            } catch (error) { tab.stale = true; tab.notice = error instanceof Error ? error.message : 'Read failed.'; }
+            } catch { tab.stale = true; if (!this.pending(tab).length) tab.notice = statusReadNotice; }
             finally { this.changed(); }
         })();
         this.reads.set(key, task);

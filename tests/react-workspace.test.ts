@@ -44,6 +44,32 @@ test('tabs retain isolated drafts and subscriptions while selection changes', as
     assert.equal(f.storage.length, 0, 'draft text is not persisted');
     f.workspace.close(); assert.equal(f.subscriptions(), 0);
 });
+test('recovered status clears a transient read warning while retaining uncertain command notice', async () => {
+    const f=fixture(), key=f.workspace.open('vessel','a','A'); await f.workspace.refresh(key);
+    await new Promise(resolve=>setTimeout(resolve,0));
+    const tab=f.workspace.tabs.get(key)!;
+    const exchange=f.connection.client.exchange.bind(f.connection.client);
+    let failSnapshot=true;
+    f.connection.client.exchange=async(payload:any)=>{
+        if(payload.command.op==='snapshot'&&failSnapshot)throw new Error('Connection lost; command outcome may be unknown.');
+        return exchange(payload);
+    };
+    await f.workspace.refresh(key);
+    assert.equal(tab.stale,true);
+    assert.equal(tab.notice,'Voyage status unavailable. Check the Vessel connection.');
+    failSnapshot=false;await f.workspace.refresh(key);
+    assert.equal(tab.stale,false);
+    assert.equal(tab.notice,'','a successful read clears only its own warning');
+    f.workspace.draft(key,'Retain the receipt');f.mode('unknown');await f.workspace.act(key,'submit');
+    assert.equal(f.storage.length,1);
+    const uncertain=tab.notice;
+    failSnapshot=true;await f.workspace.refresh(key);
+    assert.equal(tab.notice,uncertain,'a read failure cannot erase the unresolved command');
+    failSnapshot=false;await f.workspace.refresh(key);
+    assert.equal(tab.notice,uncertain,'recovery cannot imply that the command was applied');
+    assert.equal(f.commands.filter(command=>command.op==='submit').length,1,'recovery never resends the command');
+    f.workspace.close();
+});
 test('uncertain command is journaled once and reconciled without replay', async () => {
     const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
     f.workspace.draft(key, 'Retain me'); f.mode('unknown'); await f.workspace.act(key, 'submit');
