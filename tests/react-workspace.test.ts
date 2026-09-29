@@ -305,6 +305,29 @@ test('refresh retains the same subscription across canonical reads', async () =>
  assert.equal(f.subscriptions(),0);
 });
 
+test('socket renewal keeps confirmed status visible but fences actions until the new read', async () => {
+ const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
+ const tab=f.workspace.tabs.get(key)!;
+ let release!:()=>void;
+ const pending=new Promise<void>(resolve=>{release=resolve;});
+ const previous=f.connection.client;
+ f.connection.client={...previous,exchange:async(value:any)=>{
+  if(value.command.op==='snapshot')await pending;
+  return previous.exchange(value);
+ }};
+ f.workspace.connectionChanged();
+ assert.equal(tab.stale,false,'the last confirmed status stays visible during authenticated renewal');
+ assert.equal(tab.freshAt,0,'the old socket cannot authorize an action on its successor');
+ assert.equal(f.workspace.actionable(tab),false);
+ assert.equal(f.subscriptions(),0,'the old event subscription is released');
+ release();await f.workspace.refresh(key);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(tab.stale,false);
+ assert.ok(tab.freshAt>0);
+ assert.equal(f.workspace.actionable(tab),true);
+ assert.equal(f.subscriptions(),1,'the new socket gets a fresh subscription');
+ f.workspace.close();
+});
+
 test('failed events fall back to fresh snapshots without subscription churn', async () => {
  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
  const tab=f.workspace.tabs.get(key)!;

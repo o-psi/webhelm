@@ -54,8 +54,13 @@ export class Workspace {
     connectionChanged() {
         for (const tab of this.tabs.values()) {
             const stream = this.streams.get(tab.key), client = this.connections().get(tab.vessel)?.client;
-            if (!client || (this.observedClients.has(tab.key) && this.observedClients.get(tab.key) !== client)) {
+            if (!client) {
                 tab.stale = true; stream?.stop(); this.streams.delete(tab.key); this.eventRetryAt.delete(tab.key);
+            } else if (this.observedClients.has(tab.key) && this.observedClients.get(tab.key) !== client) {
+                // Ticket renewal replaces an authenticated socket before the old
+                // one drains. Keep the last confirmed status visible while the
+                // replacement is read, but fence actions until that read lands.
+                tab.freshAt = 0; stream?.stop(); this.streams.delete(tab.key); this.eventRetryAt.delete(tab.key);
             }
             if (client) void this.refresh(tab.key);
         }
