@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {JSDOM} from 'jsdom';
+import DOMPurify from 'dompurify';
 import {Conversation,CopyResponse} from '../resources/react/App.tsx';
 
 test('live tool preview appears before the working indicator', async () => {
@@ -147,4 +148,67 @@ test('copy response reads canonical text before writing to the clipboard',async(
         assert.equal(reads,1);assert.equal(copied,'Complete canonical response');
         assert.ok(dom.window.document.querySelector('[aria-label="Response copied"]'));
     }finally{await React.act(async()=>root.unmount());Object.assign(globalThis,saved);if(clipboard)Object.defineProperty(globalThis.navigator,'clipboard',clipboard);else delete (globalThis.navigator as any).clipboard;dom.window.close();}
+});
+
+test('live growth follows latest, respects reading position, and restores hidden voyages', async () => {
+    const dom = new JSDOM('<div id="mount"></div>', {pretendToBeVisual:true});
+    const saved = {window:globalThis.window, document:globalThis.document, requestAnimationFrame:globalThis.requestAnimationFrame, ResizeObserver:globalThis.ResizeObserver};
+    const callbacks = new Set<ResizeObserverCallback>();
+    class Observer {
+        constructor(readonly callback:ResizeObserverCallback){callbacks.add(callback);}
+        observe(){} disconnect(){callbacks.delete(this.callback);}
+    }
+    Object.assign(globalThis, {window:dom.window, document:dom.window.document, ResizeObserver:Observer, requestAnimationFrame:(fn:FrameRequestCallback)=>fn(0), IS_REACT_ACT_ENVIRONMENT:true});
+    const root = createRoot(dom.window.document.querySelector('#mount')!);
+    const tab:any = {key:'t', title:'Voyage', snapshot:{messages:[]}, decisions:[], pictures:[], draft:''};
+    let reads = 0;
+    const workspace:any = {actionable:()=>false,permitted:()=>false,pending:()=>[],earlier:async()=>{reads++;}};
+    const render=(active:boolean)=>root.render(React.createElement(Conversation,{tab,workspace,active,onSettings:()=>{}}));
+    const resize=()=>{for(const callback of callbacks)callback([],{} as ResizeObserver);};
+    try {
+        await React.act(async()=>render(false));
+        const el = dom.window.document.querySelector<HTMLElement>('.transcript')!;
+        let height=2000,top=0;
+        Object.defineProperties(el,{clientHeight:{get:()=>800},scrollHeight:{get:()=>height},scrollTop:{get:()=>top,set:value=>{top=Math.max(0,Math.min(value,height-800));}}});
+        await React.act(async()=>render(true));
+        assert.equal(el.scrollTop,1200,'initial hydration opens at latest');
+        await React.act(async()=>{height=2400;resize();});
+        assert.equal(el.scrollTop,1600,'stream growth keeps latest visible');
+        el.scrollTop=600;
+        await React.act(async()=>el.dispatchEvent(new dom.window.Event('scroll')));
+        await React.act(async()=>{height=2800;resize();});
+        assert.equal(el.scrollTop,600,'incoming output must not pull a reader away');
+        assert.match(dom.window.document.querySelector('.turn-navigation')!.textContent!,/Latest/);
+        await React.act(async()=>render(false));
+        el.scrollTop=0;
+        await React.act(async()=>el.dispatchEvent(new dom.window.Event('scroll')));
+        await React.act(async()=>{height=3200;resize();});
+        await React.act(async()=>render(true));
+        assert.equal(el.scrollTop,600,'hiding and reactivating preserves the reading position');
+        assert.equal(reads,0);
+        await React.act(async()=>root.unmount());
+        assert.equal(callbacks.size,0,'size observers are released');
+    } finally {await React.act(async()=>root.unmount());Object.assign(globalThis,saved);dom.window.close();}
+});
+
+test('history anchoring ignores simultaneous appended output', async () => {
+    const dom=new JSDOM('<div id="mount"></div>',{pretendToBeVisual:true});
+    const saved={window:globalThis.window,document:globalThis.document,requestAnimationFrame:globalThis.requestAnimationFrame};
+    const sanitize=DOMPurify.sanitize;DOMPurify.sanitize=DOMPurify(dom.window as any).sanitize;
+    Object.assign(globalThis,{window:dom.window,document:dom.window.document,requestAnimationFrame:(fn:FrameRequestCallback)=>fn(0),IS_REACT_ACT_ENVIRONMENT:true});
+    const root=createRoot(document.querySelector('#mount')!);
+    const tab:any={key:'t',title:'Voyage',following:false,scrollTop:600,snapshot:{message_offset:100,messages:[{message_index:100,role:'user',content:'Reading this message'}]},decisions:[],pictures:[],draft:''};
+    let height=2000,anchorTop=0,release!:()=>void;
+    const workspace:any={actionable:()=>false,permitted:()=>false,pending:()=>[],earlier:()=>new Promise<void>(resolve=>{release=resolve;})};
+    try{
+        await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:false,onSettings:()=>{}})));
+        const el=document.querySelector<HTMLElement>('.transcript')!,message=document.querySelector<HTMLElement>('[data-message-index="100"]')!;
+        Object.defineProperties(el,{clientHeight:{get:()=>800},scrollHeight:{get:()=>height}});
+        message.getBoundingClientRect=()=>({top:anchorTop,bottom:anchorTop+200}) as DOMRect;
+        await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:true,onSettings:()=>{}})));
+        el.scrollTop=100;
+        await React.act(async()=>el.dispatchEvent(new dom.window.Event('scroll')));
+        await React.act(async()=>{height+=1000;anchorTop+=600;tab.snapshot.message_offset=50;release();await Promise.resolve();});
+        assert.equal(el.scrollTop,700,'only the 600px prepended page affects the reading anchor, not the 400px live output');
+    }finally{await React.act(async()=>root.unmount());Object.assign(globalThis,saved);DOMPurify.sanitize=sanitize;dom.window.close();}
 });

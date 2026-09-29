@@ -10,7 +10,7 @@ import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogT
 import {ArrowDownIcon,ArrowUpIcon,CheckIcon,ChevronDownIcon,ChevronRightIcon,CopyIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
 import {HostBrowser} from './HostBrowser';
 import {GoalPanel} from './Goal';
-import React, {useEffect, useRef, useState, useSyncExternalStore} from 'react';
+import React, {useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ToolGroup,threadRows,toolTrigger} from './ToolGroup';
 import {Connections} from './Connections';
 import {ImagePart,Output} from './MessageParts';
@@ -121,13 +121,11 @@ export function RunStatus({tab}: {tab: Tab}) {
 
 export function Conversation({tab, workspace, active, onSettings, onRecover, connection, voyage}: {tab: Tab; workspace: Workspace; active: boolean; onSettings:()=>void; onRecover?:()=>void; connection?:any; voyage?:any}) {
     const run = tab.snapshot?.run, scroll = useRef<HTMLDivElement>(null), following = useRef(tab.following ?? true);
-    const loadingHistory = useRef(false), retryHistoryAt = useRef(0), wasActive = useRef(active);
+    const loadingHistory = useRef(false), retryHistoryAt = useRef(0), wasActive = useRef(false);
+    const activeRef=useRef(active); activeRef.current=active;
+    const pendingAnchor=useRef<null|(()=>void)>(null);
     const [showJump,setShowJump] = useState(false);
     const [turnNavigation,setTurnNavigation]=useState({previous:false,next:false});
-    useEffect(() => {if(active && scroll.current) {
-        if (active && !wasActive.current && tab.scrollTop !== undefined) scroll.current.scrollTop = following.current ? scroll.current.scrollHeight : tab.scrollTop;
-        wasActive.current = active;
-    }},[active,tab.snapshot]);
     const turnPositions=()=>{
         const container=scroll.current;
         if(!container)return [];
@@ -139,6 +137,32 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
         const previous=positions.some(position=>position<top-40),next=positions.some(position=>position>top+40);
         setTurnNavigation(current=>current.previous===previous&&current.next===next?current:{previous,next});
     };
+    // Layout changes include streamed text, images, disclosures and panel resizing.
+    // Follow only while the reader is at Latest; hidden views retain their position.
+    const settleScroll=()=>{
+        const el=scroll.current;
+        if(!activeRef.current||!el||loadingHistory.current)return;
+        if(following.current)el.scrollTop=el.scrollHeight;
+        tab.scrollTop=el.scrollTop;
+        setShowJump(el.scrollHeight-el.scrollTop-el.clientHeight>=80);
+        updateTurnNavigation();
+    };
+    const settleRef=useRef(settleScroll);settleRef.current=settleScroll;
+    useLayoutEffect(()=>{
+        if(active&&!wasActive.current&&scroll.current){
+            scroll.current.scrollTop=following.current?scroll.current.scrollHeight:tab.scrollTop??0;
+        }
+        wasActive.current=active;
+        if(active&&pendingAnchor.current){const restore=pendingAnchor.current;pendingAnchor.current=null;restore();}
+        settleScroll();
+    },[active,tab.snapshot]);
+    useEffect(()=>{
+        const el=scroll.current,thread=el?.querySelector('.thread');
+        if(!active||!el||!thread||typeof ResizeObserver==='undefined')return;
+        const observer=new ResizeObserver(()=>settleRef.current());
+        observer.observe(el);observer.observe(thread);
+        return()=>observer.disconnect();
+    },[active]);
     const jumpTurn=(direction:'previous'|'next')=>{
         const container=scroll.current;if(!container)return;
         const positions=turnPositions(),top=container.scrollTop;
@@ -149,28 +173,36 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
     };
     const loadNearTop = () => {
         const el = scroll.current, offset = tab.snapshot?.message_offset;
-        if (!active || !el || !offset || tab.busy || loadingHistory.current || Date.now() < retryHistoryAt.current) return;
+        if (!activeRef.current || !el || !offset || (following.current && el.scrollHeight>el.clientHeight) || tab.busy || loadingHistory.current || Date.now() < retryHistoryAt.current) return;
         // Preload within one eighth of the visible transcript; also fill short histories.
         if (el.scrollTop > el.clientHeight / 8 && el.scrollHeight > el.clientHeight) return;
         loadingHistory.current = true;
         following.current = false; tab.following = false;
         const height = el.scrollHeight, top = el.scrollTop;
+        const anchor=[...el.querySelectorAll<HTMLElement>('[data-message-index]')].find(message=>message.getBoundingClientRect().bottom>el.getBoundingClientRect().top);
+        const anchorTop=anchor?.getBoundingClientRect().top;
+        const incarnation=tab.incarnation;
         void workspace.earlier(tab.key).then(() => {
             if (tab.snapshot?.message_offset === offset) retryHistoryAt.current = Date.now() + 3000;
             requestAnimationFrame(() => {
-                if (scroll.current === el) {
-                    following.current = false;
-                    el.scrollTop = top + el.scrollHeight - height;
-                    setShowJump(el.scrollHeight - el.scrollTop - el.clientHeight >= 80);
-                }
+                const restore=()=>{
+                    if(scroll.current!==el||tab.incarnation!==incarnation)return;
+                    // Appended live output must not count as prepended history.
+                    const shift=anchor?.isConnected&&anchorTop!==undefined?anchor.getBoundingClientRect().top-anchorTop:el.scrollHeight-height;
+                    tab.scrollTop=top+shift;
+                    el.scrollTop=tab.scrollTop;
+                    setShowJump(el.scrollHeight-el.scrollTop-el.clientHeight>=80);
+                    updateTurnNavigation();
+                };
+                if(activeRef.current)restore();else pendingAnchor.current=restore;
                 loadingHistory.current = false;
                 // If a page still does not fill the viewport, fetch another bounded page.
-                if (scroll.current === el && el.scrollHeight <= el.clientHeight && tab.snapshot?.message_offset !== offset) loadNearTop();
+                if (activeRef.current && scroll.current === el && el.scrollHeight <= el.clientHeight && tab.snapshot?.message_offset !== offset) loadNearTop();
             });
         });
     };
     useEffect(() => {if (active) {loadNearTop();updateTurnNavigation();}}, [active, tab.snapshot?.message_offset, tab.snapshot?.messages]);
-    const renderMessage=(message:any)=>{return <article key={message.message_index} className={`message ${message.role}`}>
+    const renderMessage=(message:any)=>{return <article key={message.message_index} className={`message ${message.role}`} data-message-index={message.message_index}>
                     {['tool','function'].includes(message.role) ? <pre>{content(message.content)}</pre> : <><span className="sr-only">{message.role}</span><div className="prose" dangerouslySetInnerHTML={{__html:prose(message.parts?.length?message.parts.filter((part:any)=>part.type==='text').map((part:any)=>part.text).join('\n'):content(message.content))}}/></>}
                     {message.interrupted_attempt&&<small className="message-meta">Interrupted attempt</small>}
                     {message.parts?.filter((part:any)=>part.type==='image').map((part:any,index:number)=><ImagePart key={part.attachment?.id||index} attachment={part.attachment} tab={tab} workspace={workspace}/>)}
@@ -181,7 +213,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
     const location=[connection?.name,tab.snapshot?.workspace].filter(Boolean).join(' · ');
     return <section className="conversation" hidden={!active} aria-label={tab.title}>
         <header className="conversation-header"><div className="conversation-title"><h1 title={tab.title}>{tab.title}</h1>{location&&<p title={location}>{location}</p>}</div>{headerStatus&&<span className="status-label" data-status-tone={headerStatus.tone} data-animated={headerStatus.animated||undefined}><i aria-hidden="true"/>{headerStatus.label}</span>}</header>
-        <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {const el=scroll.current!;tab.scrollTop=el.scrollTop;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;tab.following=following.current;setShowJump(!following.current);updateTurnNavigation();loadNearTop();}}><div className="thread">
+        <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {if(!activeRef.current||loadingHistory.current)return;const el=scroll.current!;tab.scrollTop=el.scrollTop;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;tab.following=following.current;setShowJump(!following.current);updateTurnNavigation();loadNearTop();}}><div className="thread">
             {!tab.snapshot && <p className="empty">Waiting for a current Vessel snapshot…</p>}
             {threadRows(tab.snapshot?.messages||[]).map(row=>row.entries?<ToolGroup key={row.key} entries={row.entries} running={['running','starting','cancelling'].includes(run?.state)} messageStart={run?.message_start} decisions={tab.decisions.length>0} renderMessage={renderMessage}/>:<React.Fragment key={row.key}>{renderMessage(row.message)}</React.Fragment>)}
             <Output tab={tab} workspace={workspace}/>

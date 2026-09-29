@@ -37,6 +37,16 @@ export function renderPreviews(root, run, messages = []) {
     root.hidden = !rows.length;
 }
 
+// Snapshot projection uses the same 64 KiB UTF-8 prefix. Keep the byte cursor
+// even after truncation, so later deltas do not cause a snapshot per frame.
+const streamTextLimit=65536;
+function appendPrefix(prefix, text) {
+    const bytes=new TextEncoder().encode(prefix+text);
+    let end=Math.min(bytes.length,streamTextLimit);
+    while(end<bytes.length&&(bytes[end]&0xc0)===0x80)end--;
+    return {text:new TextDecoder().decode(bytes.subarray(0,end)),truncated:end<bytes.length};
+}
+
 export class ConversationStream {
     seed(snapshot, incarnation) {
         this.session = snapshot.session_id; this.incarnation = incarnation;
@@ -69,11 +79,19 @@ export class ConversationStream {
                 changed = true;
             } else if (item.kind === 'text_delta' && item.run_id === snapshot.run?.run_id && Number.isSafeInteger(payload?.offset) && typeof payload.text === 'string') {
                 const run = snapshot.run, partial = run.partial_text;
-                if (typeof partial !== 'string' || run.partial_text_truncated || new TextEncoder().encode(partial).length !== payload.offset || run.partial_text_bytes !== payload.offset) return fail();
-                run.partial_text = partial + payload.text;
-                run.partial_text_bytes += new TextEncoder().encode(payload.text).length;
+                const encoder=new TextEncoder(),partialBytes=typeof partial==='string'?encoder.encode(partial).length:-1;
+                const deltaBytes=encoder.encode(payload.text).length;
+                if (partialBytes<0 || partialBytes>streamTextLimit || payload.offset<0 || run.partial_text_bytes!==payload.offset ||
+                    !Number.isSafeInteger(payload.offset+deltaBytes) || encoder.encode(JSON.stringify(payload)).length>32768 ||
+                    (run.partial_text_truncated ? partialBytes>=payload.offset : partialBytes!==payload.offset)) return fail();
+                if(!run.partial_text_truncated){
+                    const next=appendPrefix(partial,payload.text);
+                    run.partial_text=next.text;run.partial_text_truncated=next.truncated;
+                }
+                run.partial_text_bytes+=deltaBytes;
                 if (run.stream_reconciled && Number.isSafeInteger(run.live_text_offset) && payload.offset >= run.live_text_offset && typeof run.live_text === 'string' && !run.live_text_truncated) {
-                    run.live_text += payload.text;
+                    const next=appendPrefix(run.live_text,payload.text);
+                    run.live_text=next.text;run.live_text_truncated=next.truncated;
                 }
                 changed = true;
             } else refresh = true;

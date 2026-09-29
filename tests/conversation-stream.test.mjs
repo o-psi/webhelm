@@ -83,3 +83,38 @@ test('text delta only appends from the exact provisional UTF-8 byte offset', () 
     stream.seed(snapshot,'incarnation');state.run.partial_text_truncated=true;
     assert.equal(stream.accept(page,state),'resync','a truncated snapshot needs canonical recovery, not speculative concatenation');
 });
+
+test('long UTF-8 streams keep bounded prefixes and exact continuation without snapshot storms', () => {
+    const stream=new ConversationStream();stream.seed(snapshot,'incarnation');
+    const state={revision:3,observation_cursor:10,messages:[],run:{run_id:'run',partial_text:'',partial_text_bytes:0,live_text:'',live_text_offset:0,stream_reconciled:true}};
+    const chunk='界'.repeat(4096);
+    for(let i=0;i<100;i++){
+        const cursor=11+i;
+        const page={protocol:1,session_id:'session',incarnation:'incarnation',error:null,outcome_unknown:false,result:{projection:'public-v2',cursor,latest_cursor:cursor,replay_gap:false,events:[{cursor,session_id:'session',revision:3,run_id:'run',kind:'text_delta',payload:{offset:i*12288,text:chunk}}]}};
+        assert.equal(stream.accept(page,state),'append');
+        assert.ok(new TextEncoder().encode(state.run.partial_text).length<=65536);
+        assert.ok(new TextEncoder().encode(state.run.live_text).length<=65536);
+        assert.doesNotMatch(state.run.live_text,/\ufffd/);
+    }
+    assert.equal(state.run.partial_text_bytes,1228800);
+    assert.equal(state.run.partial_text,'界'.repeat(21845));
+    assert.equal(state.run.live_text,state.run.partial_text);
+    assert.equal(state.run.partial_text_truncated,true);
+    assert.equal(state.run.live_text_truncated,true);
+    assert.equal(state.observation_cursor,110);
+});
+
+test('bounded text resumes from a truncated snapshot and rejects offset or payload violations', () => {
+    const make=()=>{const stream=new ConversationStream();stream.seed(snapshot,'incarnation');return {stream,state:{revision:3,run:{run_id:'run',partial_text:'界'.repeat(21845),partial_text_bytes:100000,partial_text_truncated:true,live_text:'tail',live_text_offset:99996,stream_reconciled:true}}};};
+    const page=payload=>({protocol:1,session_id:'session',incarnation:'incarnation',outcome_unknown:false,result:{projection:'public-v2',cursor:11,latest_cursor:11,replay_gap:false,events:[{cursor:11,session_id:'session',revision:3,run_id:'run',kind:'text_delta',payload}]}});
+    const {stream,state}=make();
+    assert.equal(stream.accept(page({offset:100000,text:'界'}),state),'append');
+    assert.equal(state.run.partial_text_bytes,100003);
+    assert.equal(state.run.live_text,'tail界');
+    assert.equal(state.run.partial_text.length,21845);
+    for(const payload of [{offset:99999,text:'x'},{offset:100000,text:'x'.repeat(32768)}]){
+        const {stream,state}=make(),before=structuredClone(state);
+        assert.equal(stream.accept(page(payload),state),'resync');
+        assert.deepEqual(state,before,'refused frame must not change displayed text or cursor');
+    }
+});

@@ -80,7 +80,14 @@ automatically resent. A fresh canonical voyage snapshot permits a separately
 initiated new message in the same conversation; other mutations still wait for
 the unresolved receipt. The conversation provides response copying (fetching
 complete canonical text when the visible projection is truncated), user-turn
-navigation, and a compact sidebar for scanning long voyage lists.
+navigation, and a compact sidebar for scanning long voyage lists. Latest follows
+streamed output and image/layout growth; reading older messages preserves position.
+Older history loads in bounded pages without counting newly appended output as
+prepended content. Inactive voyages keep their reading position. The transcript
+owns conversation scrolling, including its visually hidden accessibility labels.
+Incremental output keeps a 64 KiB UTF-8 prefix, matching snapshots, with exact byte
+continuation and explicit reads for more output. This bounds the automatic live
+text preview, not all manually expanded history or all browser memory.
 
 Voyages that expose canonical Goal state show a Goal panel above the composer.
 It reads the objective, status, usage, limits and recorded model assessment from
@@ -326,6 +333,15 @@ CSRF, connection-management feedback and logout. Archived Flux presentation
 fixtures are historical and are excluded from the active suite. Use
 `node tests/browser-layout-browser.mjs` after building for desktop/mobile Chromium
 checks, then verify the authenticated production root in the shared browser.
+`node tests/browser-conversation-browser.mjs` exercises the built shell with
+synthetic public-v2 frames in real Chromium at wide desktop, narrow desktop and
+mobile widths, in light and dark themes. It checks a 128-message recent history,
+one 50-message older page, more than 3 MiB of UTF-8 deltas, bounded live text,
+retained heap and DOM counts, output paging, Latest/reading anchors, draft retention
+and no outer document overflow. It uses existing Playwright/Chromium without
+installing dependencies; `PLAYWRIGHT_MODULE`, `CHROMIUM_PATH` and
+`CONVERSATION_OUTPUT` override their locations. This is browser rendering and
+memory evidence with synthetic transport, not TCP congestion or production login.
 For Persistent Goals (#378), the runtime checkout also owns an offline real-process
 journey: `python3 voyage/tests/goals.py --bin-dir target/debug --only web --web-root /absolute/path/to/webhelm`.
 It uses this repository's existing production build, Playwright and Chromium,
