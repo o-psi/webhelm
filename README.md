@@ -54,8 +54,8 @@ The new-voyage screen opens with a message draft and Vessel, workspace, profile 
 access controls. Sending creates an independent voyage, confirms its selected
 access mode, then submits the first message. An uncertain creation keeps the draft
 and requires exact receipt review; recovery never sends the message. Users can also
-create a voyage without a first message. Unsent text and pictures live in page
-memory and survive switching conversations, but not reloading. Profile setup carries over the archived console’s compact
+create a voyage without a first message. Unsent text and prepared pictures save
+per account and voyage in this browser and restore after reload for review. Profile setup carries over the archived console’s compact
 overview, separate searchable pickers, back navigation, fixed actions, deletion
 confirmation and expired-sign-in refresh. React owns the screens and draft state;
 no Flux console code is loaded. Reasoning/service and account usage have dedicated
@@ -68,12 +68,14 @@ settled voyages available through search or filters. The composer exposes direct
 model and reasoning choices for the current voyage; the new-voyage composer can
 override those choices without editing the saved profile. Tool activity stays
 compact until expanded. The right dock switches between the shared Vessel-hosted
-browser and Changes. Changes offers bounded, explicit read requests to the
-executing Voyage’s advertised file or shell tools and shows recorded file-edit
-requests from loaded conversation history. Recorded edits are historical requests,
-not a current filesystem diff. Read requests are admitted as one exact operator
-run; the dock waits for that run’s canonical result and never repeats an uncertain
-request. Uncertain command notices explain the affected action in the composer;
+browser and Changes. When a Vessel advertises `workspace_changes` and the
+connection has `workspace_read` permission, Changes reads current Git status and
+selected staged/unstaged diffs through the executing Voyage without starting a
+run. The read is bounded to 64 KiB and four seconds; truncation and unavailable
+states are explicit. Recorded edits show historical requests from loaded
+conversation, not a current filesystem diff. The separate explicit Inspect
+control still admits one exact operator run and observes its canonical result.
+Uncertain command notices explain the affected action in the composer;
 exact command IDs remain in expandable receipt details for inspection. If a
 receipt remains unknown, the original command stays recorded and is never
 automatically resent. A fresh canonical voyage snapshot permits a separately

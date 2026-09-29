@@ -61,7 +61,7 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
-                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
+                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','workspace_changes'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,channel:c.channel,release_id:'a'.repeat(64),version:c.channel==='nightly'?'1.0.3-nightly.20260928.1.1':'1.0.2',expires_at:Math.floor(Date.now()/1000)+3600,description:'Verified development build from fixture source',services:['vessel.service']};
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
                 else if(c.op==='update_status')result=updateRecord;
@@ -70,6 +70,7 @@ try {
                 else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
                 else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1+goal.revision,observation_cursor:5+goal.revision,goal,messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
+                else if(c.op==='workspace_changes')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{scope:c.scope,path:c.path||'.',text:c.scope==='status'?' M src/fixture.ts\0?? docs/new.md\0':'diff --git a/src/fixture.ts b/src/fixture.ts\n@@ -1 +1 @@\n-old\n+new\n',truncated:false,observed_at_ms:Date.now()}};
                 else if(c.op==='goal_update'){
                     if(c.action.action!=='set')throw Error('Unexpected Goal action');
                     goal={revision:goal.revision+1,goal:{id:c.command_id,session_id:c.session_id,objective:c.action.objective,status:c.action.continue_automatically?'active':'paused',continuation_authorized:c.action.continue_automatically,limits:c.action.limits,usage:{runs:0,input_tokens:0,output_tokens:0,elapsed_ms:0,no_progress_runs:0,unmeasured_runs:0},stop_reason:'user_paused'}};
@@ -257,7 +258,11 @@ try {
     await page.screenshot({path:`${output}/${label}-closed.png`});
     await page.getByRole('button',{name:'Changes',exact:true}).click();
     check(await page.getByLabel('Recorded changes').isVisible(),`${label}: recorded changes dock did not open`);
-    check(await page.getByLabel('Executing-host inspection').isVisible(),`${label}: executing-host inspection is missing`);
+    await page.getByLabel('Changed files').getByRole('button',{name:/src\/fixture\.ts/}).waitFor();
+    await page.getByLabel('Current Git diff').waitFor();
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='operator_tool').length===0),`${label}: opening Changes started an operator run`);
+    await page.getByText('Inspect workspace explicitly').click();
+    check(await page.getByLabel('Executing-host inspection').isVisible(),`${label}: explicit inspection is missing`);
     await page.screenshot({path:`${output}/${label}-workspace.png`});
     await page.getByRole('button',{name:'Recorded edits',exact:true}).click();
     check(await page.getByText('src/fixture.ts').first().isVisible(),`${label}: recorded patch path is missing`);

@@ -7,7 +7,7 @@ import {inspectionRequest,inventorySupports,type InspectionScope} from './inspec
 
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
 export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any; file?:File};
-export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]; scrollTop?: number; following?: boolean; draftState?:DraftSlot; draftLoading?:boolean};
+export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; capabilities?:string[]; pictures: Picture[]; scrollTop?: number; following?: boolean; draftState?:DraftSlot; draftLoading?:boolean};
 const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision',goal_update:'goal change'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const statusReadNotice='Voyage status unavailable. Check the Vessel connection.';
@@ -130,7 +130,7 @@ export class Workspace {
                     return;
                 }
                 if (tab.incarnation && tab.incarnation !== envelope.incarnation) { this.eventRetryAt.delete(key); this.legacyEvents.delete(key); }
-                Object.assign(tab, {snapshot, scope:caps.scope, rights:caps.rights||[], incarnation: envelope.incarnation, title: snapshot.name || tab.title, decisions: Array.isArray(decisions) ? decisions : [], stale: false, freshAt: Date.now()});
+                Object.assign(tab, {snapshot, scope:caps.scope, rights:caps.rights||[], capabilities:caps.features||[], incarnation: envelope.incarnation, title: snapshot.name || tab.title, decisions: Array.isArray(decisions) ? decisions : [], stale: false, freshAt: Date.now()});
                 this.observedClients.set(key, client);
                 if (tab.notice === statusReadNotice) tab.notice = '';
                 const existing = this.streams.get(key);
@@ -333,6 +333,15 @@ export class Workspace {
         const value = voyageResult(await client.exchange(request(op, {session_id: tab.session, ...fields})), tab.session, incarnation).result;
         if (this.closed || this.connections().get(tab.vessel)?.client !== client || tab.incarnation !== incarnation) throw new Error('Voyage connection changed.');
         return value;
+    }
+    async changes(key:string,scope:'status'|'unstaged'|'staged',path?:string){
+        const tab=this.tabs.get(key);
+        if(!tab||tab.stale||Date.now()-tab.freshAt>35000)throw new Error('Reconnect the voyage before reviewing changes.');
+        if(!tab.capabilities?.includes('workspace_changes'))throw new Error('This Vessel needs an update for automatic Changes review.');
+        if(tab.scope!=='owner'&&!tab.rights?.includes('workspace_read'))throw new Error('Workspace review permission is unavailable.');
+        const value=await this.read(key,'workspace_changes',{scope,...(path?{path}:{})});
+        if(tab.stale||!value||value.scope!==scope||value.path!==(path||'.')||typeof value.text!=='string'||value.text.length>65536||typeof value.truncated!=='boolean'||!Number.isSafeInteger(value.observed_at_ms))throw new Error('Workspace observation changed or was invalid.');
+        return value as {scope:typeof scope;path:string;text:string;truncated:boolean;observed_at_ms:number};
     }
     async earlier(key: string) {
         const tab = this.tabs.get(key); if (!tab || !this.actionable(tab) || !tab.snapshot.message_offset) return;
