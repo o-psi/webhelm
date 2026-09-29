@@ -61,7 +61,7 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
-                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','workspace_changes'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
+                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','workspace_changes','skills_catalog'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,channel:c.channel,release_id:'a'.repeat(64),version:c.channel==='nightly'?'1.0.3-nightly.20260928.1.1':'1.0.2',expires_at:Math.floor(Date.now()/1000)+3600,description:'Verified development build from fixture source',services:['vessel.service']};
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
                 else if(c.op==='update_status')result=updateRecord;
@@ -71,6 +71,7 @@ try {
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
                 else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1+goal.revision,observation_cursor:5+goal.revision,goal,messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
                 else if(c.op==='workspace_changes')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{scope:c.scope,path:c.path||'.',text:c.scope==='status'?' M src/fixture.ts\0?? docs/new.md\0':'diff --git a/src/fixture.ts b/src/fixture.ts\n@@ -1 +1 @@\n-old\n+new\n',truncated:false,observed_at_ms:Date.now()}};
+                else if(c.op==='controls')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:c.section==='tools'?{section:'tools',execution:'idle',value:{inventory:[{name:'read_file',description:'Read a workspace file'}],source:'builtin_preflight'}}:{section:'skills',execution:'idle',value:{skills:[{name:'review',description:'Review the workspace',path:'/work/.agents/skills/review/SKILL.md',scope:'/work'}],can_read:true,discovery_incomplete:false}}};
                 else if(c.op==='goal_update'){
                     if(c.action.action!=='set')throw Error('Unexpected Goal action');
                     goal={revision:goal.revision+1,goal:{id:c.command_id,session_id:c.session_id,objective:c.action.objective,status:c.action.continue_automatically?'active':'paused',continuation_authorized:c.action.continue_automatically,limits:c.action.limits,usage:{runs:0,input_tokens:0,output_tokens:0,elapsed_ms:0,no_progress_runs:0,unmeasured_runs:0},stop_reason:'user_paused'}};
@@ -238,6 +239,28 @@ try {
     check(await page.getByRole('button',{name:'Choose model',exact:true}).evaluate(el=>el===document.activeElement),`${label}: model picker lost trigger focus`);
     check(await page.locator('button[aria-label="Choose reasoning"]').isVisible(),`${label}: direct reasoning control is missing`);
     const draft=conversation.locator('textarea').first();
+    await conversation.getByRole('button',{name:'Discover actions, tools, and skills'}).click();
+    const discovery=page.getByRole('dialog',{name:'Composer actions'});
+    await discovery.getByRole('button',{name:/review/}).waitFor();
+    check(await discovery.getByRole('button',{name:/read_file/}).isVisible(),`${label}: live tool discovery is missing`);
+    check(await discovery.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: discovery dialog overflows horizontally`);
+    await discovery.evaluate(el=>Promise.allSettled(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
+    await page.screenshot({path:`${output}/${label}-discovery-light.png`});
+    await page.evaluate(()=>document.documentElement.classList.add('dark'));
+    await page.waitForFunction(()=>{const dialog=document.querySelector('[role="dialog"][aria-labelledby]');if(!dialog)return false;const probe=document.createElement('span');probe.style.backgroundColor='var(--popover)';dialog.append(probe);const matches=getComputedStyle(probe).backgroundColor===getComputedStyle(dialog).backgroundColor;probe.remove();return matches;});
+    await page.screenshot({path:`${output}/${label}-discovery-dark.png`});
+    await page.evaluate(()=>document.documentElement.classList.remove('dark'));
+    await discovery.getByRole('textbox',{name:'Search actions, tools, and skills'}).fill('review');
+    await discovery.getByRole('button',{name:/review/}).click();
+    await discovery.waitFor({state:'hidden'});
+    check((await draft.inputValue()).includes('/work/.agents/skills/review/SKILL.md'),`${label}: selected skill did not enter the composer`);
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='submit'||c.op==='steer').length===0),`${label}: discovery sent a message`);
+    await draft.fill('');
+    await draft.press('/');
+    await page.getByRole('dialog',{name:'Composer actions'}).waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog',{name:'Composer actions'}).waitFor({state:'hidden'});
+    check(await draft.evaluate(el=>el===document.activeElement),`${label}: closing slash discovery did not restore composer focus`);
     await draft.fill('Retained synthetic draft');
     if(label==='desktop'){
         await page.getByRole('button',{name:'Account and appearance'}).click();

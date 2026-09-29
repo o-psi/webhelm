@@ -67,7 +67,13 @@ The sidebar keeps attention and active voyages above recent work, with older
 settled voyages available through search or filters. The composer exposes direct
 model and reasoning choices for the current voyage; the new-voyage composer can
 override those choices without editing the saved profile. Tool activity stays
-compact until expanded. The right dock switches between the shared Vessel-hosted
+compact until expanded. The composer’s `/` shortcut and discovery button open
+local actions plus the executing Voyage’s advertised tools and filesystem skills
+when `skills_catalog` and workspace read access are available. Selection inserts
+text into the saved draft and never sends it. Tool inventory is a live-run view or
+built-in next-run preview; skill metadata is a next-run preview. Voyage checks
+policy again before any tool execution or skill file read. The right dock switches
+between the shared Vessel-hosted
 browser and Changes. When a Vessel advertises `workspace_changes` and the
 connection has `workspace_read` permission, Changes reads current Git status and
 selected staged/unstaged diffs through the executing Voyage without starting a
