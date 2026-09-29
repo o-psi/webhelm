@@ -162,7 +162,7 @@ test('history paging and expansion preserve canonical indices across refresh',as
  f.connection.client.exchange=async(payload:any)=>{const c=payload.command;if(c.op==='history')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{revision:1,message_offset:c.offset,next_offset:2,messages:[{message_index:0,role:'user',content:'first'},{message_index:1,role:'assistant',content:'second'}]}}};if(c.op==='message_chunk')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{data:JSON.stringify({role:'assistant',content:'complete'}),has_more:false,total_bytes:50,next_offset:50}}};return original(payload);};
  await f.workspace.earlier(key);assert.deepEqual(tab.snapshot.messages.map((m:any)=>m.message_index),[0,1,2]);await f.workspace.expand(key,2);assert.equal(tab.snapshot.messages[2].content,'complete');await f.workspace.refresh(key);assert.equal(tab.snapshot.message_offset,0);assert.equal(tab.snapshot.messages[2].content,'complete');f.workspace.close();
 });
-test('a failed automatic history read clears its notice after the page loads',async()=>{
+test('a failed automatic history read retries without showing a composer notice',async()=>{
  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
  const tab=f.workspace.tabs.get(key)!;
  tab.snapshot.message_offset=1;
@@ -176,10 +176,13 @@ test('a failed automatic history read clears its notice after the page loads',as
   return exchange(payload);
  };
  await f.workspace.earlier(key);
- assert.equal(tab.notice,'Earlier messages are temporarily unavailable. Helm Web will retry.');
+ assert.equal(tab.notice,'');
+ tab.notice='A previous action needs confirmation.';
+ await f.workspace.earlier(key);
+ assert.equal(tab.notice,'A previous action needs confirmation.');
  fail=false;
  await f.workspace.earlier(key);
- assert.equal(tab.notice,'');
+ assert.equal(tab.notice,'A previous action needs confirmation.');
  assert.equal(tab.snapshot.message_offset,0);
  f.workspace.close();
 });
