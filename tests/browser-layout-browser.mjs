@@ -208,8 +208,33 @@ try {
     await conversation.getByRole('button',{name:'Previous user message'}).click();
     check(await conversation.locator('.transcript').evaluate(element=>element.scrollTop)<beforeTurn,`${label}: previous turn did not move the transcript`);
     await page.getByRole('button',{name:'Choose model'}).click();
-    check(await page.getByRole('menuitem',{name:'Fixture model'}).isVisible(),`${label}: direct model choices did not load`);
+    const modelDialog=page.getByRole('dialog',{name:'Choose model',exact:true});
+    await modelDialog.locator('[data-model-choice]').filter({hasText:'Fixture model'}).waitFor();
+    check(await modelDialog.locator('[data-model-choice][aria-pressed="true"]').count()===1,`${label}: current model is not marked`);
+    await modelDialog.getByRole('textbox',{name:'Search models'}).fill('other');
+    check(await modelDialog.locator('[data-model-choice]').count()===1,`${label}: model search did not filter`);
+    await page.keyboard.press('ArrowDown');
+    check(await modelDialog.locator('[data-model-choice]').evaluate(el=>el===document.activeElement),`${label}: keyboard search did not reach the model`);
+    await modelDialog.getByRole('button',{name:'Save Other model to favorites'}).click();
+    check(await modelDialog.locator('section[aria-label="Favorites"] [data-model-choice]').count()===1,`${label}: model favorite not grouped`);
+    check(await modelDialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: model picker overflows horizontally`);
+    async function inspectModelTheme(){
+        await modelDialog.evaluate(el=>Promise.allSettled(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
+        return modelDialog.evaluate(el=>{const probe=document.createElement('span');probe.style.backgroundColor='var(--popover)';probe.style.color='var(--popover-foreground)';el.append(probe);const expected=getComputedStyle(probe),actual=getComputedStyle(el);const result={background:actual.backgroundColor,color:actual.color,expectedBackground:expected.backgroundColor,expectedColor:expected.color};probe.remove();return result;});
+    }
+    const lightModelTheme=await inspectModelTheme();
+    check(lightModelTheme.background===lightModelTheme.expectedBackground&&lightModelTheme.color===lightModelTheme.expectedColor,`${label}: light model picker does not use theme colors`);
+    await page.screenshot({path:`${output}/${label}-model-picker-light.png`});
+    await page.evaluate(()=>document.documentElement.classList.add('dark'));
+    const darkModelTheme=await inspectModelTheme();
+    check(darkModelTheme.background===darkModelTheme.expectedBackground&&darkModelTheme.color===darkModelTheme.expectedColor&&darkModelTheme.background!==lightModelTheme.background,`${label}: model picker does not adapt to dark appearance`);
+    await page.screenshot({path:`${output}/${label}-model-picker-dark.png`});
+    await page.evaluate(()=>document.documentElement.classList.remove('dark'));
+    await modelDialog.getByRole('textbox',{name:'Search models'}).fill('missing-model');
+    check(await modelDialog.getByText('No models match your search.',{exact:true}).isVisible(),`${label}: model search empty state missing`);
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='set_account_inference').length===0),`${label}: searching changed inference settings`);
     await page.keyboard.press('Escape');
+    check(await page.getByRole('button',{name:'Choose model',exact:true}).evaluate(el=>el===document.activeElement),`${label}: model picker lost trigger focus`);
     check(await page.locator('button[aria-label="Choose reasoning"]').isVisible(),`${label}: direct reasoning control is missing`);
     const draft=conversation.locator('textarea').first();
     await draft.fill('Retained synthetic draft');
