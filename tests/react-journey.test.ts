@@ -30,9 +30,11 @@ test('React journey connects, preserves drafts on navigation and submits once',a
  globalThis.WebSocket=Socket as any;globalThis.fetch=async()=>({ok:true,json:async()=>({url:'wss://vessel.example/v1/vessel/browser-socket',vessel_id:'v',token:'a'.repeat(64),expires_at_ms:Date.now()+120000})}) as any;
  const {createRoot}=await import('react-dom/client');
  const {App}=await import('../resources/react/App.tsx');const root=createRoot(dom.window.document.querySelector('#mount')!);
+ const draftRecords=new Map<string,any>();let draftRevision=0;
+ const draftRepository={async read(key:string){return draftRecords.get(key)??null;},async write(key:string,revision:string|null,value:any){assert.equal(draftRecords.get(key)?.revision??null,revision);const next=String(++draftRevision);if(value)draftRecords.set(key,{revision:next,value});else draftRecords.delete(key);return value?next:null;}};
  const settle=()=>new Promise(resolve=>setTimeout(resolve,10));
  try{
-  await React.act(async()=>{root.render(React.createElement(App,{bootstrap:{tenantId:'t',vessels:[{id:'11111111-2222-4333-8444-555555555555',vessel_id:'v',name:'Vessel'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'}}));await settle();});
+  await React.act(async()=>{root.render(React.createElement(App,{draftRepository,bootstrap:{tenantId:'t',vessels:[{id:'11111111-2222-4333-8444-555555555555',vessel_id:'v',name:'Vessel'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'}}));await settle();});
   assert.equal(dom.window.document.querySelectorAll('.voyage-card').length,2);
   await React.act(async()=>{dom.window.document.querySelector<HTMLButtonElement>('.voyage-card')!.click();await settle();});
   const active=()=>dom.window.document.querySelector<HTMLElement>('.conversation:not([hidden])')!;

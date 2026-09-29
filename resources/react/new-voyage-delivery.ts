@@ -4,6 +4,7 @@ import type {NewVoyageMessage} from './NewVoyage';
 // The draft crosses the creation boundary only after an exact start receipt.
 // Every later effect stops when its own observed state is unavailable.
 export async function completeNewVoyage(workspace:Workspace,key:string,message:NewVoyageMessage){
+    await workspace.restoreDraft(key);
     workspace.draft(key,message.text);
     await workspace.refresh(key);
     const tab=workspace.tabs.get(key);

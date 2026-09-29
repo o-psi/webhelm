@@ -97,7 +97,7 @@ test('direct model and reasoning choices create one voyage without editing the s
 test('first message waits for confirmed access and remains a draft when access is uncertain',async()=>{
     const calls:string[]=[];
     const tab:any={snapshot:{access:'read-only'},notice:''};
-    const workspace:any={tabs:new Map([['k',tab]]),draft(_key:string,value:string){calls.push('draft');tab.draft=value;},async refresh(){calls.push('refresh');},actionable(){return true;},permitted(){return true;},async act(_key:string,op:string){calls.push(op);if(op==='set_access')tab.snapshot.access='approval';return true;},changed(){calls.push('changed');}};
+    const workspace:any={restoreDraft:async()=>{},tabs:new Map([['k',tab]]),draft(_key:string,value:string){calls.push('draft');tab.draft=value;},async refresh(){calls.push('refresh');},actionable(){return true;},permitted(){return true;},async act(_key:string,op:string){calls.push(op);if(op==='set_access')tab.snapshot.access='approval';return true;},changed(){calls.push('changed');}};
     const message:any={text:'Build a dashboard',pictures:[],access:'approval',send:true,applyAccess:true};
     await completeNewVoyage(workspace,'k',message);
     assert.deepEqual(calls,['draft','refresh','set_access','refresh','submit']);

@@ -325,6 +325,23 @@ validation/audit, origin HTTP/health, public HTTPS/assets, route-specific titles
 descriptions and links, environment-file denial and service health. These are
 HTTP/runtime checks; no browser visual QA or agent execution was performed.
 
+### Composer drafts
+
+Message and new-voyage drafts save text and prepared pictures in IndexedDB on the
+current browser, separately for each signed-in tenant and Vessel/voyage. Reload
+restores content for review; it never sends a message or restores execution approval.
+Accepted messages clear their saved content. An uncertain send retains the draft
+with a review warning so it is not silently repeated. Sign-out leaves drafts on
+this browser for that account; use **Discard draft** or clear site data to remove them.
+These drafts do not synchronize to another device.
+
+Storage is bounded to 64 drafts and 32 MiB per account, with 64 KiB of UTF-8 text
+and the existing four-picture/4 MiB prepared-image limit per draft. Nothing is
+automatically evicted. Conflicting tabs, unavailable storage and quota failures
+show a warning and preserve the current text for copying. Sending waits for the
+recovery marker to save. Runtime credentials, grants and command receipts stay
+outside the draft store.
+
 ### Console verification
 
 Run `npm test` for the active shared transport/auth and React suites. The HTTP
@@ -333,6 +350,10 @@ CSRF, connection-management feedback and logout. Archived Flux presentation
 fixtures are historical and are excluded from the active suite. Use
 `node tests/browser-layout-browser.mjs` after building for desktop/mobile Chromium
 checks, then verify the authenticated production root in the shared browser.
+Run `node tests/browser-drafts-browser.mjs` against the built bundle for real
+IndexedDB reload, prepared-picture retention, tenant/voyage isolation, conflicting
+tabs, accepted/uncertain send handling, new-voyage approval reset and discard checks
+at desktop and mobile widths. This uses synthetic transport without provider calls.
 `node tests/browser-conversation-browser.mjs` exercises the built shell with
 synthetic public-v2 frames in real Chromium at wide desktop, narrow desktop and
 mobile widths, in light and dark themes. It checks a 128-message recent history,

@@ -1,3 +1,4 @@
+import {DraftSlot,type DraftRepository} from './drafts';
 import {assertGoalReview,validateGoalAction,goalReceipt,type GoalAction,type GoalReview} from './goals';
 import {uuid, request, voyageResult, mutation, resolved, receiptStatus} from '../js/vessel-client.js';
 import {ConversationStream} from '../js/conversation-stream.js';
@@ -5,16 +6,17 @@ import {preparePicture, MAX_PICTURE_BYTES, MAX_PICTURES} from './prepare-picture
 import {inspectionRequest,inventorySupports,type InspectionScope} from './inspection-command';
 
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
-export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any};
-export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]; scrollTop?: number; following?: boolean};
+export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any; file?:File};
+export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; pictures: Picture[]; scrollTop?: number; following?: boolean; draftState?:DraftSlot; draftLoading?:boolean};
 const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision',goal_update:'goal change'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const statusReadNotice='Voyage status unavailable. Check the Vessel connection.';
 const notApplied=(status:string)=>['not_applied','not_admitted','rejected'].includes(status);
 const settledNotice=(op:string,status:string)=>notApplied(status)?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
-// Transport state outlives React renders and selected tabs. No prompt is persisted.
+// Transport state outlives React renders; optional local drafts never dispatch.
 export class Workspace {
     tabs = new Map<string, Tab>();
+    private draftReads = new Map<string,Promise<void>>();
     private reads = new Map<string, Promise<void>>();
     private streams = new Map<string, {client: any; incarnation: string; stream: ConversationStream; stop: () => void}>();
     private observedClients = new Map<string, any>();
@@ -26,16 +28,44 @@ export class Workspace {
     private epochs = new Map<string, number>();
     private autoReceiptReads = new Map<string, number>();
     version = 0;
-    constructor(private connections: () => Map<string, Connection>) {}
+    constructor(private connections: () => Map<string, Connection>, private drafts?:DraftRepository) {}
     subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
     getVersion = () => this.version;
     changed = () => { this.version++; this.listeners.forEach(listener => listener()); };
     open(vessel: string, session: string, title: string) {
         const key = JSON.stringify([vessel, session]);
-        if (!this.tabs.has(key)) this.tabs.set(key, {key, vessel, session, title, draft: '', snapshot: null, incarnation: null, stale: true, busy: false, notice: '', receiptStates: {}, freshAt: 0, decisions: [], pictures: []});
+        if (!this.tabs.has(key)) {
+            const tab:Tab = {key, vessel, session, title, draft: '', snapshot: null, incarnation: null, stale: true, busy: false, notice: '', receiptStates: {}, freshAt: 0, decisions: [], pictures: []};
+            this.tabs.set(key,tab);
+            if(this.drafts){
+                const slot=new DraftSlot(this.drafts,key,()=>this.changed());tab.draftState=slot;tab.draftLoading=true;
+                const restoring=slot.loaded().then(async()=>{
+                    if(this.closed||this.tabs.get(key)!==tab)return;
+                    tab.draft=slot.value.text;
+                    const pictures=await Promise.all(slot.value.pictures.map(file=>this.picture(file,file.name)));
+                    if(this.closed||this.tabs.get(key)!==tab){pictures.forEach(picture=>URL.revokeObjectURL(picture.url));return;}
+                    tab.pictures=pictures;this.changed();
+                }).catch(()=>{tab.notice='Saved pictures could not be restored. Keep this page open.';this.changed();}).finally(()=>{tab.draftLoading=false;this.changed();});
+                this.draftReads.set(key,restoring);
+            }
+        }
         this.changed(); void this.refresh(key); return key;
     }
-    draft(key: string, value: string) { const tab = this.tabs.get(key); if (tab) { tab.draft = value; this.changed(); } }
+    draft(key: string, value: string) { const tab = this.tabs.get(key); if (tab && !tab.draftLoading) { tab.draft = value; this.saveDraft(tab); this.changed(); } }
+    private saveDraft(tab:Tab){tab.draftState?.set({text:tab.draft,pictures:tab.pictures.map(p=>p.file!).filter(Boolean),delivery:tab.draftState.value.delivery});}
+    async restoreDraft(key:string){await this.draftReads.get(key);}
+    async saveDrafts(){await Promise.all([...this.tabs.values()].map(tab=>tab.draftState?.flush()));}
+    async clearDraft(key:string){
+        const tab=this.tabs.get(key);if(!tab||tab.busy||tab.draftLoading)return;
+        tab.draft='';tab.pictures.forEach(p=>URL.revokeObjectURL(p.url));tab.pictures=[];
+        this.changed();
+        await tab.draftState?.discard();
+    }
+    private async picture(blob:Blob,name:string):Promise<Picture>{
+        const bytes=new Uint8Array(await blob.arrayBuffer());let binary='';
+        for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+        return {id:uuid(),name,size:blob.size,url:URL.createObjectURL(blob),base64:btoa(binary),uploadId:uuid(),file:new File([blob],name,{type:blob.type})};
+    }
     pending(tab: Tab) { return this.connections().get(tab.vessel)?.journal?.entries().filter((entry: any) => entry.session_id === tab.session) || []; }
     actionable(tab: Tab, op = '') {
         try {
@@ -152,7 +182,7 @@ export class Workspace {
     }
     async act(key: string, op: string, fields: Record<string, unknown> = {}, onReceipt?: (value:any)=>void) {
         const tab = this.tabs.get(key);
-        if (!tab || !this.actionable(tab,op) || !this.permitted(tab,op)) return;
+        if (!tab || tab.draftLoading || !this.actionable(tab,op) || !this.permitted(tab,op)) return;
         if (tab.snapshot.lifecycle?.archived || tab.snapshot.lifecycle?.deleted || (tab.snapshot.pending_cleanup_run && !['cancel','respond','set_access','steer'].includes(op) && !(op==='goal_update'&&(fields.action as GoalAction)?.action==='pause') && !['running','starting','cancelling'].includes(tab.snapshot.run?.state))) { tab.notice='Voyage lifecycle or cleanup blocks this action. Review its status.'; this.changed(); return; }
         const connection = this.connections().get(tab.vessel)!;
         const client = connection.client;
@@ -200,6 +230,8 @@ export class Workspace {
             if (tab.incarnation !== incarnation || tab.snapshot.revision !== origin.revision) throw new Error('Voyage changed while preparing attachments. Nothing submitted.');
             command = mutation(op, origin, incarnation, fields);
             if (this.closed || this.connections().get(tab.vessel)?.client !== client) throw new Error('Voyage connection changed before submission.');
+            if(['submit','steer','submit_content'].includes(op))await tab.draftState?.sending();
+            if(this.closed||this.connections().get(tab.vessel)?.client!==client||tab.incarnation!==incarnation||tab.snapshot.revision!==origin.revision)throw new Error('Voyage changed before submission. Nothing submitted.');
             stage = 'submit';
             connection.journal.prepare(command.command);
             const response = await client.exchange(command);
@@ -214,11 +246,12 @@ export class Workspace {
             if (known && !response.error && ['accepted', 'queued', 'applied'].includes(status) && ['submit', 'steer', 'submit_content'].includes(op)) {
                 if (tab.draft === draft) tab.draft = '';
                 tab.pictures = tab.pictures.filter(picture => !pictures.includes(picture)); pictures.forEach(picture => URL.revokeObjectURL(picture.url));
+                this.saveDraft(tab); await tab.draftState?.flush();
             }
             return Boolean(known && !response.error && !notApplied(status) && status!=='unknown_after_restart');
         } catch (error) {
             const reason = error instanceof Error ? error.message : 'Unexpected error';
-            if (stage === 'upload' && !command) {
+            if (stage === 'upload') {
                 tab.notice = `${reason} Draft and pictures retained; no message was submitted.`;
             } else {
                 tab.notice = uncertainNotice(op);
@@ -252,7 +285,7 @@ export class Workspace {
         return message.content as string;
     }
     async attach(key: string, files: File[], guard?: () => boolean) {
-        const tab = this.tabs.get(key); if (!tab || tab.busy || this.closed || guard && !guard()) return false;
+        const tab = this.tabs.get(key); if (!tab || tab.busy || tab.draftLoading || this.closed || guard && !guard()) return false;
         let success = true;
         tab.busy = true; this.changed();
         try {
@@ -260,11 +293,9 @@ export class Workspace {
                 if (tab.pictures.length >= MAX_PICTURES) throw new Error('At most four pictures per message.');
                 const remaining=MAX_PICTURE_BYTES-tab.pictures.reduce((n,p) => n+p.size,0);
                 const {blob,name} = await preparePicture(file,remaining);
-                const bytes = new Uint8Array(await blob.arrayBuffer());
-                if (this.closed || this.tabs.get(key) !== tab || guard && !guard()) throw new Error('Voyage changed; capture not attached.');
-                let binary = '';
-                for (let i=0;i<bytes.length;i+=8192) binary += String.fromCharCode(...bytes.subarray(i,i+8192));
-                tab.pictures.push({id:uuid(),name:name || 'pasted-image',size:blob.size,url:URL.createObjectURL(blob),base64:btoa(binary),uploadId:uuid()});
+                const picture=await this.picture(blob,name||'pasted-image');
+                if (this.closed || this.tabs.get(key) !== tab || guard && !guard()) {URL.revokeObjectURL(picture.url);throw new Error('Voyage changed; capture not attached.');}
+                tab.pictures.push(picture);this.saveDraft(tab);
             }
         } catch (error) { success = false; tab.notice = error instanceof Error ? error.message : 'Picture unavailable.'; }
         finally { tab.busy = false; this.changed(); }
@@ -272,7 +303,7 @@ export class Workspace {
     }
     removePicture(key: string, id: string) {
         const tab = this.tabs.get(key); if (!tab || tab.busy) return;
-        tab.pictures = tab.pictures.filter(picture => { if (picture.id !== id) return true; URL.revokeObjectURL(picture.url); return false; }); this.changed();
+        tab.pictures = tab.pictures.filter(picture => { if (picture.id !== id) return true; URL.revokeObjectURL(picture.url); return false; }); this.saveDraft(tab);this.changed();
     }
     async artifact(key: string, attachment: any) {
         const tab = this.tabs.get(key), client = tab && this.connections().get(tab.vessel)?.client;

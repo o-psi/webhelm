@@ -1,3 +1,4 @@
+import {DraftSlot,type DraftRepository} from './drafts';
 import React, {useEffect, useRef, useState} from 'react';
 import {ArrowUpIcon,PaperclipIcon,Settings2Icon,XIcon} from 'lucide-react';
 import {Button} from './components/ui/button';
@@ -12,8 +13,14 @@ import {preparePicture,MAX_PICTURE_BYTES,MAX_PICTURES} from './prepare-picture';
 export type NewVoyageMessage = {text:string; pictures:File[]; access:'read-only'|'approval'|'unrestricted'; send:boolean; applyAccess:boolean};
 export type RecoveryDraft = {vessel:string; workspace:string; text:string; hasPictures:boolean; source:string};
 
-export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,recovery,onCreated,onAdvanced}:{fleet:any;tenant:string;hidden:boolean;resetToken:number;reloadToken:number;recovery?:RecoveryDraft|null;onCreated:(vessel:string,process:any,message:NewVoyageMessage)=>Promise<void>|void;onAdvanced:()=>void}){
+export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,reloadToken,recovery,onCreated,onAdvanced}:{fleet:any;tenant:string;drafts?:DraftRepository;onDraftChange?:(present:boolean)=>void;hidden:boolean;resetToken:number;reloadToken:number;recovery?:RecoveryDraft|null;onCreated:(vessel:string,process:any,message:NewVoyageMessage)=>Promise<void>|void;onAdvanced:()=>void}){
     const connections=[...fleet.connections.values()] as any[];
+    const [,refreshDraft]=useState(0);
+    const [draftSlot]=useState(()=>drafts?new DraftSlot(drafts,'new-voyage',()=>refreshDraft(value=>value+1)):null);
+    const [draftReady,setDraftReady]=useState(!draftSlot);
+    const previousReset=useRef(resetToken);
+    const currentRecovery=useRef(recovery);currentRecovery.current=recovery;
+
     const [vessel,setVessel]=useState<string>(()=>connections.find(item=>item.client)?.id||connections[0]?.id||'');
     const connection=fleet.connections.get(vessel);
     const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(''),[catalogue,setCatalogue]=useState<any>(null),[accounts,setAccounts]=useState<any[]>([]),[profileId,setProfileId]=useState('');
@@ -31,7 +38,30 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,recovery,o
     const modelsReady=modelContext!==null&&modelChoicesFor===modelContext;
     const currentModel=modelOptions.find(item=>item.id===selectedModel);
     useEffect(()=>{if(!hidden)input.current?.focus();},[hidden]);
-    useEffect(()=>{setText('');setPictures([]);setNotice('');},[resetToken]);
+    useEffect(()=>{onDraftChange?.(Boolean(text||pictures.length));},[text,pictures,onDraftChange]);
+    useEffect(()=>{
+        const leaving=(event:BeforeUnloadEvent)=>{if(draftSlot?.unsaved){event.preventDefault();event.returnValue='';}};
+        window.addEventListener('beforeunload',leaving);return()=>window.removeEventListener('beforeunload',leaving);
+    },[draftSlot]);
+    useEffect(()=>{
+        if(previousReset.current===resetToken)return;
+        previousReset.current=resetToken;
+        setText('');setPictures([]);setNotice('');draftSlot?.set({text:'',pictures:[]});
+    },[resetToken]);
+    useEffect(()=>{
+        if(!draftSlot)return;
+        let active=true;
+        void draftSlot.loaded().then(()=>{
+            if(!active)return;
+            if(!currentRecovery.current){setText(draftSlot.value.text);setPictures(draftSlot.value.pictures);
+                if(draftSlot.value.destination){setVessel(draftSlot.value.destination.vessel);setPath(draftSlot.value.destination.workspace);}}
+            setDraftReady(true);
+        });
+        return()=>{active=false;};
+    },[draftSlot]);
+    useEffect(()=>{
+        if(draftReady)draftSlot?.set({text,pictures,destination:{vessel,workspace:path},delivery:draftSlot.value.delivery});
+    },[text,pictures,vessel,path,draftReady]);
     useEffect(()=>{
         if(!recovery)return;
         setVessel(recovery.vessel);setPath(recovery.workspace);setText(recovery.text);setPictures([]);setNotice('');
@@ -76,11 +106,11 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,recovery,o
     },[modelContext,connection?.client]);
     const pending=(()=>{try{creation.current??=new Creation(localStorage,tenant);return {records:creation.current.pending(),error:false};}catch{return {records:[],error:true};}})();
     const validOverride=!modelChoice&&!reasoningChoice||modelsReady&&Boolean(currentModel)&&(!selectedReasoning||currentModel.reasoning_efforts?.includes(selectedReasoning));
-    const canCreate=Boolean(!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready&&validOverride);
+    const canCreate=Boolean(draftReady&&!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready&&validOverride);
     const canSend=canCreate&&(caps.scope==='owner'||caps.rights?.includes('execute'));
     const hasMessage=Boolean(text.trim()||pictures.length);
     async function addPictures(files:File[]){
-        if(!files.length||busy||preparing)return;
+        if(!files.length||busy||preparing||!draftReady)return;
         setPreparing(true);
         try{
             let total=pictures.reduce((count,file)=>count+file.size,0);
@@ -118,6 +148,7 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,recovery,o
                 if(modelChoice!==null)settings.service_tier=null;
             }
             creation.current??=new Creation(localStorage,tenant);
+            await draftSlot?.sending();
             const process=await creation.current.start(connection,path,settings);
             await onCreated(vessel,process,{text,pictures:[...pictures],access,send,applyAccess:true});
         }catch(error){setNotice(error instanceof Error?error.message:'Creation unavailable.');}
@@ -140,9 +171,10 @@ export function NewVoyage({fleet,tenant,hidden,resetToken,reloadToken,recovery,o
             <form className="composer" aria-label="New voyage composer" onSubmit={event=>{event.preventDefault();void create(true);}} onPaste={event=>{if(event.clipboardData.files.length){event.preventDefault();void addPictures([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(event.dataTransfer.files.length){event.preventDefault();void addPictures([...event.dataTransfer.files]);}}}>
                 <Card className="composer-box gap-2 p-3 shadow-sm" size="sm">
                     {notice&&<p className="composer-feedback" role="status">{notice}</p>}
+                    {draftSlot&&<div className="composer-feedback" role="status"><p>{draftSlot.message}</p>{draftSlot.value.delivery==='review'&&<p>This draft may already belong to a created voyage. Check creation and the conversation before sending again.</p>}{(text||pictures.length>0)&&<Button variant="ghost" size="sm" type="button" disabled={busy||!draftReady} onClick={()=>{setText('');setPictures([]);void draftSlot.discard().catch(()=>{});}}>Discard draft</Button>}</div>}
                     {pending.error&&<p className="composer-feedback" role="alert">Recovery storage is unavailable. Creating a voyage is disabled.</p>}
                     {pictures.length>0&&<div className="new-voyage-pictures flex flex-wrap gap-2">{pictures.map((picture,index)=><div className="flex max-w-40 items-center gap-1 rounded-md border px-2 text-xs" key={`${picture.name}:${index}`}><span className="truncate" title={picture.name}>{picture.name}</span><Button variant="ghost" size="icon-xs" type="button" aria-label={`Remove ${picture.name}`} disabled={busy} onClick={()=>setPictures(current=>current.filter((_,i)=>i!==index))}><XIcon aria-hidden="true"/></Button></div>)}</div>}
-                    <Textarea ref={input} className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent" aria-label="Message" rows={3} value={text} disabled={busy} onChange={event=>setText(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void create(true);}}} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
+                    <Textarea ref={input} className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent" aria-label="Message" rows={3} value={text} disabled={busy||!draftReady} onChange={event=>setText(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void create(true);}}} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
                     <Input ref={pictureInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void addPictures(files);}}/>
                     <div className="new-voyage-primary"><div className="new-voyage-inference">
                         <label className="new-voyage-choice"><span className="sr-only">Model</span><NativeSelect value={selectedModel} disabled={busy||!modelsReady} onChange={event=>{setModelChoice(event.target.value);setReasoningChoice('');}}>{!modelsReady&&<option value={selectedModel}>{selectedModel||'Loading models…'}</option>}{modelsReady&&modelOptions.map((item:any)=><option key={item.id} value={item.id}>{item.display_name||item.id}</option>)}</NativeSelect></label>

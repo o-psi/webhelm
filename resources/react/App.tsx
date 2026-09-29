@@ -1,3 +1,4 @@
+import {BrowserDrafts,type DraftRepository} from './drafts';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuLabel,DropdownMenuTrigger} from './components/ui/dropdown-menu';
 import {NativeSelect} from './components/ui/native-select';
 import {Input} from './components/ui/input';
@@ -64,7 +65,7 @@ function Composer({tab, workspace, onSettings, onRecover, connection, voyage}: {
     const stopping = ['cancel_requested','cancelling'].includes(tab?.snapshot?.run?.state);
     const running = activeRun || stopping;
     const sendOp = running ? 'steer' : 'submit';
-    const enabled = tab && !stopping && workspace.actionable(tab,sendOp) && workspace.permitted(tab,sendOp);
+    const enabled = tab && !tab.draftLoading && !stopping && workspace.actionable(tab,sendOp) && workspace.permitted(tab,sendOp);
     const canStop = tab && activeRun && workspace.actionable(tab) && workspace.permitted(tab,'cancel');
     const send = () => { if (tab && enabled) void workspace.act(tab.key, sendOp); };
     const pendingState=(()=>{try{return {entries:tab?workspace.pending(tab):[],error:false};}catch{return {entries:[],error:true};}})();
@@ -72,7 +73,7 @@ function Composer({tab, workspace, onSettings, onRecover, connection, voyage}: {
     const blocked=pendingEntries.length>0||pendingState.error;
     const earlierMessageOnly=Boolean(!pendingState.error&&pendingEntries.length&&pendingEntries.every((entry:any)=>['submit','submit_content','steer'].includes(entry.op)));
     return <form className="composer" aria-label="Message composer" onPaste={event=>{if(tab&&event.clipboardData.files.length){event.preventDefault();void pickFiles([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(tab&&event.dataTransfer.files.length){event.preventDefault();void pickFiles([...event.dataTransfer.files]);}}} onSubmit={event => {event.preventDefault(); send();}}>
-        <Card className="composer-box gap-2 p-3 shadow-sm" size="sm"><Input ref={fileInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{(tab?.notice||blocked)&&<div className="composer-feedback" role="status"><p>{pendingState.error?'Recovery record is unavailable. This voyage is paused to avoid repeating an uncertain action.':earlierMessageOnly?'An earlier message is unconfirmed. You can keep chatting; check the conversation before repeating that request.':tab?.notice||'A previous action needs confirmation. Check the receipt before trying again.'}</p>{blocked&&<div className="flex flex-wrap items-center gap-2">{pendingEntries.length>0&&<Button variant="ghost" size="sm" type="button" disabled={tab?.busy||!connection?.client} onClick={() => tab && void workspace.reconcile(tab.key)}>Check receipt{pendingEntries.length>1?'s':''}</Button>}{onRecover&&!earlierMessageOnly&&<Button variant="outline" size="sm" type="button" onClick={onRecover}>Continue in a new voyage</Button>}</div>}{pendingEntries.length>0&&<details><summary>Receipt details</summary><ul>{pendingEntries.map((entry:any)=><li key={entry.command_id}><code>{entry.op} · {entry.command_id}</code>{tab?.receiptStates?.[entry.command_id]&&<span> · {tab.receiptStates[entry.command_id].replaceAll('_',' ')}</span>}</li>)}</ul></details>}</div>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="outline" size="icon-xs" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}><XIcon aria-hidden="true"/></Button></figure>)}</div>}<Textarea className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent" aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
+        <Card className="composer-box gap-2 p-3 shadow-sm" size="sm">{tab?.draftState&&<div className="composer-feedback" role="status"><p>{tab.draftState.message}</p>{tab.draftState.value.delivery==='review'&&<p>This draft may already have been sent. Check the conversation before sending it again.</p>}{(tab.draft||tab.pictures.length>0)&&<Button variant="ghost" size="sm" type="button" disabled={tab.busy||tab.draftLoading} onClick={()=>void workspace.clearDraft(tab.key).catch(()=>{})}>Discard draft</Button>}</div>}<Input ref={fileInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void pickFiles(files);}}/>{attaching && <p className="composer-feedback" role="status">Preparing pictures…</p>}{(tab?.notice||blocked)&&<div className="composer-feedback" role="status"><p>{pendingState.error?'Recovery record is unavailable. This voyage is paused to avoid repeating an uncertain action.':earlierMessageOnly?'An earlier message is unconfirmed. You can keep chatting; check the conversation before repeating that request.':tab?.notice||'A previous action needs confirmation. Check the receipt before trying again.'}</p>{blocked&&<div className="flex flex-wrap items-center gap-2">{pendingEntries.length>0&&<Button variant="ghost" size="sm" type="button" disabled={tab?.busy||!connection?.client} onClick={() => tab && void workspace.reconcile(tab.key)}>Check receipt{pendingEntries.length>1?'s':''}</Button>}{onRecover&&!earlierMessageOnly&&<Button variant="outline" size="sm" type="button" onClick={onRecover}>Continue in a new voyage</Button>}</div>}{pendingEntries.length>0&&<details><summary>Receipt details</summary><ul>{pendingEntries.map((entry:any)=><li key={entry.command_id}><code>{entry.op} · {entry.command_id}</code>{tab?.receiptStates?.[entry.command_id]&&<span> · {tab.receiptStates[entry.command_id].replaceAll('_',' ')}</span>}</li>)}</ul></details>}</div>}{!!tab?.pictures.length&&<div className="pictures">{tab.pictures.map(picture=><figure key={picture.id}><img src={picture.url} alt={picture.name}/><figcaption>{picture.name}</figcaption><Button variant="outline" size="icon-xs" type="button" disabled={tab.busy} aria-label={`Remove ${picture.name}`} onClick={()=>workspace.removePicture(tab.key,picture.id)}><XIcon aria-hidden="true"/></Button></figure>)}</div>}<Textarea className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent" aria-label="Message" rows={2} value={tab?.draft || ''} disabled={!tab||tab.draftLoading} onChange={event => tab && workspace.draft(tab.key,event.target.value)} placeholder="Ask anything…" onKeyDown={event => {if(event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();send();}}}/>
         <div className="composer-toolbar"><div className="composer-options">
             <Button variant="ghost" type="button" onClick={onSettings} title="Voyage settings" aria-label="Voyage settings"><Settings2Icon aria-hidden="true"/><span className="sr-only">Voyage settings</span></Button>
             <Button variant="ghost" type="button" disabled={!tab||tab.busy||attaching} aria-label="Attach pictures" title="Attach pictures" onClick={()=>fileInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button>
@@ -227,7 +228,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
     </section>;
 }
 
-export function App({bootstrap}: {bootstrap: Bootstrap}) {
+export function App({bootstrap,draftRepository}: {bootstrap: Bootstrap;draftRepository?:DraftRepository}) {
     const [runtime] = useState(() => {
         let workspace: Workspace;
         const fleet = new VesselFleet(bootstrap.vessels, {tenantId: bootstrap.tenantId, changed: () => workspace.connectionChanged(false), ticket: async (vessel: string) => {
@@ -235,10 +236,15 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
             if (!response.ok) throw Object.assign(new Error('Vessel authorization unavailable'), {permanent: [401, 403, 404, 419].includes(response.status)});
             return response.json();
         }});
-        workspace = new Workspace(() => fleet.connections);
-        return {fleet, workspace};
+        const drafts=draftRepository??new BrowserDrafts(bootstrap.tenantId);
+        workspace = new Workspace(() => fleet.connections,drafts);
+        return {fleet, workspace,drafts};
     });
     const {fleet, workspace} = runtime;
+    useEffect(()=>{
+        const leaving=(event:BeforeUnloadEvent)=>{if([...workspace.tabs.values()].some(tab=>tab.draftState?.unsaved)){event.preventDefault();event.returnValue='';}};
+        window.addEventListener('beforeunload',leaving);return()=>window.removeEventListener('beforeunload',leaving);
+    },[workspace]);
     useSyncExternalStore(workspace.subscribe, workspace.getVersion, workspace.getVersion);
     const [active, setActive] = useState<string | null>(null), [query, setQuery] = useState('');
     const [vesselFilter,setVesselFilter] = useState('all'), [stateFilter,setStateFilter] = useState('current'),[settledOpen,setSettledOpen]=useState(false);
@@ -262,6 +268,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     const [manage,setManage] = useState(()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('manage-vessels'));
     const [settings,setSettings] = useState<{tab?:Tab}|null>(null);
     const [webSettingsPage,setWebSettingsPage] = useState<WebSettingsPage|null>(null);
+    const [newHasDraft,setNewHasDraft]=useState(false);
     const [newDraftReset,setNewDraftReset]=useState(0),[profileReload,setProfileReload]=useState(0);
     const [recovery,setRecovery]=useState<RecoveryDraft|null>(null);
     const [mobile,setMobile] = useState(false);
@@ -303,8 +310,9 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
     const deliverNewVoyage=async(vessel:string,process:any,message:NewVoyageMessage)=>{
         const key=selectVoyage(vessel,process.session_id,process.name||'New voyage');
         setRecovery(null);
-        setNewDraftReset(value=>value+1);
         await completeNewVoyage(workspace,key,message);
+        await workspace.saveDrafts();
+        setNewDraftReset(value=>value+1);
     };
     const row=(voyage:any)=>{
         const key=JSON.stringify([voyage.connection.id,voyage.session_id]),tab=workspace.tabs.get(key);
@@ -331,7 +339,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
                     </DropdownMenu></div>
                     {connections.some((connection:any)=>!connection.client)&&<Button variant="ghost" size="icon" className="icon-button" aria-label="Reconnect Vessels" title="Reconnect Vessels" onClick={()=>fleet.reconnect()}><RefreshCwIcon aria-hidden="true"/></Button>}
                     <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="icon-button" aria-label="Account and appearance"><UserRoundIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent portalContainer={mobilePortal} side="top" align="end" className="w-48"><DropdownMenuLabel>Settings</DropdownMenuLabel><DropdownMenuItem onSelect={()=>{setMobile(false);setWebSettingsPage('account');}}>HelmWeb Account</DropdownMenuItem><DropdownMenuItem onSelect={()=>{setMobile(false);setWebSettingsPage('appearance');}}>Appearance</DropdownMenuItem><DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Vessel connections</DropdownMenuItem><DropdownMenuItem onSelect={()=>{if([...workspace.tabs.values()].some(tab=>tab.draft.trim()||tab.pictures.length))setLogoutReview(true);else logoutForm.current?.requestSubmit();}}>Sign out</DropdownMenuItem></DropdownMenuContent>
+                        <DropdownMenuContent portalContainer={mobilePortal} side="top" align="end" className="w-48"><DropdownMenuLabel>Settings</DropdownMenuLabel><DropdownMenuItem onSelect={()=>{setMobile(false);setWebSettingsPage('account');}}>HelmWeb Account</DropdownMenuItem><DropdownMenuItem onSelect={()=>{setMobile(false);setWebSettingsPage('appearance');}}>Appearance</DropdownMenuItem><DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Vessel connections</DropdownMenuItem><DropdownMenuItem onSelect={()=>{if(newHasDraft||[...workspace.tabs.values()].some(tab=>tab.draft.trim()||tab.pictures.length))setLogoutReview(true);else logoutForm.current?.requestSubmit();}}>Sign out</DropdownMenuItem></DropdownMenuContent>
                     </DropdownMenu>
                     <form ref={logoutForm} action={bootstrap.logoutUrl} method="post" hidden><Input type="hidden" name="_token" value={csrf()}/></form>
                 </div>
@@ -343,7 +351,7 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
             <SheetContent ref={setMobilePortal} side="left" showCloseButton={false} className="mobile-navigation"><SheetTitle className="sr-only">Voyages</SheetTitle><SheetDescription className="sr-only">Choose a voyage or manage Vessel connections.</SheetDescription>{mobile&&sidebar}</SheetContent>
         </Sheet>
         {!mobile&&sidebar}
-        <main className="voyage-workspace" aria-label="Conversation"><NewVoyage fleet={fleet} tenant={bootstrap.tenantId} hidden={Boolean(route)} resetToken={newDraftReset} reloadToken={profileReload} recovery={recovery} onCreated={deliverNewVoyage} onAdvanced={()=>setSettings({})}/>
+        <main className="voyage-workspace" aria-label="Conversation"><NewVoyage fleet={fleet} tenant={bootstrap.tenantId} drafts={runtime.drafts} onDraftChange={setNewHasDraft} hidden={Boolean(route)} resetToken={newDraftReset} reloadToken={profileReload} recovery={recovery} onCreated={deliverNewVoyage} onAdvanced={()=>setSettings({})}/>
             {route && !selected && <p className="empty" role="status">Waiting for this voyage on its Vessel. If it does not appear, check your connection or access.</p>}
             {selected && <HostBrowser key={selected.key} tab={selected} client={fleet.connections.get(selected.vessel)?.client} workspace={workspace}/> }
             {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})} onRecover={()=>recoverInNewVoyage(tab)} connection={fleet.connections.get(tab.vessel)} voyage={fleet.connections.get(tab.vessel)?.voyages.find((item:any)=>item.session_id===tab.session)}/>)}
@@ -351,6 +359,6 @@ export function App({bootstrap}: {bootstrap: Bootstrap}) {
         {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} connections={fleet.connections} tenant={bootstrap.tenantId} onReconnect={()=>fleet.reconnect()} onAccountSettings={()=>{setManage(false);setWebSettingsPage('account');}} onClose={()=>setManage(false)}/>}
         {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} profileOnly={!settings.tab} tenant={bootstrap.tenantId} onClose={()=>{setSettings(null);setProfileReload(value=>value+1);}} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}
         {webSettingsPage&&<WebSettings account={bootstrap} page={webSettingsPage} onPageChange={setWebSettingsPage} appearance={appearance} onAppearanceChange={setAppearance} onManageVessels={()=>{setWebSettingsPage(null);setManage(true);}} onClose={()=>setWebSettingsPage(null)}/>}
-        <Dialog open={logoutReview} onOpenChange={setLogoutReview}><DialogContent><DialogHeader><DialogTitle>Sign out with unsent work?</DialogTitle><DialogDescription>Unsent message drafts and prepared pictures in this browser will be lost. Your voyages continue on their Vessels.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" type="button" onClick={()=>setLogoutReview(false)}>Keep working</Button><Button variant="destructive" type="button" onClick={()=>logoutForm.current?.requestSubmit()}>Sign out</Button></DialogFooter></DialogContent></Dialog>
+        <Dialog open={logoutReview} onOpenChange={setLogoutReview}><DialogContent><DialogHeader><DialogTitle>Sign out with unsent work?</DialogTitle><DialogDescription>Saved message drafts and prepared pictures stay on this browser for this account. If a draft shows a save error, keep working and copy it first. Your voyages continue on their Vessels.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" type="button" onClick={()=>setLogoutReview(false)}>Keep working</Button><Button variant="destructive" type="button" onClick={()=>logoutForm.current?.requestSubmit()}>Sign out</Button></DialogFooter></DialogContent></Dialog>
     </div>;
 }

@@ -11,7 +11,7 @@ class Storage {
     setItem(key: string, value: string) { this.data.set(key, value); }
     removeItem(key: string) { this.data.delete(key); }
 }
-function fixture() {
+function fixture(drafts?:import('../resources/react/drafts').DraftRepository) {
     const storage = new Storage(), commands: any[] = [];
     let mode = 'accepted', subscriptions = 0, revision = 1, cursor = 3, eventListener: ((event: any) => void) | null = null;
     const projections: Array<string | null | undefined> = [];
@@ -29,7 +29,7 @@ function fixture() {
         subscribe(_session: string, _incarnation: string, _after: number, listener: (event: any) => void, projection?: string | null) { subscriptions++; projections.push(projection); eventListener = listener; return () => { subscriptions--; if (eventListener === listener) eventListener = null; }; },
     };
     const connection = {id: 'vessel', name: 'Vessel', client, journal: new IntentJournal(storage, 'tenant:vessel'), voyages: [], status: 'Connected'};
-    const workspace = new Workspace(() => new Map([['vessel', connection]]));
+    const workspace = new Workspace(() => new Map([['vessel', connection]]),drafts);
     return {workspace, connection, commands, storage, mode: (value: string) => { mode = value; }, subscriptions: () => subscriptions, projections, emit: (event: any) => eventListener?.(event), advanceSnapshot: () => { revision++; cursor++; }};
 }
 test('tabs retain isolated drafts and subscriptions while selection changes', async () => {
@@ -413,4 +413,23 @@ test('catalogued owner replacement fences the previous incarnation immediately',
  assert.equal(f.subscriptions(),0);
  release();await f.workspace.refresh(key);
  f.workspace.close();
+});
+
+
+test('persisted message clears only after acceptance and retains uncertain content for review',async()=>{
+    const records=new Map<string,any>();let version=0;
+    const drafts={async read(key:string){return records.get(key)||null;},async write(key:string,revision:string|null,value:any){assert.equal(records.get(key)?.revision??null,revision);const next=String(++version);if(value)records.set(key,{revision:next,value});else records.delete(key);return value?next:null;}};
+    const f=fixture(drafts),key=f.workspace.open('vessel','a','A');await f.workspace.restoreDraft(key);await f.workspace.refresh(key);
+    f.workspace.draft(key,'Accepted message');await f.workspace.act(key,'submit');assert.equal(records.has(key),false);
+    f.mode('unknown');f.workspace.draft(key,'Uncertain message');await f.workspace.act(key,'submit');
+    assert.equal(records.get(key).value.text,'Uncertain message');assert.equal(records.get(key).value.delivery,'review');
+    const sends=f.commands.filter(c=>c.op==='submit').length;const reopened=new Workspace(()=>new Map([['vessel',f.connection]]),drafts);reopened.open('vessel','a','A');await reopened.restoreDraft(key);
+    assert.equal(reopened.tabs.get(key)?.draft,'Uncertain message');assert.equal(f.commands.filter(c=>c.op==='submit').length,sends);reopened.close();f.workspace.close();
+});
+
+test('failed durable send marker prevents submission without discarding the draft',async()=>{
+    const drafts={async read(){return null;},async write(){throw new Error('Quota exceeded');}};
+    const f=fixture(drafts),key=f.workspace.open('vessel','a','A');await f.workspace.restoreDraft(key);await f.workspace.refresh(key);
+    f.workspace.draft(key,'Do not lose me');await f.workspace.act(key,'submit');
+    assert.equal(f.commands.filter(c=>c.op==='submit').length,0);assert.equal(f.workspace.tabs.get(key)?.draft,'Do not lose me');assert.match(f.workspace.tabs.get(key)?.draftState?.message||'',/Quota/);assert.match(f.workspace.tabs.get(key)?.notice||'',/no message was submitted/);f.workspace.close();
 });
