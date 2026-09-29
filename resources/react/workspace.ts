@@ -31,8 +31,16 @@ export class Workspace {
     }
     draft(key: string, value: string) { const tab = this.tabs.get(key); if (tab) { tab.draft = value; this.changed(); } }
     pending(tab: Tab) { return this.connections().get(tab.vessel)?.journal?.entries().filter((entry: any) => entry.session_id === tab.session) || []; }
-    actionable(tab: Tab) {
-        try { return Boolean(this.connections().get(tab.vessel)?.client && tab.snapshot && !tab.stale && !tab.busy && Date.now() - tab.freshAt < 35000 && !this.pending(tab).length); }
+    actionable(tab: Tab, op = '') {
+        try {
+            const pending=this.pending(tab);
+            // A previous send may remain unknown after its receipt expires. A fresh
+            // canonical snapshot can authorize a distinct new message; the old
+            // command ID stays in the journal and is never dispatched again.
+            const message=['submit','submit_content','steer'].includes(op);
+            const blocked=pending.some((entry:any)=>!message||!['submit','submit_content','steer'].includes(entry.op));
+            return Boolean(this.connections().get(tab.vessel)?.client && tab.snapshot && !tab.stale && !tab.busy && Date.now() - tab.freshAt < 35000 && !blocked);
+        }
         catch { return false; }
     }
     permitted(tab: Tab, op: string) {
@@ -85,7 +93,7 @@ export class Workspace {
     }
     async act(key: string, op: string, fields: Record<string, unknown> = {}, onReceipt?: (value:any)=>void) {
         const tab = this.tabs.get(key);
-        if (!tab || !this.actionable(tab) || !this.permitted(tab,op)) return;
+        if (!tab || !this.actionable(tab,op) || !this.permitted(tab,op)) return;
         if (tab.snapshot.lifecycle?.archived || tab.snapshot.lifecycle?.deleted || (tab.snapshot.pending_cleanup_run && !['cancel','respond','set_access','steer'].includes(op) && !['running','starting','cancelling'].includes(tab.snapshot.run?.state))) { tab.notice='Voyage lifecycle or cleanup blocks this action. Review its status.'; this.changed(); return; }
         const connection = this.connections().get(tab.vessel)!;
         const client = connection.client;

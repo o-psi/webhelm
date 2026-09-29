@@ -62,9 +62,10 @@ not a current filesystem diff. Read requests are admitted as one exact operator
 run; the dock waits for that run’s canonical result and never repeats an uncertain
 request. Uncertain command notices explain the affected action in the composer;
 exact command IDs remain in expandable receipt details for inspection. If a
-receipt remains unknown, the original voyage stays fenced while a new voyage
-can open with a copied text draft for explicit review. No command or picture is
-resent by that transition. The conversation provides response copying (fetching
+receipt remains unknown, the original command stays recorded and is never
+automatically resent. A fresh canonical voyage snapshot permits a separately
+initiated new message in the same conversation; other mutations still wait for
+the unresolved receipt. The conversation provides response copying (fetching
 complete canonical text when the visible projection is truncated), user-turn
 navigation, and a compact sidebar for scanning long voyage lists.
 
