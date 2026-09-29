@@ -48,6 +48,8 @@ try {
     });
     await page.addInitScript(()=>{
         window.fixtureCommands=[];
+        window.fixtureClipboard=[];
+        Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>window.fixtureClipboard.push(text)}});
         // Transport is synthetic. The App, DOM, CSS, browser layout,
         // controls and event handling are the unmodified production bundle.
         const binding={incarnation:'i',browser_id:'fixture-browser',attachment_id:'fixture-attachment',capture_epoch:1,controller_epoch:1};
@@ -209,6 +211,23 @@ try {
     const beforeTurn=await conversation.locator('.transcript').evaluate(element=>element.scrollTop);
     await conversation.getByRole('button',{name:'Previous user message'}).click();
     check(await conversation.locator('.transcript').evaluate(element=>element.scrollTop)<beforeTurn,`${label}: previous turn did not move the transcript`);
+    const linkedMessage=conversation.locator('.message[data-message-index="35"]');
+    await linkedMessage.getByRole('button',{name:'Copy message link'}).click();
+    const copiedLink=await page.evaluate(()=>window.fixtureClipboard.at(-1));
+    check(copiedLink.includes('/voyages/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222#turn-'),`${label}: message link lost its Voyage route`);
+    check(!copiedLink.includes('Fixture request'),`${label}: message link included transcript text`);
+    await page.evaluate(link=>{window.location.hash=new URL(link).hash;},copiedLink);
+    await page.waitForFunction(()=>document.activeElement?.getAttribute('data-message-index')==='35');
+    check(await conversation.locator('.message.user').first().textContent().then(text=>text.includes('You')),`${label}: author hierarchy missing`);
+    await page.screenshot({path:`${output}/${label}-linked-turn-light.png`});
+    await page.evaluate(()=>document.documentElement.classList.add('dark'));
+    await conversation.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
+    await page.screenshot({path:`${output}/${label}-linked-turn-dark.png`});
+    await page.evaluate(()=>document.documentElement.classList.remove('dark'));
+    await page.evaluate(link=>{window.location.hash=new URL(link).hash.replace(/-r\d+$/,'-r999');},copiedLink);
+    await conversation.getByRole('status').filter({hasText:'different conversation revision'}).waitFor();
+    check(await page.evaluate(()=>window.fixtureCommands.length===0||!window.fixtureCommands.slice(-1).some(c=>c.op==='submit'||c.op==='steer')),`${label}: link dispatched a message`);
+    await page.evaluate(()=>{window.location.hash='';});
     await page.getByRole('button',{name:'Choose model'}).click();
     const modelDialog=page.getByRole('dialog',{name:'Choose model',exact:true});
     await modelDialog.locator('[data-model-choice]').filter({hasText:'Fixture model'}).waitFor();
@@ -253,12 +272,13 @@ try {
     await page.evaluate(()=>document.documentElement.classList.remove('dark'));
     await discovery.getByRole('textbox',{name:'Search actions, tools, skills, and files'}).fill('review');
     await discovery.getByRole('button',{name:/review/}).click();
-    await discovery.waitFor({state:'hidden'});
+    await discovery.waitFor({state:'detached'});
     check((await draft.inputValue()).includes('/work/.agents/skills/review/SKILL.md'),`${label}: selected skill did not enter the composer`);
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='submit'||c.op==='steer').length===0),`${label}: discovery sent a message`);
     await draft.fill('');
     await conversation.getByRole('button',{name:'Discover actions, tools, skills, and files'}).click();
     await page.getByRole('dialog',{name:'Composer actions'}).getByRole('button',{name:'src/fixture.ts'}).click();
+    await page.getByRole('dialog',{name:'Composer actions'}).waitFor({state:'detached'});
     check((await draft.inputValue()).includes('Read the workspace file "src/fixture.ts"'),`${label}: selected file did not enter the composer`);
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='submit'||c.op==='steer').length===0),`${label}: file selection sent a message`);
     await draft.fill('');
@@ -267,6 +287,7 @@ try {
     await page.getByRole('dialog',{name:'Composer actions'}).evaluate(el=>Promise.allSettled(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
     await page.getByRole('dialog',{name:'Composer actions'}).getByRole('textbox',{name:'Search actions, tools, skills, and files'}).press('Escape');
     await page.getByRole('dialog',{name:'Composer actions'}).waitFor({state:'hidden'});
+    await page.waitForFunction(()=>document.activeElement===document.querySelector('.conversation:not([hidden]) textarea[aria-label="Message"]'));
     check(await draft.evaluate(el=>el===document.activeElement),`${label}: closing slash discovery did not restore composer focus`);
     await draft.fill('Retained synthetic draft');
     if(label==='desktop'){

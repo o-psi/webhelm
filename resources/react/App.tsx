@@ -9,6 +9,7 @@ import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from './components/ui/dialog';
 import {ArrowDownIcon,ArrowUpIcon,CheckIcon,ChevronDownIcon,ChevronRightIcon,CopyIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
+import {TurnLink,linkedTurn} from './TurnLink';
 import {HostBrowser} from './HostBrowser';
 import {GoalPanel} from './Goal';
 import {ComposerDiscovery} from './ComposerDiscovery';
@@ -130,6 +131,23 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
     const activeRef=useRef(active); activeRef.current=active;
     const pendingAnchor=useRef<null|(()=>void)>(null);
     const [showJump,setShowJump] = useState(false);
+    const [linkNotice,setLinkNotice]=useState('');
+    const [linkHash,setLinkHash]=useState(()=>window.location.hash);
+    const visitedLink=useRef('');
+    useEffect(()=>{const changed=()=>{visitedLink.current='';setLinkHash(window.location.hash);};window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
+    useEffect(()=>{
+        if(!active||!tab.snapshot)return;
+        const target=linkedTurn(linkHash,tab.vessel,tab.session);
+        if(!target){setLinkNotice('');return;}
+        if(target.revision!==tab.snapshot.revision){setLinkNotice('This message link belongs to a different conversation revision. Review the current history; the linked message has not been selected.');return;}
+        const message=scroll.current?.querySelector<HTMLElement>(`[data-message-index="${target.index}"]`);
+        if(!message){setLinkNotice('The linked message is not in the loaded history. Scroll upward to load earlier messages.');return;}
+        setLinkNotice('');
+        if(visitedLink.current===linkHash)return;
+        visitedLink.current=linkHash;following.current=false;tab.following=false;
+        const el=scroll.current!;el.scrollTop+=message.getBoundingClientRect().top-el.getBoundingClientRect().top-12;
+        tab.scrollTop=el.scrollTop;message.focus({preventScroll:true});setShowJump(true);
+    },[active,linkHash,tab.snapshot,tab.session]);
     const [turnNavigation,setTurnNavigation]=useState({previous:false,next:false});
     const turnPositions=()=>{
         const container=scroll.current;
@@ -207,8 +225,8 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
         });
     };
     useEffect(() => {if (active) {loadNearTop();updateTurnNavigation();}}, [active, tab.snapshot?.message_offset, tab.snapshot?.messages]);
-    const renderMessage=(message:any)=>{return <article key={message.message_index} className={`message ${message.role}`} data-message-index={message.message_index}>
-                    {['tool','function'].includes(message.role) ? <pre>{content(message.content)}</pre> : <><span className="sr-only">{message.role}</span><div className="prose" dangerouslySetInnerHTML={{__html:prose(message.parts?.length?message.parts.filter((part:any)=>part.type==='text').map((part:any)=>part.text).join('\n'):content(message.content))}}/></>}
+    const renderMessage=(message:any)=>{return <article key={message.message_index} className={`message ${message.role}`} data-message-index={message.message_index} tabIndex={-1}>
+                    {['tool','function'].includes(message.role) ? <pre>{content(message.content)}</pre> : <><div className="flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{message.role==='user'?'You':message.role==='assistant'?'Voyage':message.role}</span><TurnLink tab={tab} message={message}/></div><div className="prose" dangerouslySetInnerHTML={{__html:prose(message.parts?.length?message.parts.filter((part:any)=>part.type==='text').map((part:any)=>part.text).join('\n'):content(message.content))}}/></>}
                     {message.interrupted_attempt&&<small className="message-meta">Interrupted attempt</small>}
                     {message.parts?.filter((part:any)=>part.type==='image').map((part:any,index:number)=><ImagePart key={part.attachment?.id||index} attachment={part.attachment} tab={tab} workspace={workspace}/>)}
                     {message.projection_truncated && <Button variant="ghost" disabled={tab.busy} onClick={()=>void workspace.expand(tab.key,message.message_index)}>Read complete message</Button>}
@@ -218,6 +236,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
     const location=[connection?.name,tab.snapshot?.workspace].filter(Boolean).join(' · ');
     return <section className="conversation" hidden={!active} aria-label={tab.title}>
         <header className="conversation-header"><div className="conversation-title"><h1 title={tab.title}>{tab.title}</h1>{location&&<p title={location}>{location}</p>}</div>{headerStatus&&<span className="status-label" data-status-tone={headerStatus.tone} data-animated={headerStatus.animated||undefined}><i aria-hidden="true"/>{headerStatus.label}</span>}</header>
+        <p role="status" className="px-3 text-sm text-muted-foreground" hidden={!linkNotice}>{linkNotice}</p>
         <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {if(!activeRef.current||loadingHistory.current)return;const el=scroll.current!;tab.scrollTop=el.scrollTop;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;tab.following=following.current;setShowJump(!following.current);updateTurnNavigation();loadNearTop();}}><div className="thread">
             {!tab.snapshot && <p className="empty">Waiting for a current Vessel snapshot…</p>}
             {threadRows(tab.snapshot?.messages||[]).map(row=>row.entries?<ToolGroup key={row.key} entries={row.entries} running={['running','starting','cancelling'].includes(run?.state)} messageStart={run?.message_start} decisions={tab.decisions.length>0} renderMessage={renderMessage}/>:<React.Fragment key={row.key}>{renderMessage(row.message)}</React.Fragment>)}

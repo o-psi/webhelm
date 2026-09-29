@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import {JSDOM} from 'jsdom';
-import {threadRows,ToolGroup} from '../resources/react/ToolGroup.tsx';
+import {threadRows,ToolGroup,activitySummary} from '../resources/react/ToolGroup.tsx';
 const messages=Array.from({length:5},(_,i)=>[{role:'assistant',message_index:i*2,content:'',tool_calls:[{id:`call-${i}`,function:{name:'shell',arguments:`command-${i}`}}]},{role:'tool',message_index:i*2+1,tool_call_id:`call-${i}`,content:`result-${i}`}]).flat();
 test('tool calls and results become one group with no duplicate result messages',()=>{
  const rows=threadRows(messages);assert.equal(rows.length,1);assert.equal(rows[0].entries?.length,5);assert.equal(rows[0].entries?.[0].result.content,'result-0');
@@ -14,7 +14,7 @@ test('activity summary hides action details until expansion and preserves an ope
  entries[4].call={...entries[4].call,function:{name:'shell',arguments:JSON.stringify({command:'first line\nsecond line\nthird line'})}};
  const render=()=>React.createElement(ToolGroup,{entries,running:false,messageStart:0,decisions:false,renderMessage:(message:any)=>React.createElement('pre',null,message.content)});
  try{
-  await React.act(async()=>root.render(render()));assert.equal(document.querySelectorAll('[data-tool-id]').length,0);assert.match(document.querySelector('.tool-group-heading')!.textContent!,/5 commands.*5 recorded/);assert.doesNotMatch(document.body.textContent!,/result-4|command-4/);
+  await React.act(async()=>root.render(render()));assert.equal(document.querySelectorAll('[data-tool-id]').length,0);assert.match(document.querySelector('.tool-group-heading')!.textContent!,/5 commands.*5 returned/);assert.doesNotMatch(document.body.textContent!,/result-4|command-4/);
   await React.act(async()=>{document.querySelector<HTMLButtonElement>('.tool-group-heading')!.click();});assert.equal(document.querySelectorAll('[data-tool-id]').length,5);
   const detail=document.querySelector<HTMLElement>('[data-tool-id="call-4"]')!;
   await React.act(async()=>{detail.querySelector<HTMLButtonElement>('button')!.click();});assert.match(detail.textContent!,/result-4/);assert.match(detail.querySelector('.tool-summary-text')!.textContent!,/first line\nsecond line\nthird line/);
@@ -32,4 +32,14 @@ test('tool summary clamps to two lines only while collapsed',async()=>{
  const css=readFileSync(new URL('../resources/react/style.css',import.meta.url),'utf8');
  assert.match(css,/\.tool-entry\[data-state="closed"\] \.tool-trigger>\.tool-summary-text\{[^}]*-webkit-line-clamp:2;[^}]*max-height:3em;[^}]*overflow:hidden/);
  assert.match(css,/\.tool-summary-text\{[^}]*overflow-wrap:anywhere;[^}]*line-height:1\.5/);
+});
+
+
+test('activity distinguishes action failures and unconfirmed results from the run, with honest summed timing',()=>{
+ const entry=(status:any,elapsed:number)=>({key:'x',call:{function:{name:'list_directory'}},result:{tool_outcome:{execution:status,elapsed_ms:elapsed},tool_success:true}});
+ const summary=activitySummary([entry('completed',1200),entry('policy_refused',50),{key:'pending',call:{function:{name:'read_file'}},request:{message_index:0}}],false,5,false);
+ assert.equal(summary.kinds,'2 directory listings · 1 file read');
+ assert.equal(summary.outcomes,'1 returned · 1 unsuccessful action · 1 unconfirmed');
+ assert.equal(summary.timing,'1.2 s tool time (partial)');
+ assert.equal(summary.failed,1);
 });
