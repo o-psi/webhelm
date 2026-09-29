@@ -1,6 +1,7 @@
 export type Tool={name:string;description:string};
 export type Skill={name:string;description:string;path:string;scope:string|null};
 export type Catalogue={tools:Tool[];skills:Skill[];toolSource:string;skillExecution:string;incomplete:boolean;canRead:boolean};
+export type FileCatalogue={paths:string[];truncated:boolean};
 
 function safeText(value:unknown,limit:number):string{return typeof value==='string'?value.slice(0,limit).replace(/[\u0000-\u001f\u007f]/g,' '):'';}
 export function parseDiscovery(tools:any,skills:any):Catalogue {
@@ -15,4 +16,11 @@ export function parseDiscovery(tools:any,skills:any):Catalogue {
         incomplete:skills.value.discovery_incomplete===true,
         canRead:skills.value.can_read===true,
     };
+}
+
+export function parseFileDiscovery(reply:any):FileCatalogue {
+    if(reply?.section!=='files'||!Array.isArray(reply.value?.files)||typeof reply.value?.truncated!=='boolean')throw new Error('Voyage returned an invalid file catalogue.');
+    const candidates:unknown[]=reply.value.files.slice(0,1024);
+    const paths=candidates.filter((path):path is string=>typeof path==='string'&&path.length>0&&path.length<=4096&&!path.startsWith('/')&&!path.includes('\\')&&!/[\u0000-\u001f\u007f]/.test(path)&&!path.split('/').some(part=>part===''||part==='..'));
+    return {paths:[...new Set(paths)],truncated:reply.value.truncated||reply.value.files.length>1024||paths.length!==reply.value.files.length};
 }

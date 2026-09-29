@@ -72,7 +72,11 @@ local actions plus the executing Voyage’s advertised tools and filesystem skil
 when `skills_catalog` and workspace read access are available. Selection inserts
 text into the saved draft and never sends it. Tool inventory is a live-run view or
 built-in next-run preview; skill metadata is a next-run preview. Voyage checks
-policy again before any tool execution or skill file read. The right dock switches
+policy again before any tool execution or skill file read. When the Voyage advertises
+`workspace_file_catalog`, the same menu lists bounded workspace-relative filenames
+under workspace read permission. It omits symlinks and generated/dependency
+directories and labels incomplete results. Selecting a file inserts a request in
+the unsent draft; Voyage checks current policy before reading contents. The right dock switches
 between the shared Vessel-hosted
 browser and Changes. When a Vessel advertises `workspace_changes` and the
 connection has `workspace_read` permission, Changes reads current Git status and

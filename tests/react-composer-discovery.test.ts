@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {parseDiscovery} from '../resources/react/composer-discovery';
+import {parseDiscovery,parseFileDiscovery} from '../resources/react/composer-discovery';
 
 test('discovery accepts bounded advertised metadata and rejects invalid replies',()=>{
     const value=parseDiscovery(
@@ -17,6 +17,13 @@ test('discovery accepts bounded advertised metadata and rejects invalid replies'
     assert.throws(()=>parseDiscovery({section:'tools',value:{}},{section:'skills',value:{skills:[]}}),/invalid tool inventory/);
 });
 
+test('file discovery keeps only bounded workspace-relative names and reports incomplete input',()=>{
+    const value=parseFileDiscovery({section:'files',value:{files:['src/main.rs','../outside','/root/private','src/main.rs','bad\\path'],truncated:false}});
+    assert.deepEqual(value.paths,['src/main.rs']);
+    assert.equal(value.truncated,true);
+    assert.throws(()=>parseFileDiscovery({section:'files',value:{files:'not an array',truncated:false}}),/invalid file catalogue/);
+});
+
 test('composer discovery inserts a selected skill without sending and gates old Vessels',async()=>{
     const dom=new JSDOM('<main id="app"></main>',{url:'https://fixture.invalid'});
     const names=['window','document','IS_REACT_ACT_ENVIRONMENT','getComputedStyle','MutationObserver','HTMLElement','HTMLInputElement','Node','NodeFilter','Element','ShadowRoot','Event','CustomEvent','requestAnimationFrame','cancelAnimationFrame'];
@@ -26,27 +33,30 @@ test('composer discovery inserts a selected skill without sending and gates old 
     const {createRoot}=await import('react-dom/client');
     const {ComposerDiscovery}=await import('../resources/react/ComposerDiscovery.tsx');
     const root=createRoot(dom.window.document.getElementById('app')!);
-    const tab:any={key:'v:s',draft:'Please review.',incarnation:'one',stale:false,capabilities:['skills_catalog'],scope:'owner',snapshot:{run:{run_id:'run-one'}}};
+    const tab:any={key:'v:s',draft:'Please review.',incarnation:'one',stale:false,capabilities:['skills_catalog','workspace_file_catalog'],scope:'owner',snapshot:{run:{run_id:'run-one'}}};
     const readLog:string[]=[];
-    const workspace:any={draft(_key:string,value:string){tab.draft=value;},read(_key:string,_op:string,fields:any){readLog.push(fields.section);if(fields.section==='tools')return Promise.resolve({section:'tools',value:[{name:'read_file'}],execution:'active'});return Promise.resolve({section:'skills',value:{skills:[{name:'review',description:'Review code',path:'/workspace/review/SKILL.md',scope:'/workspace'}],can_read:true,discovery_incomplete:false},execution:'next_run'});}};
+    const workspace:any={draft(_key:string,value:string){tab.draft=value;},read(_key:string,_op:string,fields:any){readLog.push(fields.section);if(fields.section==='tools')return Promise.resolve({section:'tools',value:[{name:'read_file'}],execution:'active'});if(fields.section==='files')return Promise.resolve({section:'files',value:{files:['src/main.rs'],truncated:false},execution:'next_run'});return Promise.resolve({section:'skills',value:{skills:[{name:'review',description:'Review code',path:'/workspace/review/SKILL.md',scope:'/workspace'}],can_read:true,discovery_incomplete:false},execution:'next_run'});}};
     const render=async()=>act(async()=>root.render(React.createElement(ComposerDiscovery,{tab,workspace,onSettings:()=>{},onAttach:()=>{}})));
     try{
         await render();
-        await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Discover actions, tools, and skills"]')!.click());
-        assert.deepEqual(readLog,['tools','skills']);
+        await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Discover actions, tools, skills, and files"]')!.click());
+        assert.deepEqual(readLog,['tools','skills','files']);
         assert.match(dom.window.document.body.textContent!,/next run/);
         await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('section[aria-label="Skills"] button')!.click());
         assert.equal(tab.draft,'Please review.\nUse the "review" filesystem skill at "/workspace/review/SKILL.md" for this task.');
         assert.equal(dom.window.document.querySelector('[role="dialog"]'),null);
+        await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Discover actions, tools, skills, and files"]')!.click());
+        await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('section[aria-label="Files"] button')!.click());
+        assert.equal(tab.draft,'Please review.\nUse the "review" filesystem skill at "/workspace/review/SKILL.md" for this task.\nRead the workspace file "src/main.rs" for this task.');
         tab.capabilities=[];await render();
-        await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Discover actions, tools, and skills"]')!.click());
+        await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Discover actions, tools, skills, and files"]')!.click());
         assert.match(dom.window.document.body.textContent!,/does not advertise/);
-        assert.deepEqual(readLog,['tools','skills']);
+        assert.deepEqual(readLog,['tools','skills','files','tools','skills','files']);
         await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
         tab.capabilities=['skills_catalog'];
         workspace.read=async()=>{throw new Error('Voyage connection changed.');};
         await render();
-        await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Discover actions, tools, and skills"]')!.click());
+        await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Discover actions, tools, skills, and files"]')!.click());
         assert.match(dom.window.document.querySelector('[role="alert"]')!.textContent!,/Voyage connection changed/);
         assert.equal(dom.window.document.querySelector('section[aria-label="Skills"]'),null);
     }finally{
