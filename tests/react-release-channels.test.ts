@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {checkReleaseChannel,compareReleaseVersions,publishedRelease} from '../resources/js/release-channels.js';
+import {checkReleaseChannel,compareReleaseVersions,installedReleaseChannel,isNewerOnInstalledChannel,publishedRelease} from '../resources/js/release-channels.js';
 
 const target='x86_64-unknown-linux-gnu';
 const assets=version=>[
@@ -20,6 +20,13 @@ test('published channel checks are read-only hints with SemVer ordering',async()
     assert.equal(compareReleaseVersions('1.0.3-nightly.20260928.13.1','v1.0.2'),1);
     assert.equal(compareReleaseVersions('v1.0.3','1.0.3-nightly.20260928.13.1'),1);
     assert.equal(compareReleaseVersions('unknown','v1.0.2'),null);
+    assert.equal(installedReleaseChannel('1.0.2'),'stable');
+    assert.equal(installedReleaseChannel('1.0.3-nightly.20260928.12.1'),'nightly');
+    assert.equal(installedReleaseChannel('unknown'),null);
+    assert.equal(isNewerOnInstalledChannel('nightly','1.0.3-nightly.20260928.13.1','1.0.2'),false,'another channel does not raise a badge');
+    assert.equal(isNewerOnInstalledChannel('stable','v1.0.3','1.0.2'),true);
+    assert.equal(isNewerOnInstalledChannel('nightly','1.0.3-nightly.20260928.13.1','1.0.3-nightly.20260928.12.1'),true);
+    assert.equal(isNewerOnInstalledChannel('stable','v1.0.2','1.0.2'),false);
     const oldFetch=globalThis.fetch, urls=[];
     globalThis.fetch=async url=>{urls.push(String(url));return new Response(JSON.stringify(urls.length===1?stable:releases));};
     try {

@@ -16,6 +16,11 @@ function parseVersion(value) {
     return match ? match.slice(1).map(part => part === undefined ? null : BigInt(part)) : null;
 }
 
+export function installedReleaseChannel(version) {
+    const parsed = parseVersion(version);
+    return parsed ? parsed[3] === null ? 'stable' : 'nightly' : null;
+}
+
 // Null means an installed version has an unknown format; don't guess its order.
 export function compareReleaseVersions(a, b) {
     const left = parseVersion(a), right = parseVersion(b);
@@ -28,6 +33,12 @@ export function compareReleaseVersions(a, b) {
         if (left[i] !== right[i]) return left[i] > right[i] ? 1 : -1;
     }
     return 0;
+}
+
+export function isNewerOnInstalledChannel(channel, candidate, installed) {
+    return installedReleaseChannel(installed) === channel
+        && installedReleaseChannel(candidate) === channel
+        && compareReleaseVersions(candidate, installed) === 1;
 }
 
 export function publishedRelease(channel, data) {

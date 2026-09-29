@@ -15,6 +15,7 @@ export function vesselUpdate(root, {show, resume}) {
     const text = (id, value) => { $(id).textContent = String(value ?? ''); };
     const active = (c, n) => context?.c === c && generation === n;
     const mayPrepare = record => !record || ['idle','discarded','complete','failed'].includes(record.phase);
+    const reviewExpired = record => record?.phase === 'ready' && Number.isSafeInteger(record.expires_at) && Date.now() >= record.expires_at * 1000;
     const phaseMessage = {
         idle: 'Choose a channel to prepare a verified build. Nothing installs until you approve it.',
         preparing: 'Preparing a build on the Vessel. Nothing has been installed.',
@@ -31,7 +32,8 @@ export function vesselUpdate(root, {show, resume}) {
     }
     function render(record) {
         const phase = record?.phase || 'idle';
-        text('update-status', record?.message || phaseMessage[phase] || 'Check the current update status.');
+        const expired = reviewExpired(record);
+        text('update-status', expired ? 'This prepared review expired. Discard it and prepare a fresh build before updating.' : record?.message || phaseMessage[phase] || 'Check the current update status.');
         $('update-source').hidden = !mayPrepare(record);
         $('update-review').hidden = phase !== 'ready';
         $('update-refresh').hidden = ['idle','discarded'].includes(phase);
@@ -39,7 +41,8 @@ export function vesselUpdate(root, {show, resume}) {
         text('update-version',record?.version);
         text('update-description',record?.description);
         text('update-services',record?.services?.length ? `Services to restart: ${record.services.join(', ')}` : '');
-        $('update-approve').disabled = busy;
+        $('update-approve').disabled = busy || expired;
+        text('update-discard',expired ? 'Discard expired review' : 'Not now');
         $('update-discard').disabled = busy;
         $('update-check').disabled = busy;
     }
@@ -80,14 +83,18 @@ export function vesselUpdate(root, {show, resume}) {
     async function mutate(op, fields) {
         if (busy || !context?.caps.remote_updates) return;
         const {c}=context, n=generation;
+        let failure = null;
         busy=true; render(pending);
         try {
             const record=await exchange(c,op,fields);
             if (active(c,n)) { remember(record.phase === 'complete' ? {...record,phase:'applying'} : record); render(pending); }
-        } catch(error) { if (active(c,n)) text('update-status',error.message); }
-        finally { if (active(c,n)) { busy=false; $('update-approve').disabled=false; $('update-discard').disabled=false; $('update-check').disabled=false; } }
+        } catch(error) { if (active(c,n)) { failure=error.message; text('update-status',failure); } }
+        finally { if (active(c,n)) { busy=false; $('update-approve').disabled=reviewExpired(pending); $('update-discard').disabled=false; $('update-check').disabled=false; } }
         // Resolve the already journalled identity after an uncertain response.
         if (active(c,n)) await refresh();
+        if (failure && active(c,n) && pending?.phase === 'ready' && !reviewExpired(pending)) {
+            text('update-status',`${failure} The prepared review is still ready; check its status before approving again.`);
+        }
     }
     listen('update-check',() => {
         if (busy || !context?.caps.remote_updates || !mayPrepare(pending)) return;
@@ -97,6 +104,7 @@ export function vesselUpdate(root, {show, resume}) {
     });
     listen('update-approve',() => {
         if (pending?.phase !== 'ready' || busy) return;
+        if (reviewExpired(pending)) return render(pending);
         const fields={operation_id:pending.operation_id,release_id:pending.release_id};
         pending={...pending,phase:'applying'}; render(pending);
         mutate('update_apply',fields);

@@ -62,6 +62,7 @@ try {
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
                 if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,release_id:'a'.repeat(64),version:'fixture-next-version',description:'Verified development build from fixture source',services:['vessel.service']};
+                else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
                 else if(c.op==='update_status')result=updateRecord;
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
@@ -111,7 +112,7 @@ try {
     await vesselCard.getByText('Version 1.0.2').waitFor();
     await page.getByText('Stable: v1.0.2').waitFor();
     await page.getByText('Development: 1.0.3-nightly.20260928.1.1').waitFor();
-    check(await vesselCard.getByText('New release').isVisible(),`${label}: newer published build is not shown`);
+    check(await vesselCard.getByText('New release').count()===0,`${label}: another channel falsely marks this Vessel as having a new release`);
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='update_prepare').length===0),`${label}: release lookup prepared a build without consent`);
     check((await vesselCard.boundingBox()).height<100,`${label}: overview card is not compact`);
     check(await page.getByText('Needs confirmation').count()===0,`${label}: pending pairing panel is still shown`);
@@ -119,7 +120,8 @@ try {
     await page.screenshot({path:`${output}/${label}-vessel-overview.png`});
     await vesselCard.getByRole('button',{name:'View details for Fixture Vessel'}).click();
     await page.locator('.connections-maintenance #update-current').getByText('1.0.2').waitFor();
-    check(await page.locator('.connections-maintenance').getByText('Newer release published').isVisible(),`${label}: channel comparison is missing`);
+    check(await page.locator('.connections-maintenance').getByText('Newer release published').count()===0,`${label}: another channel falsely claims a newer release`);
+    check(await page.locator('.connections-maintenance').getByText('Published on another channel').isVisible(),`${label}: cross-channel build is not identified`);
     check(await page.locator('.connections-maintenance').isVisible(),`${label}: Vessel maintenance is missing from Manage Vessels`);
     check(await page.locator('.connections-dialog #update-check').isVisible(),`${label}: update action is not visible`);
     check(await page.locator('.connections-dialog').getByRole('button',{name:'Remove from Helm Web…'}).count()===0,`${label}: removal action is exposed before opening its disclosure`);
@@ -146,6 +148,9 @@ try {
     await page.locator('#update-review').waitFor({state:'visible'});
     await page.locator('#update-review').scrollIntoViewIfNeeded();
     await page.screenshot({path:`${output}/${label}-vessel-review-dark.png`});
+    await page.locator('#update-approve').click();
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='update_apply').length===1),`${label}: Update this Vessel did not send one exact approval`);
+    check(await page.locator('#update-review').isHidden(),`${label}: approved review stayed actionable`);
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.getByRole('button',{name:'Account and appearance'}).click();

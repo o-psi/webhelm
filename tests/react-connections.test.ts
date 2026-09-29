@@ -52,7 +52,7 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.match(query('.connections-card')!.textContent!, /Version 1\.0\.2/);
         assert.match(query('.connections-dialog')!.textContent!, /Stable: v1\.0\.2/);
         assert.match(query('.connections-dialog')!.textContent!, /Development: 1\.0\.3-nightly/);
-        assert.match(query('.connections-card')!.textContent!, /New release/);
+        assert.doesNotMatch(query('.connections-card')!.textContent!, /New release/,'newer development build does not mark a stable Vessel');
         assert.equal(query('.connections-pending'), null);
         assert.doesNotMatch(query('.connections-dialog')!.textContent!, /Laptop|Needs confirmation/);
         assert.deepEqual(commands, ['capabilities']);
@@ -61,7 +61,8 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.match(query('.connections-maintenance')!.textContent!, /Software updates/);
         assert.equal(query('#update-current')!.textContent, '1.0.2');
         assert.ok(query('#update-check'), 'the selected Vessel has update controls');
-        assert.match(query('.connections-maintenance')!.textContent!, /Newer release published/);
+        assert.doesNotMatch(query('.connections-maintenance')!.textContent!, /Newer release published/);
+        assert.match(query('.connections-maintenance')!.textContent!, /Published on another channel/);
         assert.equal(commands.includes('update_prepare'),false,'opening maintenance does not download a build');
         assert.deepEqual(commands, ['capabilities', 'capabilities']);
         assert.equal(query('.connections-details dd'),null,'technical identifiers start collapsed');
