@@ -118,3 +118,11 @@ test('bounded text resumes from a truncated snapshot and rejects offset or paylo
         assert.deepEqual(state,before,'refused frame must not change displayed text or cursor');
     }
 });
+
+test('public context observations apply once without fetching a snapshot or dispatching work',()=>{
+    const stream=new ConversationStream();stream.seed(snapshot,'incarnation');const state={revision:1,messages:[]};
+    const update={protocol:1,session_id:'session',incarnation:'incarnation',error:null,outcome_unknown:false,result:{projection:'public-v2',cursor:12,latest_cursor:12,replay_gap:false,events:[{cursor:12,session_id:'session',revision:2,kind:'session',payload:{context_status:'Last prepared input: unknown tokens',context_observation:{projection_generation:2,count:{input_tokens:null}}}}]}};
+    assert.equal(stream.accept(update,state),'append');assert.equal(state.context_status,'Last prepared input: unknown tokens');assert.equal(state.context_observation.count.input_tokens,null);
+    assert.equal(stream.accept(update,state),'duplicate');assert.deepEqual(state.messages,[]);
+    const bad=structuredClone(update);bad.result.cursor=13;bad.result.latest_cursor=13;bad.result.events[0].cursor=13;bad.result.events[0].payload.context_status=42;assert.equal(stream.accept(bad,state),'resync');assert.equal(state.context_status,'Last prepared input: unknown tokens');
+});

@@ -77,6 +77,12 @@ export class ConversationStream {
                 else if (!messages.length || messages.at(-1).message_index + 1 === payload.message_index) messages.push(payload.message);
                 else return fail();
                 changed = true;
+            } else if (item.kind === 'session' && Object.hasOwn(payload || {}, 'context_status')) {
+                if (payload.context_status !== null && typeof payload.context_status !== 'string') return fail();
+                if (payload.context_observation !== null && (typeof payload.context_observation !== 'object' || Array.isArray(payload.context_observation))) return fail();
+                snapshot.context_status = payload.context_status === null ? null : bounded(payload.context_status,1024).text;
+                snapshot.context_observation = payload.context_observation;
+                changed = true;
             } else if (item.kind === 'text_delta' && item.run_id === snapshot.run?.run_id && Number.isSafeInteger(payload?.offset) && typeof payload.text === 'string') {
                 const run = snapshot.run, partial = run.partial_text;
                 const encoder=new TextEncoder(),partialBytes=typeof partial==='string'?encoder.encode(partial).length:-1;
