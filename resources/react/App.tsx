@@ -118,6 +118,7 @@ export function RunStatus({tab}: {tab: Tab}) {
     const cleanup = snapshot.cleanup?.run_id === run?.run_id ? snapshot.cleanup : null;
     return <div className="run-status" role="status" aria-live="polite">
         {snapshot.recovery_notice && <p>{snapshot.recovery_notice}</p>}
+        {typeof snapshot.context_status==='string' && snapshot.context_status && <p className="composer-hint" aria-label="Request context accounting">{snapshot.context_status}</p>}
         {show && <><p className="run-status-label">{working ? <WorkingIndicator/> : tab.stale && run.state === 'running' ? 'Status unavailable' : snapshot.recovery_pending ? 'Previous run interrupted · saved output' : active && tab.decisions.length ? 'Waiting for you' : labels[run.state] || 'Needs attention'}</p>
             {run.failure_summary && <p>{run.failure_summary}</p>}
             {!active && cleanup?.reason && <p>{cleanup.reason}</p>}

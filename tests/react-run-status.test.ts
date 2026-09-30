@@ -44,3 +44,11 @@ test('running decoration uses the TUI word list and ten-frame spinner cadence', 
     const css = readFileSync(new URL('../resources/react/style.css', import.meta.url), 'utf8');
     assert.match(css, /prefers-reduced-motion:reduce\).*?working-word/s);
 });
+
+test('context accounting displays the Voyage label without inventing current remaining or percentages',()=>{
+    const label='Last prepared input: unknown tokens · window: unknown · reserve: unknown · projection 3';
+    const html=status({state:'running'},{context_status:label});
+    assert.match(html,/Request context accounting/);assert.ok(html.includes(label));assert.doesNotMatch(html,/remaining tokens|%/);
+    assert.doesNotMatch(status({state:'completed'}),/Request context accounting/);
+    assert.ok(status({state:'completed'},{context_status:'Last prepared input: 0 tokens · window: 1000 · reserve: unknown · projection 1'}).includes('0 tokens'));
+});
