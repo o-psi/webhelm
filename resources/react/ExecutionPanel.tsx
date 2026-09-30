@@ -58,13 +58,14 @@ export function ExecutionPanel({tab,connection}:{tab:Tab;connection:any}){
             setReview(saved);setUncertain(false);setAcknowledged(false);
         }catch(error){setNotice(error instanceof Error?error.message:'Execution review unavailable.');}finally{setBusy(false);}
     };
-    const act=async(action:'approve'|'cancel'|'revoke')=>{
+    const act=async(action:'approve'|'cancel'|'revoke'|'reconcile')=>{
         if(busy||!review||!pending.current)return;
         setBusy(true);setNotice('');setAcknowledged(false);
         try{
             const approval={review_id:review.review.review_id,command_id:review.review.command_id,digest:review.review.digest};
-            const operation=action==='approve'?{action:'approve',approval}:{action:'control',control:{review_id:approval.review_id,command_id:uuid(),digest:approval.digest,action}};
+            const operation=action==='reconcile'?{action:'reconcile_transition',review_id:approval.review_id,command_id:uuid(),digest:approval.digest}:action==='approve'?{action:'approve',approval}:{action:'control',control:{review_id:approval.review_id,command_id:uuid(),digest:approval.digest,action}};
             const saved=await exchange(operation);
+            if(action==='reconcile'&&saved?.transition?.review_id===approval.review_id){setNotice(saved.message);setStatus(null);return;}
             if(saved?.review?.review_id!==approval.review_id||saved?.receipt?.review_digest!==approval.digest)throw new Error('Execution receipt identity changed.');
             setReview(saved);
             if(saved.receipt.outcome?.state==='cancelled'){localStorage.removeItem(key);pending.current=null;setReview(null);}
@@ -80,6 +81,7 @@ export function ExecutionPanel({tab,connection}:{tab:Tab;connection:any}){
             {outcome==='ready'&&<Button asChild><a href={voyagePath(connection.id,review.review.facts.session_id)}>Open reviewed voyage</a></Button>}
             {['launching','unconfirmed','revocation_requested'].includes(outcome)&&<p>Check the exact receipt and process status. Approval will not be repeated; revocation requested does not establish cleanup.</p>}
         </>}
+        {review?.review?.facts?.change==='transition'&&['launching','unconfirmed'].includes(outcome)&&<Button variant="outline" disabled={busy} onClick={()=>void act('reconcile')}>Reconcile exact handoff metadata</Button>}
         <p role="status">{notice|| (busy?'Reading execution state…':'')}</p><DialogFooter><Button variant="outline" onClick={()=>setOpen(false)}>Close</Button>{pending.current&&<Button variant="outline" disabled={busy} onClick={()=>{setBusy(true);observe().catch(error=>setNotice(error.message)).finally(()=>setBusy(false));}}>Check retained review</Button>}{!pending.current&&inventory?.can_review_administrator&&<Button disabled={busy} onClick={()=>void prepare()}>Prepare administrator voyage</Button>}{outcome==='awaiting_approval'&&<><Button variant="outline" disabled={busy} onClick={()=>void act('cancel')}>Cancel review</Button><Button disabled={busy||uncertain||expired||!acknowledged||tab.stale} onClick={()=>void act('approve')}>Approve reviewed execution</Button></>}{['approved','launching','ready','unconfirmed'].includes(outcome)&&review?.administrator_grant_id&&<Button variant="destructive" disabled={busy} onClick={()=>void act('revoke')}>Revoke administrator authorization</Button>}</DialogFooter>
     </DialogContent></Dialog>;
 }

@@ -25,6 +25,7 @@ function executionOperation(value) {
   if(value.action==='review')return exact(value,['action','review_id'])&&uuid(value.review_id);
   if(value.action==='prepare')return exact(value,['action','review_id','command_id','session_id','workspace','identity'])&&[value.review_id,value.command_id,value.session_id].every(uuid)&&text(value.workspace)&&identity(value.identity);
   if(value.action==='prepare_transition')return exact(value,['action','review_id','command_id','session_id','source_incarnation','identity','stop_source'])&&[value.review_id,value.command_id,value.session_id,value.source_incarnation].every(uuid)&&identity(value.identity)&&value.stop_source===true;
+  if(value.action==='reconcile_transition')return exact(value,['action','review_id','command_id','digest'])&&approval({review_id:value.review_id,command_id:value.command_id,digest:value.digest});
   if(value.action==='approve')return exact(value,['action','approval'])&&approval(value.approval);
   if(value.action==='control')return exact(value,['action','control'])&&exact(value.control,['review_id','command_id','digest','action'])&&approval({review_id:value.control.review_id,command_id:value.control.command_id,digest:value.control.digest})&&['cancel','revoke'].includes(value.control.action);
   return false;
