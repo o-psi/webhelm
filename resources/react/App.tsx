@@ -9,6 +9,7 @@ import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from './components/ui/dialog';
 import {ArrowDownIcon,ArrowUpIcon,CheckIcon,ChevronDownIcon,ChevronRightIcon,CopyIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
+import {ExecutionPanel} from './ExecutionPanel';
 import {TurnLink,linkedTurn} from './TurnLink';
 import {HostBrowser} from './HostBrowser';
 import {GoalPanel} from './Goal';
@@ -83,6 +84,7 @@ function Composer({tab, workspace, onSettings, onRecover, connection, voyage}: {
             {tab&&<ComposerDiscovery tab={tab} workspace={workspace} onSettings={onSettings} onAttach={()=>fileInput.current?.click()} triggerOpen={discoveryRequested} onTriggerHandled={()=>setDiscoveryRequested(false)} focusComposer={()=>composerInput.current?.focus()}/>}
             <Button variant="ghost" type="button" disabled={!tab||tab.busy||attaching} aria-label="Attach pictures" title="Attach pictures" onClick={()=>fileInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button>
             {tab&&connection&&tab.snapshot?.inference&&<InferenceControls tab={tab} workspace={workspace} connection={connection}/>}
+            {tab&&connection&&<ExecutionPanel tab={tab} connection={connection}/>}
             {connection&&voyage&&<VoyageActions connection={connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} accessTrigger triggerLabel={`Access: ${{'read-only':'Read only',approval:'Approval',unrestricted:'Full access'}[tab?.snapshot?.access as 'read-only'|'approval'|'unrestricted']||'Unknown'}`}/>}
         </div>{running && <Button variant="outline" type="button" aria-label="Stop run" disabled={!canStop} onClick={() => tab && void workspace.act(tab.key,'cancel')}><SquareIcon aria-hidden="true"/>{stopping?'Stopping…':'Stop run'}</Button>}<Button variant="default" aria-label={sendOp === 'steer' ? 'Send to current run' : 'Send'} disabled={!enabled || (!tab?.draft.trim() && !tab?.pictures.length)}><ArrowUpIcon aria-hidden="true"/>{sendOp === 'steer' ? 'Send to current run' : 'Send'}</Button></div><small className="composer-hint">Enter to send · Shift+Enter for a new line · / for actions</small></Card>
     </form>;

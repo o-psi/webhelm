@@ -426,3 +426,22 @@ Composer hook is installed, so production updates do not depend on a dev package
 ## Repository split and shared browser assets
 
 This public repository contains Helm Web independently of the Helm/Vessel/Voyage repository. `shared/` contains snapshots of the viewer, status vocabulary, and browser vendor file from the source repository at split time. Keep these files in sync with protocol changes there. The production updater clones this repository as the `helm` deployment identity without GitHub credentials. Do not place credentials in this repository or overwrite the CT runtime `.env`, database, or backups. A Git push alone does not deploy; request the scoped update job and verify its receipt and health checks.
+
+## Execution identity source integration
+
+The React Execution dialog and gateway schema are prepared for the core
+`execution_identity` capability. Older peers hide this control. Scoped ordinary
+observations show the executing identity and separate launch/process/owned-cleanup
+facts; administrator preparation requires both existing connection permissions
+and separate protected host-operator enrollment using a fresh root-issued
+connection. The client submits configured identity references, never a UID,
+environment, executable or credential path. Review identity is saved before
+preparation; reconnect and Check observe the exact server receipt and never replay
+approval. Explicit approval/revocation remain human actions. Message drafts stay
+separate.
+
+This source has not been typechecked, built or exercised, following the user's
+instruction to complete milestone implementation before one coordinated final
+verification set. It is not production deployment evidence. Core reviewed identity
+transition and matching client scope are still being integrated; do not claim
+#344/#377 acceptance or advertise source-only work as a verified release.
