@@ -16,7 +16,22 @@ function goalAction(value) {
   if(value.action==='edit')return exact(value,['action','goal_id','objective','limits'])&&uuid(value.goal_id)&&goalObjective(value.objective)&&goalLimits(value.limits);
   return ['pause','resume','clear'].includes(value.action)&&exact(value,['action','goal_id'])&&uuid(value.goal_id);
 }
+function executionOperation(value) {
+  if(!object(value))return false;
+  const identity=v=>exact(v,['id','revision'])&&uuid(v.id)&&uint(v.revision)&&v.revision>0;
+  const approval=v=>exact(v,['review_id','command_id','digest'])&&uuid(v.review_id)&&uuid(v.command_id)&&typeof v.digest==='string'&&/^[a-f0-9]{64}$/.test(v.digest);
+  if(value.action==='inventory')return exact(value,['action']);
+  if(value.action==='status')return exact(value,['action','session_id'])&&uuid(value.session_id);
+  if(value.action==='review')return exact(value,['action','review_id'])&&uuid(value.review_id);
+  if(value.action==='prepare')return exact(value,['action','review_id','command_id','session_id','workspace','identity'])&&[value.review_id,value.command_id,value.session_id].every(uuid)&&text(value.workspace)&&identity(value.identity);
+  if(value.action==='prepare_transition')return exact(value,['action','review_id','command_id','session_id','source_incarnation','identity','stop_source'])&&[value.review_id,value.command_id,value.session_id,value.source_incarnation].every(uuid)&&identity(value.identity)&&value.stop_source===true;
+  if(value.action==='reconcile_transition')return exact(value,['action','review_id','command_id','digest'])&&approval({review_id:value.review_id,command_id:value.command_id,digest:value.digest});
+  if(value.action==='approve')return exact(value,['action','approval'])&&approval(value.approval);
+  if(value.action==='control')return exact(value,['action','control'])&&exact(value.control,['review_id','command_id','digest','action'])&&approval({review_id:value.control.review_id,command_id:value.control.command_id,digest:value.control.digest})&&['cancel','revoke'].includes(value.control.action);
+  return false;
+}
 function accountCommand(c) {
+  if(c.op==='execution')return exact(c,['op','operation'])&&executionOperation(c.operation);
   if (c.op === 'catalogue_changes') return exact(c,['op','after','limit','wait_ms']) && (c.after === null || uint(c.after)) && uint(c.limit) && c.limit >= 1 && c.limit <= 128 && uint(c.wait_ms) && c.wait_ms <= 10000;
   if (c.op === 'update_prepare') return exact(c,['op','operation_id','channel']) && uuid(c.operation_id) && ['stable','nightly'].includes(c.channel);
   if (['update_status','update_discard'].includes(c.op)) return exact(c,['op','operation_id']) && uuid(c.operation_id);
@@ -101,7 +116,7 @@ export function validReply(f) {
 // view rather than forwarding unknown future execution/credential metadata.
 export function restrictCapabilities(value, vesselId) {
   if (!object(value) || value.protocol !== 1 || value.vessel_id !== vesselId || !Array.isArray(value.features) || !value.features.every(v => typeof v === 'string')) throw Error('invalid capabilities');
-  const features = new Set(['sqlite_catalogue', 'catalogue_changes', 'catalogue', 'scoped_catalogue', 'inspect', 'durable_receipts', 'history_paging', 'events', 'duplex_socket', 'decisions', 'grant_revocation', 'revocation', 'provider_accounts', 'execution_profiles', 'account_start', 'start_resolution']);
+  const features = new Set(['sqlite_catalogue', 'catalogue_changes', 'catalogue', 'scoped_catalogue', 'inspect', 'durable_receipts', 'history_paging', 'events', 'duplex_socket', 'decisions', 'grant_revocation', 'revocation', 'provider_accounts', 'execution_identity', 'execution_profiles', 'account_start', 'start_resolution']);
   const result = { protocol: 1, vessel_id: vesselId, features: value.features.filter(f => features.has(f)) };
   if (typeof value.running_release === 'string' && /^[a-f0-9]{64}$/.test(value.running_release)) result.running_release = value.running_release;
   if (typeof value.remote_updates === 'boolean') result.remote_updates = value.remote_updates && value.scope === 'owner';
