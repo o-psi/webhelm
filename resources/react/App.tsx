@@ -11,6 +11,7 @@ import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogT
 import {ArrowDownIcon,ArrowUpIcon,CheckIcon,ChevronDownIcon,ChevronRightIcon,CopyIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
 import {ExecutionPanel} from './ExecutionPanel';
 import {TurnLink,linkedTurn} from './TurnLink';
+import {MessageActions} from './MessageActions';
 import {HostBrowser} from './HostBrowser';
 import {GoalPanel} from './Goal';
 import {ComposerDiscovery} from './ComposerDiscovery';
@@ -233,6 +234,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
                     {message.parts?.filter((part:any)=>part.type==='image').map((part:any,index:number)=><ImagePart key={part.attachment?.id||index} attachment={part.attachment} tab={tab} workspace={workspace}/>)}
                     {message.projection_truncated && <Button variant="ghost" disabled={tab.busy} onClick={()=>void workspace.expand(tab.key,message.message_index)}>Read complete message</Button>}
                     {message.role==='assistant'&&Boolean(content(message.content).trim())&&<CopyResponse tab={tab} workspace={workspace} message={message}/>}
+                    {message.role==='user'&&<MessageActions tab={tab} workspace={workspace} message={message} connection={connection} voyage={voyage} active={active} onPrepared={()=>scroll.current?.closest('section')?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')?.focus()}/>}
                 </article>;};
     const headerStatus=voyage?cardStatus(voyage,Boolean(connection?.client),tab.stale?null:tab.snapshot):null;
     const location=[connection?.name,tab.snapshot?.workspace].filter(Boolean).join(' · ');

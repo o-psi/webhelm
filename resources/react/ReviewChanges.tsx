@@ -1,11 +1,12 @@
 import React,{useState} from 'react';
 import {Button} from './components/ui/button';
+import {NativeSelect} from './components/ui/native-select';
 import {actionStatus} from '../js/tool-presentation.js';
 import {LiveInspection} from './LiveInspection';
 import {WorkspaceChanges} from './WorkspaceChanges';
 import type {Tab,Workspace} from './workspace';
 
-type Change={key:string;path:string;kind:string;status:string;preview:string;truncated:boolean};
+type Change={key:string;path:string;kind:string;status:string;preview:string;truncated:boolean;turnId:string|null};
 export function PatchPreview({source}:{source:string}){
     const lines=source.split('\n');
     if(lines.length>2000)return <pre className="overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre" aria-label="Recorded patch request">{source}</pre>;
@@ -14,7 +15,7 @@ export function PatchPreview({source}:{source:string}){
         return <span key={index} className={kind?`diff-${kind}`:undefined}>{line}{index<lines.length-1?'\n':''}</span>;
     })}</pre>;
 }
-export function recordedChanges(messages:any[]):Change[]{
+export function recordedChanges(messages:any[],turns:any[]=[]):Change[]{
     const results=new Map(messages.filter(message=>['tool','function'].includes(message.role)&&message.tool_call_id).map(message=>[message.tool_call_id,message]));
     const changes:Change[]=[];
     for(const message of messages){
@@ -26,7 +27,8 @@ export function recordedChanges(messages:any[]):Change[]{
             const source=name==='apply_patch'?String(args.patch||''):String(args.content||'');
             const file=source.match(/^\*\*\* (?:Update|Add|Delete) File: (.+)$/m)?.[1]||source.match(/^\+\+\+ b\/(.+)$/m)?.[1];
             const path=typeof args.path==='string'&&args.path?args.path:file||'Path not recorded';
-            changes.push({key:String(call.id||`${message.message_index}:${changes.length}`),path,kind:name==='apply_patch'?'Patch':'File write',status:actionStatus(call,results.get(call.id),false,false),preview:source.slice(0,65536),truncated:source.length>65536});
+            const turn=Number.isSafeInteger(message.message_index)?turns.find(item=>typeof item.run_id==='string'&&Number.isSafeInteger(item.message_start)&&Number.isSafeInteger(item.message_end)&&message.message_index>=item.message_start&&message.message_index<item.message_end):null;
+            changes.push({key:String(call.id||`${message.message_index}:${changes.length}`),path,kind:name==='apply_patch'?'Patch':'File write',status:actionStatus(call,results.get(call.id),false,false),preview:source.slice(0,65536),truncated:source.length>65536,turnId:turn?.run_id||null});
             if(changes.length>=128)return changes;
         }
     }
@@ -36,11 +38,15 @@ export function recordedChanges(messages:any[]):Change[]{
 export function ReviewChanges({tab,workspace}:{tab:Tab;workspace:Workspace}){
     const [view,setView]=useState<'workspace'|'recorded'>('workspace');
     const [selected,setSelected]=useState<string|null>(null),[loading,setLoading]=useState(false);
-    const changes=recordedChanges(tab.snapshot?.messages||[]);
+    const [turnId,setTurnId]=useState('all');
+    const allChanges=recordedChanges(tab.snapshot?.messages||[],tab.snapshot?.turns||[]);
+    const turns=[...new Set(allChanges.map(change=>change.turnId).filter((id):id is string=>Boolean(id)))];
+    const chosenTurn=turns.includes(turnId)||turnId==='unattributed'?turnId:'all';
+    const changes=allChanges.filter(change=>chosenTurn==='all'||chosenTurn==='unattributed'&&!change.turnId||change.turnId===chosenTurn);
     const current=changes.find(change=>change.key===selected)||changes.at(-1);
     return <div className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="Recorded changes">
         <div className="flex gap-1 border-b px-3 py-2"><Button variant={view==='workspace'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='workspace'} onClick={()=>setView('workspace')}>Workspace</Button><Button variant={view==='recorded'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='recorded'} onClick={()=>setView('recorded')}>Recorded edits</Button></div>
-        {view==='workspace'?<><WorkspaceChanges tab={tab} workspace={workspace}/><details className="border-t p-3 text-sm"><summary>Inspect workspace explicitly</summary><LiveInspection tab={tab} workspace={workspace}/></details></>:<><p className="m-0 border-b px-4 py-3 text-xs text-muted-foreground">Recorded file tool requests in loaded history. Files may have changed since; this is not a live diff.</p>
+        {view==='workspace'?<><WorkspaceChanges tab={tab} workspace={workspace}/><details className="border-t p-3 text-sm"><summary>Inspect workspace explicitly</summary><LiveInspection tab={tab} workspace={workspace}/></details></>:<><p className="m-0 border-b px-4 py-3 text-xs text-muted-foreground">Recorded file tool requests in loaded history. Files may have changed since; this is not a live diff.</p><label className="grid gap-1 border-b px-4 py-2 text-xs">Recorded turn<NativeSelect aria-label="Recorded turn" value={chosenTurn} onChange={event=>{setTurnId(event.target.value);setSelected(null);}}><option value="all">All loaded turns</option>{turns.map((id,index)=><option key={id} value={id}>Loaded turn {index+1} · {allChanges.filter(change=>change.turnId===id).length} edit requests</option>)}{allChanges.some(change=>!change.turnId)&&<option value="unattributed">Turn boundary unavailable</option>}</NativeSelect></label>
         <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(130px,35%)_minmax(0,1fr)]">
             <div className="max-h-44 min-h-0 overflow-auto border-b p-2 lg:max-h-none lg:border-r lg:border-b-0" aria-label="Recorded file edits">{changes.length?changes.map(change=><Button key={change.key} variant={current?.key===change.key?'secondary':'ghost'} type="button" className="mb-1 h-auto w-full flex-col items-start gap-0.5 whitespace-normal px-2 py-2 text-left" aria-pressed={current?.key===change.key} onClick={()=>setSelected(change.key)}><span className="w-full truncate font-medium" title={change.path}>{change.path}</span><small className="text-muted-foreground">{change.kind} · {change.status}</small></Button>):<p className="p-2 text-sm text-muted-foreground">No file edit requests appear in the loaded conversation.</p>}
                 {Boolean(tab.snapshot?.message_offset)&&<Button variant="outline" size="sm" type="button" className="mt-2 w-full" disabled={loading||tab.busy} onClick={()=>{setLoading(true);void workspace.earlier(tab.key).finally(()=>setLoading(false));}}>{loading?'Loading…':'Load earlier history'}</Button>}

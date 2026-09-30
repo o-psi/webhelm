@@ -206,7 +206,7 @@ export class Workspace {
                         if (upload?.error && upload.outcome_unknown === false) throw new Error(`Picture upload refused: ${upload.error}`);
                         const attachment = voyageResult(upload, tab.session).result;
                         if (!attachment || typeof attachment.id !== 'string' || typeof attachment.sha256 !== 'string' || typeof attachment.byte_size !== 'number') throw new Error('Invalid picture upload receipt.');
-                        if (this.closed || this.connections().get(tab.vessel)?.client !== client || tab.incarnation !== incarnation) throw new Error('Voyage connection changed while uploading pictures.');
+                        if (this.closed || this.tabs.get(key) !== tab || this.connections().get(tab.vessel)?.client !== client || tab.incarnation !== incarnation) throw new Error('Voyage connection changed while uploading pictures.');
                         // Artifacts belong to the session, not its transient process.
                         // Keep confirmed uploads even when the process resumes.
                         picture.attachment = attachment;
@@ -331,7 +331,7 @@ export class Workspace {
         if (!tab || !connection?.client || tab.stale) throw new Error('Wait for a fresh connected snapshot.');
         const client = connection.client, incarnation: any = tab.incarnation;
         const value = voyageResult(await client.exchange(request(op, {session_id: tab.session, ...fields})), tab.session, incarnation).result;
-        if (this.closed || this.connections().get(tab.vessel)?.client !== client || tab.incarnation !== incarnation) throw new Error('Voyage connection changed.');
+        if (this.closed || this.tabs.get(key) !== tab || this.connections().get(tab.vessel)?.client !== client || tab.incarnation !== incarnation) throw new Error('Voyage connection changed.');
         return value;
     }
     async changes(key:string,scope:'status'|'unstaged'|'staged',path?:string){
@@ -342,6 +342,15 @@ export class Workspace {
         const value=await this.read(key,'workspace_changes',{scope,...(path?{path}:{})});
         if(tab.stale||!value||value.scope!==scope||value.path!==(path||'.')||typeof value.text!=='string'||value.text.length>65536||typeof value.truncated!=='boolean'||!Number.isSafeInteger(value.observed_at_ms))throw new Error('Workspace observation changed or was invalid.');
         return value as {scope:typeof scope;path:string;text:string;truncated:boolean;observed_at_ms:number};
+    }
+    async file(key:string,path:string){
+        const tab=this.tabs.get(key);
+        const allowed=()=>Boolean(tab&&!tab.stale&&Date.now()-tab.freshAt<=35000&&tab.capabilities?.includes('workspace_file')&&(tab.scope==='owner'||tab.rights?.includes('workspace_read')));
+        if(!allowed())throw new Error('Reconnect with workspace read permission and file-preview capability.');
+        if(!path||path.length>4096||path.startsWith('/')||path.includes('\\')||/[\u0000-\u001f\u007f]/.test(path)||path.split('/').some(part=>!part||part==='.'||part==='..'))throw new Error('Invalid workspace-relative file path.');
+        const value=await this.read(key,'workspace_file',{path});
+        if(!allowed()||!value||value.path!==path||typeof value.text!=='string'||new TextEncoder().encode(value.text).length>65536||typeof value.truncated!=='boolean'||!Number.isSafeInteger(value.observed_at_ms)||!Number.isSafeInteger(value.file_bytes)||value.file_bytes<0||value.observed_bytes!==new TextEncoder().encode(value.text).length||!/^[a-f0-9]{64}$/.test(value.preview_sha256))throw new Error('File observation changed or was invalid.');
+        return value as {path:string;text:string;truncated:boolean;file_bytes:number;observed_bytes:number;preview_sha256:string;observed_at_ms:number};
     }
     async earlier(key: string) {
         const tab = this.tabs.get(key); if (!tab || !this.actionable(tab) || !tab.snapshot.message_offset) return;

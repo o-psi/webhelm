@@ -85,6 +85,32 @@ run. The read is bounded to 64 KiB and four seconds; truncation and unavailable
 states are explicit. Recorded edits show historical requests from loaded
 conversation, not a current filesystem diff. The separate explicit Inspect
 control still admits one exact operator run and observes its canonical result.
+
+User messages expose **Edit as draft** and **Branch from here**. Editing reads the
+complete text when needed and prepares an unsent composer draft. It keeps the
+existing draft by appending unless the person explicitly chooses to replace its
+text; currently attached pictures and pending-delivery metadata are retained.
+Earlier message pictures stay in history and can be added explicitly to the new
+draft. A changed conversation, owner, composer or attachment selection refuses
+stale preparation, and oversized UTF-8 text is rejected before changing the draft.
+Preparing a draft never sends, steers, uploads or runs a tool.
+
+The per-message branch action uses the existing reviewed branch controller. It
+reads one bounded history page beginning at the selected canonical user-message
+index, checks the observed revision and owner, and pins that boundary through
+the human **Create branch** action. It preserves the source composer and pictures,
+copies canonical history/settings into an independent voyage, and leaves workspace
+files as they are. It resets provider continuation and copies no active run or
+pending approvals. Changed/missing/non-user boundaries refuse; uncertain branch
+effects remain in the exact receipt journal and are not automatically repeated.
+
+Local verification of this increment passed TypeScript, 60 shared JavaScript
+and 140 React tests, the production build, and the Chromium desktop/mobile
+layout journey. The browser journey verifies draft retention, edit focus,
+explicit selected-user branching, bounded Files selection and no automatic run.
+It exposed overlapping edit controls and a missing action-dialog accessible name;
+both were corrected before the final passing layout. Screenshots were inspected.
+These checks are synthetic; exact-source production deployment remains pending.
 Uncertain command notices explain the affected action in the composer;
 exact command IDs remain in expandable receipt details for inspection. If a
 receipt remains unknown, the original command stays recorded and is never
@@ -384,6 +410,20 @@ reviews, reconnect and confirmed Clear without inference. It does not certify
 production OAuth or TLS deployment. `tests/goal-protocol.test.mjs` keeps the
 retained gateway validator aligned with the runtime browser-command allowlist;
 the production console continues to use direct Vessel sockets.
+
+## Files review
+
+The existing review dock includes Files when the executing Vessel advertises
+`workspace_file` and `workspace_file_catalog` with WorkspaceRead authority.
+Search observes a bounded filename catalogue; selecting a file reads up to
+64 KiB of current UTF-8 text under Voyage policy. Linked/nonregular/binary files
+and traversal refuse, and changed connection/incarnation responses are withheld.
+The preview is read-only and displays truncation. Adding a file reference retains
+the current draft and pictures without sending or attaching file bytes. Changes
+can explicitly preview untracked text without staging it. Old capabilities keep
+the separate operator Inspect workflow. Verify the actual matching core process
+journey, Web tests/typecheck/build and production-bundle browser layout before
+publication; source publication alone does not deploy these controls.
 
 ## Laravel Boost (local AI development)
 

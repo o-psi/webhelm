@@ -109,7 +109,9 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
         render();
         return (nextConnection, nextItem) => { connection = nextConnection; item = nextItem; };
     }
-    async function open(connection,item,action) {
+    /** @param {{index:number,revision:number,incarnation:string}|null} boundary */
+    async function open(connection,item,action,boundary = null) {
+        const selected=boundary?{index:boundary.index,revision:boundary.revision,incarnation:boundary.incarnation}:null;
         stopReceiptObservation(); const mine = ++epoch; current = null;
         await modal('sidebar-action').show();
         if (mine !== epoch) return;
@@ -119,13 +121,16 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
         $('action-title').textContent=({access:'Access mode',archive:'Archive or restore',cancel:'Cancel run',details:'Voyage details'})[action] || action[0].toUpperCase()+action.slice(1);
         $('action-target').textContent=`${item.name || item.session_id} · ${connection.name} · ${item.session_id}`;
         for (const name of ['name','access','branch','retain','confirm']) $(`${name}-field`).hidden=true;
-        $('details-summary').hidden=true; $('details-advanced').hidden=true; $('access-review').hidden=true; $('confirm').value='';
+        $('details-summary').hidden=true; $('details-advanced').hidden=true; $('access-review').hidden=true; $('confirm').value=''; $('branch').disabled=false;
         $('reconcile').hidden=!pendingFor(connection,item);
         status('Loading fresh voyage state…');
         try {
             const view = await inspect(connection,item.session_id);
             if (mine !== epoch) return;
-            current={connection,item,action,view,mine};
+            if(selected&&(action!=='branch'||!Number.isSafeInteger(selected.index)||selected.index<0||selected.index>4294967295||!Number.isSafeInteger(selected.revision)||selected.revision<0||typeof selected.incarnation!=='string'||!selected.incarnation))throw new Error('Message point unavailable. Reopen the current message.');
+            const point=selected;
+            if(point&&(view.process.incarnation!==point.incarnation||view.snapshot?.revision!==point.revision))throw new Error('The conversation changed since this message was selected. Reopen the current message.');
+            current={connection,item,action,view,mine,boundary:point};
             const reason=actionReason(action,view,connection);
             status(reason || descriptions[action]);
             $('submit').hidden=action==='details';
@@ -146,13 +151,20 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             if (action==='compact') $('retain-field').hidden=false;
             if (action==='branch' && !reason) {
                 $('branch-field').hidden=false; $('branch').replaceChildren(new Option('Full conversation',''));
-                current.branchOffset=0; current.branchIndices=new Set();
+                current.branchOffset=point?.index??0; current.branchIndices=new Set();
                 await loadBranchPoints();
+                if(mine!==epoch||current?.mine!==mine)return;
+                if(point){
+                    if(!current?.branchIndices.has(point.index)||!current.branchBoundaryObserved)throw new Error('The selected user message is not available at this conversation revision.');
+                    $('branch').value=String(point.index);$('branch').disabled=true;$('branch-more').hidden=true;
+                    $('branch').selectedOptions[0].textContent='Selected user message';
+                    status(`${descriptions.branch} Copy history through the selected message. Workspace files stay as they are.${current.branchBoundaryPreview?` Selected text: ${current.branchBoundaryPreview}`:''}`);
+                }
             }
             if (['clear','delete','compact'].includes(action)) { $('confirm-field').hidden=false; $('confirm-label').textContent=`Type ${action==='compact' ? 'COMPACT' : action.toUpperCase()} to confirm`; }
             $('submit').disabled=Boolean(reason || action==='access' && $('access').value===view.snapshot?.access);
             if(pendingFor(connection,item)) observeReceipts(mine);
-        } catch(error) { if(mine===epoch) {status(error.message); $('submit').disabled=true;} }
+        } catch(error) { if(mine===epoch) {current=null;status(error.message); $('submit').disabled=true;} }
     }
     function updateAccessReview() {
         if(!current || current.action!=='access') return;
@@ -170,10 +182,16 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             const page=voyageResult(await view.client.exchange(request('history',{session_id:item.session_id,incarnation:view.process.incarnation,expected_revision:view.snapshot.revision,offset,limit:128})),item.session_id,view.process.incarnation).result;
             if(mine!==epoch || current!==target) return;
             if(page.revision!==view.snapshot.revision || page.message_offset!==offset) throw new Error('History changed during branch review.');
+            if(!Array.isArray(page.messages)||page.messages.length>128)throw new Error('Invalid bounded branch history.');
             for(const [n,message] of (page.messages || []).entries()) if(message.role==='user') {
                 const index=message.message_index ?? offset+n;
                 if(!Number.isSafeInteger(index)||index<offset) throw new Error('Invalid canonical index.');
                 target.branchIndices.add(index); $('branch').append(new Option(`Through user message ${index+1}`,String(index)));
+                if(target.boundary&&message.message_index===target.boundary.index){
+                    target.branchBoundaryObserved=true;
+                    const value=Array.isArray(message.parts)&&message.parts.length?message.parts.filter(part=>part.type==='text').map(part=>part.text||'').join(' '):typeof message.content==='string'?message.content:'';
+                    target.branchBoundaryPreview=value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'').slice(0,160);
+                }
             }
             $('branch-more').hidden=!page.has_more;
             if(page.has_more && (!Number.isSafeInteger(page.next_offset)||page.next_offset<=offset)) throw new Error('History paging did not advance.');
@@ -196,7 +214,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             const fields={};
             if (['rename','branch'].includes(action)) { fields.name=$('name').value.trim() || null; if(fields.name && new TextEncoder().encode(fields.name).length>256) throw new Error('Name exceeds 256 UTF-8 bytes.'); if(action==='rename' && !fields.name) throw new Error('Enter a name.'); }
             if (action==='compact') { fields.retain=Number($('retain').value); fields.preserve_canonical=true; if(!Number.isInteger(fields.retain)||fields.retain<0||fields.retain>4294967295||!$('retain').value) throw new Error('Enter a valid message count.'); }
-            if (action==='branch') { fields.branch_id=uuid(); fields.through_message=$('branch').value===''?null:Number($('branch').value); if(fields.through_message!==null && (!Number.isSafeInteger(fields.through_message)||fields.through_message<0||!target.branchIndices?.has(fields.through_message))) throw new Error('Invalid branch boundary.'); }
+            if (action==='branch') { fields.branch_id=uuid(); fields.through_message=$('branch').value===''?null:Number($('branch').value); if(fields.through_message!==null && (!Number.isSafeInteger(fields.through_message)||fields.through_message<0||!target.branchIndices?.has(fields.through_message))) throw new Error('Invalid branch boundary.'); if(target.boundary&&(!target.branchBoundaryObserved||fields.through_message!==target.boundary.index))throw new Error('The selected message point changed. Reopen the message.'); }
             if (action==='access') { fields.access=$('access').value; if(fields.access===view.snapshot?.access) throw new Error('Choose a different access mode.'); }
             if (['clear','delete'].includes(action)) fields.confirm_session_id=item.session_id;
             const fresh=await inspect(connection,item.session_id);

@@ -23,3 +23,11 @@ test('recorded patch coloring distinguishes file headers from additions and remo
  assert.match(html,/diff-added[^>]*>\+new/);
  assert.match(html,/aria-label="Recorded patch request"/);
 });
+
+test('recorded edits use observed canonical turn boundaries and leave partial history unattributed',()=>{
+ const messages=[4,8,12].map(index=>({role:'assistant',message_index:index,tool_calls:[{id:`write-${index}`,function:{name:'write_file',arguments:{path:`file-${index}.txt`,content:'requested'}}}]}));
+ const turns=[{run_id:'first',message_start:0,message_end:8},{run_id:'second',message_start:8,message_end:12},{run_id:'unfinished',message_start:12,message_end:null}];
+ const changes=recordedChanges(messages,turns);
+ assert.deepEqual(changes.map(change=>[change.path,change.turnId]),[['file-4.txt','first'],['file-8.txt','second'],['file-12.txt',null]]);
+ assert.equal(changes.every(change=>change.status!=='Done'),true,'missing outcomes must not claim completed writes');
+});

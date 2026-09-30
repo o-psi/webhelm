@@ -63,15 +63,18 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
-                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','workspace_changes','skills_catalog','workspace_file_catalog'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
+                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','workspace_changes','workspace_file','skills_catalog','workspace_file_catalog'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,channel:c.channel,release_id:'a'.repeat(64),version:c.channel==='nightly'?'1.0.3-nightly.20260928.1.1':'1.0.2',expires_at:Math.floor(Date.now()/1000)+3600,description:'Verified development build from fixture source',services:['vessel.service']};
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
                 else if(c.op==='update_status')result=updateRecord;
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
                 else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
+                else if(c.op==='inspect')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',state:'live',workspace:'/work'};
+                else if(c.op==='history')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{revision:1+goal.revision,message_offset:c.offset,next_offset:40,has_more:false,messages:Array.from({length:40-c.offset},(_,n)=>{const i=n+c.offset;return {role:i%5===0?'user':'assistant',message_index:i,content:i%5===0?`Fixture request ${i/5+1}`:`Fixture observation ${i+1}`};})}};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
                 else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1+goal.revision,observation_cursor:5+goal.revision,goal,messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
+                else if(c.op==='workspace_file')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{path:c.path,text:'# Current file preview\n',truncated:false,observed_at_ms:Date.now(),observed_bytes:23,file_bytes:23,preview_sha256:'a'.repeat(64)}};
                 else if(c.op==='workspace_changes')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{scope:c.scope,path:c.path||'.',text:c.scope==='status'?' M src/fixture.ts\0?? docs/new.md\0':'diff --git a/src/fixture.ts b/src/fixture.ts\n@@ -1 +1 @@\n-old\n+new\n',truncated:false,observed_at_ms:Date.now()}};
                 else if(c.op==='controls')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:c.section==='tools'?{section:'tools',execution:'idle',value:{inventory:[{name:'read_file',description:'Read a workspace file'}],source:'builtin_preflight'}}:c.section==='files'?{section:'files',execution:'idle',value:{files:['src/fixture.ts','docs/new.md'],truncated:false,excluded_directories:['.git','node_modules','target','vendor','.venv'],observed_at_ms:Date.now()}}:{section:'skills',execution:'idle',value:{skills:[{name:'review',description:'Review the workspace',path:'/work/.agents/skills/review/SKILL.md',scope:'/work'}],can_read:true,discovery_incomplete:false}}};
                 else if(c.op==='goal_update'){
@@ -298,6 +301,30 @@ try {
         check(await draft.inputValue()==='Retained synthetic draft','desktop: cancelling sign-out lost the draft');
     }
     await page.waitForTimeout(250);
+    const editingSource=conversation.locator('.message.user').first();
+    const savedComposerText=await draft.inputValue();
+    await editingSource.getByRole('button',{name:'Edit as draft',exact:true}).click();
+    const editDialog=page.getByRole('dialog',{name:'Edit message as a draft'});
+    await editDialog.getByLabel('Edited message text').waitFor();
+    check(await editDialog.getByLabel('Edited message text').inputValue()==='Fixture request 1',`${label}: message edit lost canonical text`);
+    await editDialog.getByRole('button',{name:'Cancel',exact:true}).click();
+    await editDialog.waitFor({state:'detached'});
+    check(await editingSource.getByRole('button',{name:'Edit as draft',exact:true}).evaluate(el=>el===document.activeElement),`${label}: cancelling message edit lost trigger focus`);
+    await editingSource.getByRole('button',{name:'Edit as draft',exact:true}).click();
+    await editDialog.getByLabel('Edited message text').waitFor();
+    await editDialog.getByRole('button',{name:savedComposerText?'Add to draft':'Prepare draft',exact:true}).click();
+    await editDialog.waitFor({state:'detached'});
+    check((await draft.inputValue()).includes('Fixture request 1')&& (!savedComposerText||(await draft.inputValue()).startsWith(savedComposerText)),`${label}: editing replaced unsent work without review`);
+    check(await draft.evaluate(el=>el===document.activeElement),`${label}: prepared edit did not return composer focus`);
+    await draft.fill(savedComposerText);
+    await editingSource.getByRole('button',{name:'Branch from here',exact:true}).click();
+    const branchDialog=page.getByRole('dialog',{name:'Branch',exact:true});
+    await branchDialog.getByRole('button',{name:'Create branch',exact:true}).waitFor();
+    await page.waitForFunction(()=>document.querySelector('#sidebar-branch')?.value==='0');
+    check(await branchDialog.locator('#sidebar-branch').isDisabled(),`${label}: selected branch boundary can move`);
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['branch','submit','steer'].includes(c.op)).length===0),`${label}: message review dispatched an effect`);
+    await branchDialog.getByRole('button',{name:'Close',exact:true}).click();
+    await branchDialog.waitFor({state:'detached'});
     await conversation.locator('.transcript').evaluate(el=>{el.scrollTop=321;window.savedTranscript=el;window.savedDraft=document.querySelector('.conversation:not([hidden]) textarea');});
     const geometry=()=>page.evaluate(()=>{
         const rect=selector=>{const el=document.querySelector(selector);if(!el)return null;const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom};};
@@ -322,6 +349,23 @@ try {
     await page.screenshot({path:`${output}/${label}-changes.png`});
     await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
+    await page.getByRole('button',{name:'Files',exact:true}).click();
+    await page.getByLabel('Workspace files').waitFor();
+    await page.getByLabel('Workspace filename list').getByRole('button',{name:'docs/new.md',exact:true}).waitFor();
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='workspace_file').length===0),`${label}: Files opening read content before selection`);
+    await page.getByLabel('Find workspace file').fill('new');
+    await page.getByLabel('Workspace filename list').getByRole('button',{name:'docs/new.md',exact:true}).click();
+    await page.getByLabel('Current file preview').waitFor();
+    check((await page.getByLabel('Current file preview').textContent()).includes('# Current file preview'),`${label}: current file content is missing`);
+    const draftBeforeFile=await draft.inputValue();
+    await page.getByRole('button',{name:'Add reference to draft',exact:true}).click();
+    check((await draft.inputValue()).startsWith(draftBeforeFile)&& (await draft.inputValue()).includes('docs/new.md'),`${label}: file reference lost existing draft`);
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['operator_tool','submit','steer'].includes(c.op)).length===0),`${label}: Files review dispatched a run`);
+    check(await page.getByLabel('Workspace files').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Files panel overflows horizontally`);
+    await page.screenshot({path:`${output}/${label}-files-light.png`});
+    await page.getByRole('button',{name:'Close panel',exact:true}).click();
+    await page.locator('.task-browser-panel').waitFor({state:'detached'});
+    await draft.fill(draftBeforeFile);
     await page.getByRole('button',{name:'Browser',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('.host-browser-viewer')?.querySelector('.browser-next-mirror'));
     await page.waitForTimeout(150);
@@ -352,6 +396,15 @@ try {
     report.viewports.push({label,viewport,before,opened,privateState,closed,commands,errors});
     await context.close();
  }
+} catch(error) {
+ const failedPage=browser.contexts().at(-1)?.pages().at(-1);
+ if(failedPage){
+  console.error('FAILED FIXTURE UI:',(await failedPage.locator('body').innerText()).slice(-16000));
+  console.error('LAST FIXTURE COMMANDS:',JSON.stringify(await failedPage.evaluate(()=>window.fixtureCommands.slice(-12))));
+  await failedPage.screenshot({path:`${output}/failed-layout.png`});
+ }
+ report.failures.push(String(error));
+ throw error;
 } finally {
  await writeFile(`${output}/measurements.json`,JSON.stringify(report,null,2)+'\n');
  await browser.close();await new Promise(r=>server.close(r));

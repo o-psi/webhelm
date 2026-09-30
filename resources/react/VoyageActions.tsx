@@ -8,11 +8,12 @@ import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuLabel,Drop
 import {Card,CardContent} from './components/ui/card';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import {Alert,AlertDescription} from './components/ui/alert';
-import {MoreHorizontalIcon} from 'lucide-react';
+import {GitBranchIcon,MoreHorizontalIcon} from 'lucide-react';
+import type {MessagePoint} from './message-draft';
 
-export function VoyageActions({connection,voyage,onChanged,portalContainer,accessTrigger=false,triggerLabel}:{connection:any;voyage:any;onChanged:()=>void;portalContainer?:HTMLElement|null;accessTrigger?:boolean;triggerLabel?:string}){
+export function VoyageActions({connection,voyage,onChanged,portalContainer,accessTrigger=false,triggerLabel,branchTrigger=false,branchBoundary,disabled=false}:{connection:any;voyage:any;onChanged:()=>void;portalContainer?:HTMLElement|null;accessTrigger?:boolean;triggerLabel?:string;branchTrigger?:boolean;branchBoundary?:MessagePoint;disabled?:boolean}){
     const host=useRef<HTMLDivElement>(null),controller=useRef<ReturnType<typeof sidebarActions>|null>(null),showResolver=useRef<(()=>void)|null>(null);
-    const latest=useRef({connection,voyage,onChanged});latest.current={connection,voyage,onChanged};
+    const latest=useRef({connection,voyage,onChanged,branchBoundary});latest.current={connection,voyage,onChanged,branchBoundary};
     const [container,setContainer]=useState<HTMLDivElement|null>(null),[open,setOpen]=useState(false);
     useEffect(()=>setContainer(host.current),[]);
     useEffect(()=>{
@@ -21,10 +22,11 @@ export function VoyageActions({connection,voyage,onChanged,portalContainer,acces
         controller.current=adapter;
         return()=>{adapter.invalidate();showResolver.current?.();showResolver.current=null;controller.current=null;};
     },[container,connection.id,voyage.session_id]);
+    useEffect(()=>{if(disabled){controller.current?.invalidate();setOpen(false);}},[disabled]);
     const archived=Boolean(voyage.catalogue?.summary?.archived||voyage.archive);
     const item=(action:string,label:string,destructive=false)=><DropdownMenuItem key={action} variant={destructive?'destructive':'default'} onSelect={()=>void controller.current?.open(latest.current.connection,latest.current.voyage,action)}>{label}</DropdownMenuItem>;
-    return <div ref={host} className={accessTrigger?undefined:'voyage-action-host'}>
-        {accessTrigger?<Button variant="outline" type="button" aria-label="Review access mode" onClick={()=>void controller.current?.open(latest.current.connection,latest.current.voyage,'access')}>{triggerLabel||'Access mode'}</Button>:<DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" type="button" size="icon-sm" aria-label="Voyage actions" title="Voyage actions"><MoreHorizontalIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
+    return <div ref={host} className={accessTrigger||branchTrigger?undefined:'voyage-action-host'}>
+        {branchTrigger?<Button variant="ghost" size="sm" type="button" disabled={disabled||!branchBoundary} onClick={()=>void controller.current?.open(latest.current.connection,latest.current.voyage,'branch',latest.current.branchBoundary)}><GitBranchIcon aria-hidden="true"/><span>Branch from here</span></Button>:accessTrigger?<Button variant="outline" type="button" aria-label="Review access mode" onClick={()=>void controller.current?.open(latest.current.connection,latest.current.voyage,'access')}>{triggerLabel||'Access mode'}</Button>:<DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" type="button" size="icon-sm" aria-label="Voyage actions" title="Voyage actions"><MoreHorizontalIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
             <DropdownMenuContent portalContainer={portalContainer} data-actions aria-label="Voyage actions" align="end" className="voyage-action-menu min-w-48">
                 {item('details','Details')}
                 <DropdownMenuSeparator/>
@@ -34,7 +36,7 @@ export function VoyageActions({connection,voyage,onChanged,portalContainer,acces
             </DropdownMenuContent>
         </DropdownMenu>}
         {container&&<Dialog open={open} onOpenChange={next=>{if(!next){controller.current?.invalidate();setOpen(false);}}}>
-            <DialogContent portalContainer={container} showCloseButton={false} className="settings-dialog sidebar-action-dialog w-[440px] sm:max-w-[calc(100vw-2rem)]" onInteractOutside={event=>event.preventDefault()}>
+            <DialogContent portalContainer={container} showCloseButton={false} aria-labelledby="sidebar-action-title" aria-describedby="sidebar-action-target sidebar-action-status" className="settings-dialog sidebar-action-dialog w-[440px] sm:max-w-[calc(100vw-2rem)]" onInteractOutside={event=>event.preventDefault()}>
                 <form id="sidebar-action-form" ref={node=>{if(node){showResolver.current?.();showResolver.current=null;}}}>
                     <header><DialogTitle asChild><h2 id="sidebar-action-title"/></DialogTitle></header>
                     <p id="sidebar-action-target"/><p id="sidebar-action-status" role="status"/>
