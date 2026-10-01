@@ -35,7 +35,10 @@ test('mobile viewer traps focus, Escape restores action and conversation DOM sur
         assert.equal(panel.contains(dom.window.document.activeElement),true);
         await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
         assert.equal(dom.window.document.querySelector('[data-slot="sheet-content"]'),null);
-        assert.equal(dom.window.document.activeElement,action);
+        // Sheet cleanup schedules focus after removal; settle the mocked frame
+        // instead of inspecting the intermediate BODY focus state.
+        await act(async()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve())));
+        assert.equal(dom.window.document.activeElement===action,true,'Escape restores the browser trigger after sheet cleanup');
         assert.equal(dom.window.document.querySelector('textarea'),draft);
         assert.equal(draft.value,'Unsent draft');
         assert.equal(transcript.scrollTop,321);
