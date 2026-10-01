@@ -16,7 +16,7 @@ body{margin:0;font:14px system-ui;color:#182638;background:#f4f7fa}*{box-sizing:
 .conversation h1{font-size:18px}.conversation .messages{flex:1;overflow:auto}.conversation textarea{width:100%;height:75px}
 #viewer{height:100%;min-width:0;min-height:0;padding:8px}
 @media(max-width:750px){.workspace{display:block}.conversation{display:none}#viewer{padding:0}}
-</style><script src="/shared/voyage/browser/rrweb-vendor.mjs"></script></head><body><article id="site"><h1>Example Domain</h1><p>A responsive synthetic page.</p><button id="site-button">Open details</button><label>Your name <input id="site-input"></label></article><script type="module">
+</style><script src="/shared/voyage/browser/rrweb-vendor.mjs"></script></head><body><article id="site"><h1>Example Domain</h1><p>A responsive synthetic page.</p><output id="historical-count">0</output><button id="site-button">Open details</button><label>Your name <input id="site-input"></label></article><script type="module">
 import {mountBrowserViewer} from '/shared/helm/browser-view/viewer.mjs';
 const child=document.createElement('iframe');child.width='400';child.height='220';child.srcdoc='<html><head><script src="/shared/voyage/browser/rrweb-vendor.mjs"><\\/script></head><body><h2>Child form</h2><button>Frame action</button><label>Frame code <input></label><canvas width="80" height="35"></canvas></body></html>';
 document.querySelector('#site').append(child);
@@ -28,10 +28,17 @@ await new Promise(resolve=>nested.addEventListener('load',resolve,{once:true}));
 const nestedCanvas=nested.contentDocument.querySelector('canvas');nestedCanvas.getContext('2d').fillRect(0,0,50,20);
 const nestedEvents=[];const stopNested=nested.contentWindow.rrweb.record({emit:event=>nestedEvents.push(event),inlineStylesheet:true});stopNested();
 const childEvents=[];const stopChild=child.contentWindow.rrweb.record({emit:event=>childEvents.push(event),inlineStylesheet:true});stopChild();
-const recorded=[];const stop=rrweb.record({emit:event=>recorded.push(event),inlineStylesheet:true});stop();
+const recorded=[];const stop=rrweb.record({emit:event=>recorded.push(event),inlineStylesheet:true});
+const initialEvents=structuredClone(recorded);
+document.querySelector('#historical-count').textContent='1';
+await new Promise(resolve=>setTimeout(resolve,0));
+const historicalEvents=structuredClone(recorded);
+document.querySelector('#historical-count').textContent='2';
+await new Promise(resolve=>setTimeout(resolve,0));stop();
+if(!historicalEvents.some(event=>event.type===3&&event.data.source===0)||recorded.length<=historicalEvents.length)throw Error('Actual historical mutation fixture missing');
 const bytes=new TextEncoder();
 const encoded=async events=>{const compressed=await new Response(new Blob([bytes.encode(JSON.stringify(events))]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();const raw=new Uint8Array(compressed);let binary='';for(let i=0;i<raw.length;i+=16384)binary+=String.fromCharCode(...raw.subarray(i,i+16384));return btoa(binary);};
-const payload=await encoded(recorded);
+const payload=await encoded(initialEvents);
 const childPayload=await encoded(childEvents);
 const nestedPayload=await encoded(nestedEvents);
 const emptyPayload=await encoded([]);
@@ -45,6 +52,7 @@ const nil='00000000-0000-0000-0000-000000000000';
 const binding={incarnation:'incarnation',browser_id:'browser',attachment_id:nil,tab_id:'tab',document_epoch:1,viewport_epoch:1,controller_epoch:1,capture_epoch:1};
 const state={available:true,running:true,mode:'agent',controller:null,binding,tabs:['tab'],viewport:{width:1280,height:720},page:{url:'https://example.com/',title:'Example Domain',can_go_back:false,can_go_forward:false},tab_details:[{id:'tab',title:'Example Domain'}],input_sequence:0};
 window.fixtureCommands=[];
+let historical=false,advanced=false;
 const transport=async operation=>{
  window.fixtureCommands.push(operation);
  if(operation.action==='attach')state.binding.attachment_id=operation.binding.attachment_id;
@@ -55,11 +63,26 @@ const transport=async operation=>{
   if(action.type==='navigate'){state.page={url:action.url,title:'Navigated page',can_go_back:true,can_go_forward:false};state.tab_details=[{id:'tab',title:'Navigated page'}];}
  }
  const reset=operation.action==='mirror'&&operation.since===0;
- return {status:structuredClone(state),value:operation.action==='mirror'?{encoding:'gzip',data_base64:reset?payload:emptyPayload,reset,cursor:recorded.length,latest:recorded.length,visuals:[],frames:[{frame_id:childId,parent_frame_id:null,host_node_id:childHost,encoding:'gzip',data_base64:reset?childPayload:emptyPayload,reset,cursor:childEvents.length,visuals:[childVisual]},{frame_id:nestedId,parent_frame_id:childId,host_node_id:nestedHost,encoding:'gzip',data_base64:reset?nestedPayload:emptyPayload,reset,cursor:nestedEvents.length,visuals:[nestedVisual]}]}:null};
+ const available=historical?(advanced?recorded:historicalEvents):initialEvents;
+ const data=operation.action==='mirror'?(historical?await encoded(reset?available:available.slice(operation.since)):reset?payload:emptyPayload):null;
+ return {status:structuredClone(state),value:operation.action==='mirror'?{encoding:'gzip',data_base64:data,reset,cursor:available.length,latest:available.length,visuals:[],frames:[{frame_id:childId,parent_frame_id:null,host_node_id:childHost,encoding:'gzip',data_base64:reset?childPayload:emptyPayload,reset,cursor:childEvents.length,visuals:[childVisual]},{frame_id:nestedId,parent_frame_id:childId,host_node_id:nestedHost,encoding:'gzip',data_base64:reset?nestedPayload:emptyPayload,reset,cursor:nestedEvents.length,visuals:[nestedVisual]}]}:null};
 };
 const workspace=document.createElement('div');workspace.className='workspace';workspace.innerHTML='<aside class="conversation"><h1>Example voyage</h1><div class="messages">Conversation</div><textarea>Unsent draft</textarea></aside><main id="viewer"></main>';
 document.body.replaceChildren(workspace);
 window.viewer=mountBrowserViewer(document.querySelector('#viewer'),{transport,context:()=>({incarnation:'incarnation',revision:1})});
+window.fixtureHistoricalRecovery=async()=>{
+ // Retain natural recorder timestamps. Wait until all historical events are
+ // older than the real live baseline, without rewriting timestamps or clocks.
+ const last=recorded.at(-1).timestamp;
+ await new Promise(resolve=>setTimeout(resolve,Math.max(0,last+200-Date.now())));
+ historical=true;
+ const before=window.fixtureCommands.length,start=performance.now();
+ await window.viewer.session.recover();
+ return {elapsed_ms:performance.now()-start,event_count:historicalEvents.length,
+  recorded_age_ms:Date.now()-last,batch_bytes:bytes.encode(JSON.stringify(historicalEvents)).length,
+  read_only:window.fixtureCommands.slice(before).every(operation=>['status','mirror'].includes(operation.action))};
+};
+window.fixtureHistoricalAdvance=()=>{advanced=true;};
 window.fixtureReparent=async()=>{
  const session=window.viewer.session,nestedRoot=session.frames.get(nestedId).root;
  await session.updateFrames([
@@ -127,11 +150,24 @@ try{
   await page.waitForFunction(()=>window.fixtureCommands.some(c=>c.action==='input'&&c.input?.type==='frame_element'&&c.input.frame_id==='22222222-2222-4222-8222-222222222222'));
   await page.waitForFunction(()=>[...document.querySelectorAll('.browser-next-frame-visual')].length===2&&[...document.querySelectorAll('.browser-next-frame-visual')].every(image=>image.complete&&image.naturalWidth>0));
   assert.equal(await page.evaluate(()=>window.fixtureReparent()),true,'nested replay survives a parent snapshot rebuild');
+  await page.waitForFunction(()=>window.viewer.session.streaming&&!window.viewer.session.polling&&!window.viewer.session.sending);
+  const recovery=await page.evaluate(()=>window.fixtureHistoricalRecovery());
+  assert.ok(recovery.recorded_age_ms>=200,'recovery must use genuinely historical recorder timestamps');
+  assert.ok(recovery.event_count<=16&&recovery.batch_bytes<=200000,'historical fixture remains bounded');
+  assert.equal(recovery.read_only,true,'recovery must not repeat site actions or control changes');
+  await frame.locator('#historical-count').filter({hasText:'1'}).waitFor({timeout:5000});
+  assert.equal(await frame.locator('#historical-count').textContent(),'1','old fullsnapshot0 plus mutation1 must display1');
+  await page.evaluate(()=>window.fixtureHistoricalAdvance());
+  await frame.locator('#historical-count').filter({hasText:'2'}).waitFor({timeout:5000});
+  assert.equal(await frame.locator('#historical-count').textContent(),'2','subsequent historical delta must continue visible progress');
+  assert.equal(await page.locator('.browser-next-mirror iframe').count(),1,'recovery retains one top-level replay');
+  assert.equal(await page.locator('.browser-next-frame iframe').count(),2,'recovery retires previous nested players');
+  assert.ok(recovery.elapsed_ms<5000,'bounded local recovery must complete');
   const geometry=await page.evaluate(()=>({width:document.documentElement.scrollWidth,stage:document.querySelector('.browser-next-stage').getBoundingClientRect().height,mirror:!!document.querySelector('.browser-next-mirror .replayer-wrapper'),commands:window.fixtureCommands.map(c=>({action:c.action,input:c.input?.type}))}));
   if(geometry.width>viewport.width)report.failures.push(`${viewport.width}: horizontal overflow`);
   if(geometry.stage<240)report.failures.push(`${viewport.width}: browser too short`);
   if(errors.length)report.failures.push(`${viewport.width}: ${errors.join('; ')}`);
-  report.viewports.push({viewport,geometry});await page.screenshot({path:`${output}/${viewport.width}-private.png`});await page.close();
+  report.viewports.push({viewport,geometry,historical_recovery:recovery});await page.screenshot({path:`${output}/${viewport.width}-private.png`});await page.close();
  }
 }finally{await writeFile(`${output}/report.json`,JSON.stringify(report,null,2));await browser.close();await new Promise(resolve=>server.close(resolve));}
 console.log(JSON.stringify(report,null,2));assert.deepEqual(report.failures,[]);

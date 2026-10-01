@@ -396,6 +396,14 @@ CSRF, connection-management feedback and logout. Archived Flux presentation
 fixtures are historical and are excluded from the active suite. Use
 `node tests/browser-layout-browser.mjs` after building for desktop/mobile Chromium
 checks, then verify the authenticated production root in the shared browser.
+`node tests/browser-next-browser.mjs` also prepares a historical live-recovery
+regression with naturally recorded snapshot0 and mutation1 older than the live
+baseline. It requires visible1 after recovery and progress to2 from a subsequent
+recorded delta, with bounded event bytes/count, local recovery time and replay
+instances. The shared live viewer uses the supported `useVirtualDom: false`
+option so old synchronous mutations are applied without waiting for a non-live
+Flush. This source increment awaits coordinated verification; it is not passing
+production TLS or deployed-client evidence.
 Run `node tests/browser-drafts-browser.mjs` against the built bundle for real
 IndexedDB reload, prepared-picture retention, tenant/voyage isolation, conflicting
 tabs, accepted/uncertain send handling, new-voyage approval reset and discard checks
