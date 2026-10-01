@@ -1,0 +1,46 @@
+{
+  "scope": {
+    "vessel_id": "00000000-0000-0000-0000-000000000001",
+    "session_id": "00000000-0000-0000-0000-000000000002",
+    "incarnation": "00000000-0000-0000-0000-000000000003"
+  },
+  "stream_id": "00000000-0000-0000-0000-000000000004",
+  "expected_text": "Exact evidence 🦀 survives",
+  "events": [
+    {
+      "type": "entity_start",
+      "manifest": {
+        "stream_id": "00000000-0000-0000-0000-000000000004",
+        "scope": {
+          "vessel_id": "00000000-0000-0000-0000-000000000001",
+          "session_id": "00000000-0000-0000-0000-000000000002",
+          "incarnation": "00000000-0000-0000-0000-000000000003"
+        },
+        "kind": "message",
+        "key": "message:12",
+        "byte_size": 28,
+        "sha256": "969b4a725b4862e1794b2f96c1125b76e6f475c81539488ab802816c3a10ec11"
+      }
+    },
+    {
+      "type": "entity_chunk",
+      "stream_id": "00000000-0000-0000-0000-000000000004",
+      "offset": 0,
+      "text": "Exact evidence "
+    },
+    {
+      "type": "entity_chunk",
+      "stream_id": "00000000-0000-0000-0000-000000000004",
+      "offset": 15,
+      "text": "🦀 survives"
+    },
+    {
+      "type": "entity_end",
+      "stream_id": "00000000-0000-0000-0000-000000000004"
+    },
+    {
+      "type": "entity_end",
+      "stream_id": "00000000-0000-0000-0000-000000000004"
+    }
+  ]
+}
