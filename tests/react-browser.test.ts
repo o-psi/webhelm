@@ -9,9 +9,9 @@ import type {Tab} from '../resources/react/workspace.ts';
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 test('selected React browser uses shared controls, live revision fences and detach-only cleanup', async () => {
     const dom = new JSDOM('<div id="app"></div>', {url:'https://console.test'});
-    const names = ['window','document','IS_REACT_ACT_ENVIRONMENT'] as const;
+    const names = ['window','document','IS_REACT_ACT_ENVIRONMENT','requestAnimationFrame','cancelAnimationFrame'] as const;
     const saved = names.map(name => Object.getOwnPropertyDescriptor(globalThis,name));
-    Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true});
+    Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true,requestAnimationFrame:(callback:FrameRequestCallback)=>setTimeout(()=>callback(Date.now()),0),cancelAnimationFrame:clearTimeout});
     const root = createRoot(dom.window.document.getElementById('app')!);
     const sent: any[] = [];
     const socket = (name: string) => ({exchange:async (payload: any) => {
