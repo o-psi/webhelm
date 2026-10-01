@@ -52,7 +52,12 @@ test('selected React browser uses shared controls, live revision fences and deta
         await click('Browser'); assert.equal(sent.at(-1).operation.action,'detach');
         await click('Browser');
         await act(async()=>{dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await tick();});
-        assert.equal(dom.window.document.activeElement?.textContent,'Browser','Escape restores the discoverable action');
+        // React commits the closed panel before its restoration animation frame.
+        const focusDeadline=Date.now()+1000;
+        while(dom.window.document.activeElement!==dom.window.document.querySelector('.task-browser-action')&&Date.now()<focusDeadline) {
+            await act(async()=>{await tick();});
+        }
+        assert.equal(dom.window.document.activeElement===dom.window.document.querySelector('.task-browser-action'),true,'Escape restores the discoverable action');
         await click('Browser'); await click('Close panel');
         assert.equal(dom.window.document.querySelector('.browser-next-mirror'),null);
         await click('Browser');
