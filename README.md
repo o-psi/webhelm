@@ -382,7 +382,14 @@ outside the draft store.
 
 ### Console verification
 
-Run `npm test` for the active shared transport/auth and React suites. The HTTP
+Run `npm test` for the active shared transport/auth and React suites. On the
+supported Linux verification host, React files run sequentially in separate
+transient systemd user services, each capped at 1 GiB memory, zero swap and
+25 seconds. The launcher uses the current Node executable and refuses an
+unrestricted fallback when the user manager is unavailable. This bounds native
+allocations as well as V8 heap and keeps a failing test out of the app cgroup.
+It changes no persistent system settings. Keep full and focused verification
+under these limits rather than launching unrestricted parallel DOM workers. The HTTP
 fixture checks canonical root rendering, `/react` redirect, tenant isolation,
 CSRF, connection-management feedback and logout. Archived Flux presentation
 fixtures are historical and are excluded from the active suite. Use

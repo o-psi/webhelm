@@ -7,7 +7,7 @@
         "dev": "vite",
         "test": "node --test tests/*.test.mjs && npm run test:react",
         "typecheck": "tsc --noEmit",
-        "test:react": "tsx --test tests/react-*.test.ts"
+        "test:react": "node tests/run-react-bounded.mjs"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
