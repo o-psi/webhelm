@@ -352,6 +352,8 @@ try {
     await page.screenshot({path:`${output}/${label}-changes.png`});
     await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    check(await page.getByRole('button',{name:'Changes',exact:true}).evaluate(el=>el===document.activeElement),`${label}: closing Changes did not restore its trigger focus`);
     await page.getByRole('button',{name:'Files',exact:true}).click();
     await page.getByLabel('Workspace files').waitFor();
     await page.getByLabel('Workspace filename list').getByRole('button',{name:'docs/new.md',exact:true}).waitFor();
@@ -368,6 +370,8 @@ try {
     await page.screenshot({path:`${output}/${label}-files-light.png`});
     await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    check(await page.getByRole('button',{name:'Files',exact:true}).evaluate(el=>el===document.activeElement),`${label}: closing Files did not restore its trigger focus`);
     await draft.fill(draftBeforeFile);
     await page.getByRole('button',{name:'Browser',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('.host-browser-viewer')?.querySelector('.browser-next-mirror'));
@@ -391,11 +395,22 @@ try {
     check(errors.length===0,`${label}: page errors: ${errors.join('; ')}`);
     await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     const closed=await geometry();
+    check(await page.getByRole('button',{name:'Browser',exact:true}).evaluate(el=>el===document.activeElement),`${label}: closing Browser did not restore its trigger focus`);
     const retained=await draft.inputValue();
     const commands=await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='host_browser').map(c=>c.operation.action));
     check(commands.includes('detach')&&!commands.includes('close'),`${label}: close did not detach or stopped browser`);
     check(retained==='Retained synthetic draft' && closed.sameDraft && closed.sameTranscript,`${label}: draft/transcript DOM not retained`);
+    // Escape follows the currently selected dock, including an in-panel tab
+    // switch. It never targets the Browser action captured at initial opening.
+    await page.getByRole('button',{name:'Changes',exact:true}).click();
+    await page.locator('.task-browser-panel').getByRole('button',{name:'Files',exact:true}).click();
+    await page.getByLabel('Workspace files').waitFor();
+    await page.keyboard.press('Escape');
+    await page.locator('.task-browser-panel').waitFor({state:'detached'});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    check(await page.getByRole('button',{name:'Files',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Escape after dock switch restored the wrong trigger`);
     report.viewports.push({label,viewport,before,opened,privateState,closed,commands,errors});
     await context.close();
  }

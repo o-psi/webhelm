@@ -29,12 +29,32 @@ export function HostBrowser({tab, client, workspace}: {tab: Tab; client: any; wo
     const [viewerRoot,setViewerRoot] = useState<HTMLDivElement|null>(null);
     const panel = useRef<HTMLElement>(null), browserToggle = useRef<HTMLButtonElement>(null),changesToggle=useRef<HTMLButtonElement>(null),filesToggle=useRef<HTMLButtonElement>(null);
     const latest = useRef(tab);
+    const returnFocus = useRef<{view:'browser'|'changes'|'files';vessel:string;session:string;incarnation:string|null}|null>(null);
     latest.current = tab;
     const id = useId();
     const activity = browserActivity(tab.snapshot);
     const ready = Boolean(client);
-    const close = () => { setExpanded(false);setOpen(false); (view==='browser'?browserToggle:view==='files'?filesToggle:changesToggle).current?.focus(); };
-    const show=(next:'browser'|'changes'|'files')=>{if(open&&view===next){close();return;}setView(next);setExpanded(false);setOpen(true);};
+    const close = () => {
+        const origin=latest.current;
+        returnFocus.current={view,vessel:origin.vessel,session:origin.session,incarnation:origin.incarnation};
+        setExpanded(false);setOpen(false);
+    };
+    const show=(next:'browser'|'changes'|'files')=>{if(open&&view===next){close();return;}returnFocus.current=null;setView(next);setExpanded(false);setOpen(true);};
+    useEffect(()=>{
+        if(open||!returnFocus.current)return;
+        const origin=returnFocus.current;
+        // Wait for panel removal, viewer disposal, inert restoration and the
+        // mobile sheet's own focus cleanup before restoring the selected dock.
+        const frame=requestAnimationFrame(()=>{
+            if(returnFocus.current!==origin)return;
+            returnFocus.current=null;
+            const current=latest.current;
+            if(current.vessel!==origin.vessel||current.session!==origin.session||current.incarnation!==origin.incarnation)return;
+            const trigger=(origin.view==='browser'?browserToggle:origin.view==='files'?filesToggle:changesToggle).current;
+            if(trigger?.isConnected&&!trigger.disabled)trigger.focus();
+        });
+        return()=>cancelAnimationFrame(frame);
+    },[open,tab.vessel,tab.session,tab.incarnation]);
     useEffect(()=>{
         const media=window.matchMedia?.('(max-width: 1000px)');
         if(!media)return;
@@ -55,13 +75,16 @@ export function HostBrowser({tab, client, workspace}: {tab: Tab; client: any; wo
     useEffect(() => {
         if (!open || mobile) return;
         panel.current?.focus();
+    },[open,mobile]);
+    useEffect(()=>{
+        if(!open||mobile)return;
         const key = (event: KeyboardEvent) => {
             if (event.defaultPrevented) return;
             if (event.key === 'Escape') { event.preventDefault(); close(); }
         };
         document.addEventListener('keydown', key);
         return () => document.removeEventListener('keydown', key);
-    }, [open,mobile]);
+    }, [open,mobile,view]);
     useEffect(() => {
         if (!open || !expanded || mobile) return;
         const conversation = panel.current?.closest('.voyage-workspace')?.querySelector<HTMLElement>(':scope > .conversation');
