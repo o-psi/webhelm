@@ -57,6 +57,7 @@ const transport=async operation=>{
  window.fixtureCommands.push(operation);
  if(operation.action==='attach')state.binding.attachment_id=operation.binding.attachment_id;
  if(operation.action==='control'){state.mode=operation.mode;state.controller=operation.mode==='agent'?null:state.binding.attachment_id;state.binding.controller_epoch++;state.binding.capture_epoch++;}
+ if(operation.action==='close'){state.running=false;state.mode=null;state.controller=null;state.binding.attachment_id=nil;}
  if(operation.action==='input'){state.input_sequence=operation.sequence;const action=operation.input;
   if(operation.claim){state.mode='human';state.controller=state.binding.attachment_id;state.binding.controller_epoch++;state.binding.capture_epoch++;}
   if(action.type==='resize'){state.viewport={width:action.width,height:action.height};state.binding.viewport_epoch++;}
@@ -167,7 +168,16 @@ try{
   if(geometry.width>viewport.width)report.failures.push(`${viewport.width}: horizontal overflow`);
   if(geometry.stage<240)report.failures.push(`${viewport.width}: browser too short`);
   if(errors.length)report.failures.push(`${viewport.width}: ${errors.join('; ')}`);
-  report.viewports.push({viewport,geometry,historical_recovery:recovery});await page.screenshot({path:`${output}/${viewport.width}-private.png`});await page.close();
+  report.viewports.push({viewport,geometry,historical_recovery:recovery});await page.screenshot({path:`${output}/${viewport.width}-private.png`});
+  await page.getByLabel('More browser options',{exact:true}).click();
+  await page.getByRole('button',{name:'Close browser',exact:true}).click();
+  await page.locator('.browser-next[data-state="stopped"]').waitFor({timeout:5000});
+  const restart=page.getByRole('button',{name:'Start browser',exact:true});
+  assert.equal(await restart.isVisible(),true,'stopped recovery has the actual accessible action name');
+  assert.equal(await restart.getAttribute('title'),await restart.textContent());
+  assert.equal(await page.locator('.browser-next-mirror iframe').count(),0,'stopped UI retires replay resources');
+  assert.equal(await page.locator('.browser-next-frame iframe').count(),0);
+  await page.close();
  }
 }finally{await writeFile(`${output}/report.json`,JSON.stringify(report,null,2));await browser.close();await new Promise(resolve=>server.close(resolve));}
 console.log(JSON.stringify(report,null,2));assert.deepEqual(report.failures,[]);

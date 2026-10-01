@@ -404,6 +404,10 @@ instances. The shared live viewer uses the supported `useVirtualDom: false`
 option so old synchronous mutations are applied without waiting for a non-live
 Flush. This source increment awaits coordinated verification; it is not passing
 production TLS or deployed-client evidence.
+The stopped recovery action keeps its accessible label/title consistent with its
+displayed intent. The same Chromium fixture prepares that assertion after
+synthetic close and requires all replay instances to be retired; runtime restart
+admission remains enforced by the executing Voyage.
 Run `node tests/browser-drafts-browser.mjs` against the built bundle for real
 IndexedDB reload, prepared-picture retention, tenant/voyage isolation, conflicting
 tabs, accepted/uncertain send handling, new-voyage approval reset and discard checks
