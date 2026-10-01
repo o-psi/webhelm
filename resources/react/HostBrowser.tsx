@@ -40,21 +40,22 @@ export function HostBrowser({tab, client, workspace}: {tab: Tab; client: any; wo
         setExpanded(false);setOpen(false);
     };
     const show=(next:'browser'|'changes'|'files')=>{if(open&&view===next){close();return;}returnFocus.current=null;setView(next);setExpanded(false);setOpen(true);};
+    const restoreFocus=(origin:NonNullable<typeof returnFocus.current>)=>{
+        if(returnFocus.current!==origin)return;
+        returnFocus.current=null;
+        const current=latest.current;
+        if(current.vessel!==origin.vessel||current.session!==origin.session||current.incarnation!==origin.incarnation)return;
+        const trigger=(origin.view==='browser'?browserToggle:origin.view==='files'?filesToggle:changesToggle).current;
+        if(trigger?.isConnected&&!trigger.disabled)trigger.focus();
+    };
     useEffect(()=>{
-        if(open||!returnFocus.current)return;
+        if(open||mobile||!returnFocus.current)return;
         const origin=returnFocus.current;
-        // Wait for panel removal, viewer disposal, inert restoration and the
-        // mobile sheet's own focus cleanup before restoring the selected dock.
-        const frame=requestAnimationFrame(()=>{
-            if(returnFocus.current!==origin)return;
-            returnFocus.current=null;
-            const current=latest.current;
-            if(current.vessel!==origin.vessel||current.session!==origin.session||current.incarnation!==origin.incarnation)return;
-            const trigger=(origin.view==='browser'?browserToggle:origin.view==='files'?filesToggle:changesToggle).current;
-            if(trigger?.isConnected&&!trigger.disabled)trigger.focus();
-        });
+        // Desktop panel removal, viewer disposal and inert restoration finish
+        // before focus returns. Mobile waits for the sheet's cleanup event.
+        const frame=requestAnimationFrame(()=>restoreFocus(origin));
         return()=>cancelAnimationFrame(frame);
-    },[open,tab.vessel,tab.session,tab.incarnation]);
+    },[open,mobile,tab.vessel,tab.session,tab.incarnation]);
     useEffect(()=>{
         const media=window.matchMedia?.('(max-width: 1000px)');
         if(!media)return;
@@ -100,7 +101,14 @@ export function HostBrowser({tab, client, workspace}: {tab: Tab; client: any; wo
             <div className="flex gap-1 border-b px-3 py-2"><Button variant={view==='changes'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='changes'} onClick={()=>{setExpanded(false);setView('changes');}}>Changes</Button><Button variant={view==='files'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='files'} onClick={()=>{setExpanded(false);setView('files');}}>Files</Button><Button variant={view==='browser'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='browser'} onClick={()=>setView('browser')}>Browser</Button></div>
             {view==='browser'?<>{!ready && <p role="status">Vessel disconnected. The browser will reconnect when this Vessel connection returns.</p>}<div className="task-browser-content" ref={setViewerRoot}/></>:view==='files'?<WorkspaceFiles tab={tab} workspace={workspace}/>:<ReviewChanges tab={tab} workspace={workspace}/>}</>;
     return <div className="react-host-browser">
-        {mobile?<Sheet open={open} onOpenChange={next=>{if(!next)close();else setOpen(true);}}>{actions}{open&&<SheetContent ref={node=>{panel.current=node;}} side="right" showCloseButton={false} id={id} className="task-browser-panel mobile-browser-sheet" aria-labelledby={`${id}-title`}><SheetDescription className="sr-only">Review dock for {tab.title}</SheetDescription>{body}</SheetContent>}</Sheet>:actions}
+        {mobile?<Sheet open={open} onOpenChange={next=>{if(!next)close();else setOpen(true);}}>{actions}{open&&<SheetContent onCloseAutoFocus={event=>{
+            // The sheet's only primitive trigger is Browser. Suppress its
+            // default handoff and restore the actual selected dock only after
+            // portal/focus-scope cleanup, with the original identity fences.
+            event.preventDefault();
+            const origin=returnFocus.current;
+            if(origin)requestAnimationFrame(()=>restoreFocus(origin));
+        }} ref={node=>{panel.current=node;}} side="right" showCloseButton={false} id={id} className="task-browser-panel mobile-browser-sheet" aria-labelledby={`${id}-title`}><SheetDescription className="sr-only">Review dock for {tab.title}</SheetDescription>{body}</SheetContent>}</Sheet>:actions}
         {activity && <span id={`${id}-activity`} className="sr-only">Browser activity in this voyage</span>}
         {open&&!mobile&&<aside ref={panel} tabIndex={-1} id={id} className={`task-browser-panel${expanded?' expanded':''}`} aria-labelledby={`${id}-title`}>{body}</aside>}
     </div>;
