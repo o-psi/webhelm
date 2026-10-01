@@ -384,7 +384,8 @@ outside the draft store.
 
 Run `npm test` for the active shared transport/auth and React suites. On the
 supported Linux verification host, React files run sequentially in separate
-transient systemd user services, each capped at 1 GiB memory, zero swap and
+transient systemd user services with private umask `0077`, each capped at
+1 GiB memory, zero swap and
 25 seconds. The launcher uses the current Node executable and refuses an
 unrestricted fallback when the user manager is unavailable. This bounds native
 allocations as well as V8 heap and keeps a failing test out of the app cgroup.

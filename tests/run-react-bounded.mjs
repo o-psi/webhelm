@@ -15,7 +15,7 @@ if(!files.length)throw Error('No React test files found.');
 for(const file of files) {
     const unit=`voyage-react-${randomUUID()}`;
     const args=['--user','--wait','--pipe','--collect',`--unit=${unit}`,
-        '-p','MemoryMax=1G','-p','MemorySwapMax=0','-p','RuntimeMaxSec=25s',
+        '-p','UMask=0077','-p','MemoryMax=1G','-p','MemorySwapMax=0','-p','RuntimeMaxSec=25s',
         `--working-directory=${root}`,'/usr/bin/env','NODE_OPTIONS=--max-old-space-size=512',
         process.execPath,'--import','tsx','--test','--test-concurrency=1',
         '--test-timeout=15000',resolve(root,'tests',file)];
