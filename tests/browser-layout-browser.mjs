@@ -63,7 +63,7 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
-                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','workspace_changes','workspace_file','skills_catalog','workspace_file_catalog'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
+                if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','verified_user_updates','workspace_changes','workspace_file','skills_catalog','workspace_file_catalog'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,channel:c.channel,release_id:'a'.repeat(64),version:c.channel==='nightly'?'1.0.3-nightly.20260928.1.1':'1.0.2',expires_at:Math.floor(Date.now()/1000)+3600,description:'Verified development build from fixture source',services:['vessel.service']};
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
                 else if(c.op==='update_status')result=updateRecord;

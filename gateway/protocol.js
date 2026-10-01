@@ -116,7 +116,7 @@ export function validReply(f) {
 // view rather than forwarding unknown future execution/credential metadata.
 export function restrictCapabilities(value, vesselId) {
   if (!object(value) || value.protocol !== 1 || value.vessel_id !== vesselId || !Array.isArray(value.features) || !value.features.every(v => typeof v === 'string')) throw Error('invalid capabilities');
-  const features = new Set(['sqlite_catalogue', 'catalogue_changes', 'catalogue', 'scoped_catalogue', 'inspect', 'durable_receipts', 'history_paging', 'events', 'duplex_socket', 'decisions', 'grant_revocation', 'revocation', 'provider_accounts', 'execution_identity', 'execution_profiles', 'account_start', 'start_resolution']);
+  const features = new Set(['sqlite_catalogue', 'catalogue_changes', 'catalogue', 'scoped_catalogue', 'inspect', 'durable_receipts', 'history_paging', 'events', 'duplex_socket', 'decisions', 'grant_revocation', 'revocation', 'provider_accounts', 'execution_identity', 'execution_profiles', 'account_start', 'start_resolution', 'verified_user_updates']);
   const result = { protocol: 1, vessel_id: vesselId, features: value.features.filter(f => features.has(f)) };
   if (typeof value.running_release === 'string' && /^[a-f0-9]{64}$/.test(value.running_release)) result.running_release = value.running_release;
   if (typeof value.remote_updates === 'boolean') result.remote_updates = value.remote_updates && value.scope === 'owner';

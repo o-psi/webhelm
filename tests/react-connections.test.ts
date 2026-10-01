@@ -143,7 +143,7 @@ test('maintenance handles old, offline and reconnected Vessels without crossing 
         assert.match(card('Old Vessel')!.textContent!, /Version 1\.0\.0/);
         assert.match(card('Offline Vessel')!.textContent!, /Version unavailable/);
         await select('Old Vessel');
-        assert.match(dom.window.document.querySelector('.connections-maintenance')!.textContent!, /one-time remote administrator installation/);
+        assert.match(dom.window.document.querySelector('.connections-maintenance')!.textContent!, /current verified installer/);
         assert.equal(dom.window.document.querySelector<HTMLElement>('#update-source')!.hidden,true);
 
         await back();

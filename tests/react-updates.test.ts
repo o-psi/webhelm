@@ -25,7 +25,7 @@ const controls=(t:any, root:any, resume=()=>{})=>{
  return controller;
 };
 const vessel=(exchange:any)=>({id:'v',vessel_id:'identity',name:'HelmWeb',client:{exchange}});
-const capabilities=(version='1.0.2')=>({remote_updates:true,scope:'owner',version});
+const capabilities=(version='1.0.2')=>({remote_updates:true,scope:'owner',version,features:['verified_user_updates']});
 
 test('channel starts on the installed channel and displays its latest version',async t=>{
  const {root,$}=fixture(t,'1.0.4-nightly.20260927.1.1');
@@ -43,7 +43,7 @@ test('one click prepares and applies only the exact selected version',async t=>{
    seen.push(command);
    if(command.op==='update_prepare')record={operation_id:command.operation_id,channel:command.channel,phase:'ready',version:'1.0.3',release_id:hash,expires_at:Math.floor(Date.now()/1000)+1800,description:'Verified build'};
    if(command.op==='update_apply')record={...record,phase:'complete'};
-   if(command.op==='capabilities')return reply({vessel_id:'identity',version:'1.0.3',running_release:hash,features:['execution_profiles']});
+   if(command.op==='capabilities')return reply({...capabilities('1.0.3'),vessel_id:'identity',running_release:hash,features:['execution_profiles','verified_user_updates']});
    return reply(structuredClone(record));
  });
  let resumed=0;const update=controls(t,root,()=>{resumed++;});
@@ -127,6 +127,113 @@ test('an installed current channel version disables Update',t=>{
  assert.match($('update-check').textContent!,/Already up to date/);
 });
 
+test('legacy stable and nightly advertisements refuse all new update effects',async t=>{
+ for(const version of ['1.0.2','1.0.3-nightly.20260928.1.1']){
+  const {root,$}=fixture(t,version),seen:any[]=[];
+  const c=vessel(async({command}:any)=>{seen.push(command);return reply({phase:'idle'});});
+  const update=controls(t,root);update.bind(c,{remote_updates:true,scope:'owner',version,features:['execution_profiles']});
+  assert.equal($('update-source').hidden,true);
+  assert.equal(($('update-check') as HTMLButtonElement).disabled,true);
+  assert.equal($('update-review').hidden,true);
+  assert.match($('update-status').textContent!,/current verified installer/);
+  assert.match($('update-status').textContent!,/approved host installer route/);
+  // Callback gates apply even to a synthetic event on a disabled button.
+  for(const name of ['update-check','update-discard','update-refresh','setup-update-open'])$(name).dispatchEvent(new Event('click',{bubbles:true}));
+  update.releasesChanged();await settle();
+  assert.deepEqual(seen,[],'no nil status or preparation is sent to a legacy controller without a saved operation');
+  assert.ok(c.client,'normal connection is retained');
+ }
+});
+
+test('verified feature alone cannot broaden owner or remote-update authority',async t=>{
+ for(const caps of [{...capabilities(),scope:'workspaces'}, {...capabilities(),remote_updates:false},
+                    {...capabilities(),features:'verified_user_updates'}, {...capabilities(),features:['future_verified_user_updates']}]){
+  const {root,$}=fixture(t),seen:any[]=[];
+  const update=controls(t,root);update.bind(vessel(async({command}:any)=>{seen.push(command);return reply({phase:'idle'});}),caps);
+  $('update-check').dispatchEvent(new Event('click',{bubbles:true}));await settle();
+  assert.equal($('update-source').hidden,true);assert.deepEqual(seen,[]);
+ }
+});
+
+test('legacy pending ready and unconfirmed operations retain exact status without apply or discard',async t=>{
+ for(const phase of ['ready','unconfirmed']){
+  const {root,$}=fixture(t),seen:any[]=[];
+  const key='helm-web:update:update-test:v:identity';localStorage.setItem(key,JSON.stringify({operation_id:id}));
+  const record={operation_id:id,phase,channel:'stable',version:'1.0.3',release_id:hash,
+   expires_at:Math.floor(Date.now()/1000)+1800,message:phase==='unconfirmed'?'Original update remains unconfirmed.':null};
+  const c=vessel(async({command}:any)=>{seen.push(command);return reply(record);});
+  const update=controls(t,root);update.bind(c,{remote_updates:true,scope:'owner',version:'1.0.2',features:[]});await settle();
+  assert.equal($('update-refresh').hidden,false);
+  assert.equal($('update-review').hidden,true);
+  assert.match($('update-status').textContent!,/current verified installer/);
+  assert.match($('update-status').textContent!,phase==='unconfirmed'?/Original update remains unconfirmed/:/saved preparation remains available/);
+  for(const name of ['update-check','update-discard'])$(name).dispatchEvent(new Event('click',{bubbles:true}));
+  $('update-refresh').click();await settle();
+  assert.ok(seen.length>=2);assert.ok(seen.every(command=>command.op==='update_status'&&command.operation_id===id));
+  assert.deepEqual(JSON.parse(localStorage.getItem(key)!),{operation_id:id});
+ }
+});
+
+test('legacy status refusal preserves the saved identity and installer guidance',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];const key='helm-web:update:update-test:v:identity';
+ localStorage.setItem(key,JSON.stringify({operation_id:id}));
+ const update=controls(t,root);update.bind(vessel(async({command}:any)=>{
+  seen.push(command);return {protocol:1,error:'not available',outcome_unknown:false,result:null};
+ }),{remote_updates:true,scope:'owner',version:'1.0.2',features:[]});await settle();
+ assert.match($('update-status').textContent!,/current verified installer/);
+ assert.match($('update-status').textContent!,/could not confirm/);
+ assert.deepEqual(JSON.parse(localStorage.getItem(key)!),{operation_id:id});
+ assert.deepEqual(seen.map(c=>[c.op,c.operation_id]),[['update_status',id]]);
+ const blocked=fixture(t),denied:any[]=[];
+ localStorage.setItem(key,JSON.stringify({operation_id:id}));
+ const noStatus=controls(t,blocked.root);noStatus.bind(vessel(async({command}:any)=>{denied.push(command);return reply({phase:'idle'});}),
+  {remote_updates:false,scope:'owner',version:'1.0.0',features:[]});await settle();
+ assert.match(blocked.$('update-status').textContent!,/cannot check its status/);
+ assert.equal(blocked.$('update-refresh').hidden,true);assert.deepEqual(denied,[]);
+ assert.deepEqual(JSON.parse(localStorage.getItem(key)!),{operation_id:id});
+});
+
+test('capability loss during prepare blocks delayed apply and restoring it needs a new click',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];let resolve:any;
+ let record:any={phase:'idle'};
+ const c=vessel(async({command}:any)=>{
+  seen.push(command);
+  if(command.op==='update_prepare'){record={operation_id:command.operation_id,phase:'preparing'};return new Promise(r=>{resolve=r;});}
+  if(command.op==='update_apply')record={...record,phase:'applying'};
+  return reply(structuredClone(record));
+ });
+ const update=controls(t,root);update.bind(c,capabilities());$('update-check').click();
+ const operation=seen.find(command=>command.op==='update_prepare').operation_id;
+ update.bind(c,{remote_updates:true,scope:'owner',version:'1.0.2',features:[]});await settle();
+ record={operation_id:operation,phase:'ready',channel:'stable',version:'1.0.3',release_id:hash,expires_at:Math.floor(Date.now()/1000)+1800};
+ resolve(reply(record));await settle();
+ assert.equal(seen.filter(command=>command.op==='update_apply').length,0);
+ assert.match($('update-status').textContent!,/current verified installer/);
+ assert.doesNotMatch($('update-status').textContent!,/Installation follows automatically/);
+ update.bind(c,capabilities());await settle();
+ assert.equal(seen.filter(command=>command.op==='update_apply').length,0,'capability recovery does not revive old in-memory approval');
+ $('update-check').click();await settle();
+ assert.equal(seen.filter(command=>command.op==='update_prepare').length,1,'the saved exact preparation is retained');
+ assert.deepEqual(seen.filter(command=>command.op==='update_apply').map(command=>[command.operation_id,command.release_id]),[[operation,hash]]);
+});
+
+test('a verified completed legacy operation permits normal review while new effects stay gated',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];let resumed=0;
+ localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:id}));
+ const c=vessel(async({command}:any)=>{
+  seen.push(command);
+  if(command.op==='capabilities')return reply({vessel_id:'identity',version:'1.0.3',scope:'owner',remote_updates:true,
+   running_release:hash,features:['execution_profiles']});
+  return reply({operation_id:id,phase:'complete',release_id:hash});
+ });
+ const update=controls(t,root,()=>{resumed++;});update.bind(c,{remote_updates:true,scope:'owner',version:'1.0.2',features:[]});await settle();
+ assert.equal($('update-continue').hidden,false);assert.equal($('update-source').hidden,true);
+ assert.match($('update-status').textContent!,/current verified installer/);
+ assert.match($('update-status').textContent!,/Reconnected to the verified Vessel version/);
+ $('update-continue').click();assert.equal(resumed,1);
+ assert.ok(seen.every(command=>['update_status','capabilities'].includes(command.op)));
+});
+
 test('switching Vessel drops stale replies and owner-only controls stay unavailable',async t=>{
  const {root,$}=fixture(t);let resolve:any;
  const c={id:'a',vessel_id:'a',name:'A',client:{exchange:()=>new Promise(r=>{resolve=r;})}};
@@ -151,6 +258,9 @@ test('update transport accepts only fixed typed requests and owner capability',a
  const caps={protocol:1,vessel_id:id,scope:'workspaces',features:[],remote_updates:true,running_release:hash};
  assert.equal(restrictCapabilities(caps,id).remote_updates,false);
  assert.equal(restrictCapabilities({...caps,scope:'owner'},id).remote_updates,true);
+ const explicit={...caps,scope:'owner',features:['verified_user_updates','execution_profiles','unknown_future_execution']};
+ assert.deepEqual(restrictCapabilities(explicit,id).features,['verified_user_updates','execution_profiles']);
+ assert.equal(restrictCapabilities({...explicit,scope:'workspaces'},id).remote_updates,false);
 });
 
 test('disposed controls ignore late replies and dispatch nothing else',async t=>{

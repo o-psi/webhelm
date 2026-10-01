@@ -50,6 +50,23 @@ cutover. Browser viewing, account enrollment,
 advanced voyage actions and the reviewed updater use explicitly disposed adapters.
 No unknown command is automatically replayed. Provider credentials remain on Vessels.
 
+New user-update preparation, approval and discard require the explicit
+`verified_user_updates` feature, owner scope and `remote_updates`. A version string
+or the older remote-update flag does not prove that the installed controller
+supports the current rollback/quarantine contract. Current core Vessels advertise
+the feature only for a supported managed user installation with the current
+verified controller; the staged system/root update path does not advertise it.
+The legacy gateway capability projection retains this one explicit feature while
+preserving its existing owner restriction and unrelated capability filters.
+Old Vessels retain normal connection/catalogue/browser access and exact saved
+update identity; owner-authorized read-only status checks remain available when
+their existing remote-update surface supports them. Reload, reconnect, capability
+loss or later recovery cannot revive approval. The UI explains the existing
+approved host installer bootstrap/maintenance route; it does not mint a grant,
+execute arbitrary host commands or retrofit an immutable old updater.
+See [the current core contract](https://github.com/o-psi/helm.vessel.voyage/blob/main/docs/remote-updates.md#current-client-admission-to-verified-user-updates)
+and [the tracked legacy delivery defect](https://github.com/o-psi/helm.vessel.voyage/issues/401).
+
 The new-voyage screen opens with a message draft and Vessel, workspace, profile and
 access controls. Sending creates an independent voyage, confirms its selected
 access mode, then submits the first message. An uncertain creation keeps the draft

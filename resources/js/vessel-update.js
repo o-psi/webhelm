@@ -1,6 +1,13 @@
 import {request, uuid} from './vessel-client.js';
 import {compareReleaseVersions,installedReleaseChannel} from './release-channels.js';
 
+// Older binaries advertised remote_updates while invoking their old installed
+// controller. Only the explicit current contract admits new installer effects.
+const mayObserveUpdates = caps => caps?.scope === 'owner' && caps.remote_updates === true;
+const verifiedUserUpdates = caps => mayObserveUpdates(caps)
+    && Array.isArray(caps.features) && caps.features.includes('verified_user_updates');
+const installerBootstrap = 'Remote updates need the current verified installer on this Vessel. Use its existing approved host installer route, then reconnect. Saved updates are retained for status review; previous approval will not be repeated.';
+
 // A stored id observes one server-owned operation. Reload/reconnect never repeats
 // approval or starts another update, even when the original reply was lost.
 export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(channel: 'stable'|'nightly') => ({phase: string, version?: string}|null)} */ (() => null)}) {
@@ -44,21 +51,27 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
         const comparison = sameChannel ? compareReleaseVersions(release.version,context?.caps.version) : null;
         const current = comparison !== null && comparison <= 0;
         text('update-selected-version',authorized ? `Updating to ${authorized.version}` : release ? `Latest ${release.channel === 'nightly' ? 'development' : 'stable'} version: ${release.version}` : 'Published version unavailable. Check again later.');
-        const unsupported = context && !context.caps.remote_updates
-            ? context.caps.scope !== 'owner' ? 'Only this Vessel’s account owner can approve an update.' : 'This version predates remote updates. Its updater needs a one-time remote administrator installation.'
+        const supported = verifiedUserUpdates(context?.caps);
+        const unsupported = context && !supported
+            ? context.caps.scope !== 'owner' ? 'Only this Vessel’s account owner can approve an update.' : installerBootstrap
             : null;
+        const expiryMessage = supported ? 'The previous prepared build is no longer valid. A new update will replace it automatically.'
+            : 'The saved prepared build has expired. Its operation is retained for status review after installer bootstrap.';
+        const retainedPhase = phase === 'preparing' ? 'The saved update is preparing. Installation will not be approved by this client.'
+            : phase === 'ready' ? 'The saved preparation remains available for status review.' : phaseMessage[phase];
+        const operationStatus = statusOverride || (expired ? expiryMessage : record?.message || (!supported ? retainedPhase : phaseMessage[phase]) || 'Check the current update status.');
         $('update-alert').hidden = phase === 'idle' && !statusOverride && !unsupported;
-        text('update-status', unsupported || statusOverride || (expired ? 'The previous prepared build is no longer valid. A new update will replace it automatically.' : record?.message || phaseMessage[phase] || 'Check the current update status.'));
-        $('update-source').hidden = !context?.caps.remote_updates || !mayPrepare(record) || Boolean(authorized && (phase === 'ready' || phase === 'preparing'));
-        $('update-review').hidden = !context?.caps.remote_updates || phase !== 'ready' || expired || Boolean(authorized && !authorized.approvalSent);
-        $('update-refresh').hidden = !context?.caps.remote_updates || ['idle','discarded'].includes(phase);
+        text('update-status', unsupported ? `${unsupported}${record?.operation_id ? ` Saved update: ${operationStatus}` : ''}` : operationStatus);
+        $('update-source').hidden = !supported || !mayPrepare(record) || Boolean(authorized && (phase === 'ready' || phase === 'preparing'));
+        $('update-review').hidden = !supported || phase !== 'ready' || expired || Boolean(authorized && !authorized.approvalSent);
+        $('update-refresh').hidden = !mayObserveUpdates(context?.caps) || ['idle','discarded'].includes(phase);
         $('update-continue').hidden = phase !== 'complete';
         text('update-version',record?.version);
         text('update-description',record?.description);
         text('update-services',record?.services?.length ? `Services to restart: ${record.services.join(', ')}` : '');
-        $('update-discard').disabled = busy;
+        $('update-discard').disabled = busy || !supported;
         text('update-check',current ? 'Already up to date' : 'Update this Vessel');
-        $('update-check').disabled = busy || !release || current || Boolean(authorized?.approvalSent) || !context?.caps.remote_updates;
+        $('update-check').disabled = busy || !release || current || Boolean(authorized?.approvalSent) || !supported;
     }
     async function exchange(c, op, fields) {
         if (!c.client) throw Error('Waiting for this Vessel to reconnect. Your update request is retained.');
@@ -67,7 +80,7 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
         return reply.result;
     }
     function maybeAutoApply() {
-        if (!authorized || authorized.approvalSent || pending?.phase !== 'ready' || busy || !context) return;
+        if (!authorized || authorized.approvalSent || pending?.phase !== 'ready' || busy || !verifiedUserUpdates(context?.caps)) return;
         const matches = pending.operation_id === authorized.operation_id
             && pending.channel === authorized.channel
             && compareReleaseVersions(pending.version,authorized.version) === 0
@@ -90,7 +103,7 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
     }
     async function refresh() {
         const {c,caps} = context || {};
-        if (!c || !caps.remote_updates || busy) return;
+        if (!c || !mayObserveUpdates(caps) || busy || (!verifiedUserUpdates(caps) && !pending?.operation_id)) return;
         const n=generation;
         try {
             const record = await exchange(c,'update_status',{operation_id:pending?.operation_id || '00000000-0000-0000-0000-000000000000'});
@@ -110,18 +123,19 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
             render(record);
             if (record.phase === 'ready') maybeAutoApply();
             if (record.phase === 'complete') {
-                $('update-continue').hidden = !verified;
-                text('update-status',verified
+                statusOverride = verified
                     ? 'Update complete. Reconnected to the verified Vessel version.'
-                    : 'This saved update is complete, but this connection does not match its reviewed release. Check for updates to review the current installation.');
+                    : 'This saved update is complete, but this connection does not match its reviewed release. Check for updates to review the current installation.';
+                render(record);
+                $('update-continue').hidden = !verified;
             }
-        } catch (error) { if (active(c,n)) text('update-status',error.message); }
+        } catch (error) { if (active(c,n)) {statusOverride=error.message;render(pending);} }
         if (active(c,n) && !busy && pending?.operation_id && !['ready','complete','failed','discarded','unconfirmed'].includes(pending.phase)) {
             clearTimeout(timer); timer=setTimeout(refresh,3000);
         }
     }
     async function mutate(op, fields) {
-        if (busy || !context?.caps.remote_updates) return;
+        if (busy || !verifiedUserUpdates(context?.caps)) return;
         const {c}=context, n=generation;
         let failure = null;
         busy=true; render(pending);
@@ -154,7 +168,7 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
         void mutate('update_prepare',{operation_id:record.operation_id,channel});
     }
     listen('update-check',async() => {
-        if (busy || !context?.caps.remote_updates || !mayPrepare(pending) || authorized?.approvalSent) return;
+        if (busy || !verifiedUserUpdates(context?.caps) || !mayPrepare(pending) || authorized?.approvalSent) return;
         const release=selectedRelease();
         if (!release) return;
         const installedChannel=installedReleaseChannel(context.caps.version);
@@ -175,7 +189,7 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
         prepare(release);
     });
     listen('update-discard',() => {
-        if (pending?.phase !== 'ready' || busy) return;
+        if (pending?.phase !== 'ready' || busy || !verifiedUserUpdates(context?.caps)) return;
         authorized=null;
         void mutate('update_discard',{operation_id:pending.operation_id});
     });
@@ -192,9 +206,11 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
             if (!context) return;
             text('update-vessel-name',`Update ${c.name}`); text('update-current',caps.version || 'unknown');
             try { pending=JSON.parse(localStorage.getItem(storageKey(c)) || 'null'); } catch { pending=null; }
-            if (pending?.operation_id) pending={operation_id:pending.operation_id,phase:'observing',message:'Checking the saved update. Approval will not be repeated.'};
+            if (pending?.operation_id) pending={operation_id:pending.operation_id,phase:'observing',message:mayObserveUpdates(caps)
+                ? 'Checking the saved update. Approval will not be repeated.'
+                : 'The saved update is retained, but this connection cannot check its status. Approval will not be repeated.'};
             render(pending);
-            if (caps.remote_updates && pending?.operation_id) refresh();
+            if (mayObserveUpdates(caps) && pending?.operation_id) refresh();
         },
         releasesChanged() { if (context) render(pending); },
         required() { show(); },
