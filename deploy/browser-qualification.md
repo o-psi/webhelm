@@ -278,3 +278,33 @@ false; `LOG_CHANNEL=stderr` captures exceptions into the bounded private PHP log
 The isolated Python unit subprocess also uses `-B` so explicit importlib source
 loading does not write bytecode into the checkout. Production settings are
 unchanged.
+
+## Explicit NativeLocal companion qualification route
+
+Core's [production qualification guide](https://github.com/o-psi/helm.vessel.voyage/blob/main/docs/testing/host-browser-production-qualification.md)
+now prepares an explicit supported NativeLocal choice: `native_route` contains
+`mode:local`, the existing ordinary account's canonical private Vessel directory
+and its expected physical Vessel UUID. The real native command is
+`helm connect --directory DIRECTORY --no-start`; F6 still opens the shared viewer.
+It consumes existing local discovery through normal Helm. No paired credential
+is fabricated, no Web credential is copied/exported, and no grant is minted.
+The original public Native access-file route remains available.
+
+This changes neither these measured React tabs nor their tenant/operator/revision/
+CSRF/public HTTPS/WSS admission. The Web broker continues to exchange only fixed
+benign fixture metadata; it receives no local discovery, actor files or native
+receipt claims. Native's existing account-owner actor is distinct from the Web
+principal. That Native initiator alone handles private disconnect/reclaim/close.
+
+NativeLocal's opt-in counter reports **local WS application payload**, not public
+Native WSS or TLS. Native graphical request/response payload, native Vessel socket
+payload, actual Web public WSS payload, per-client CPU/RSS/heap and latency remain
+separate scopes. Bodies begun/completed within each cost window and requests
+crossing its end are explicit; do not add overlapping layers as total bandwidth.
+Core's read-only exact actor/socket/receipt attribution and observed cleanup remain
+mandatory, together with all full-site/media/private/multi-voyage/reopen gates.
+NativeLocal qualifies no macOS/Windows or protected Root behavior.
+
+This is a source-only runbook update; it adds no production setting or enabled
+fixture job. Source contracts/final artifact and actual host/browser qualification
+remain pending. Do not call this route passed or silently remove a real #333 gate.
