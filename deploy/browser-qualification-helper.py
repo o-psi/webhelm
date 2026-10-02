@@ -37,6 +37,10 @@ PROOFS = {
     'observe_real_renewal': {'both_actual_connections_renewed', 'browser_identity_retained', 'no_effect_replay', 'no_transport_rewrite'},
     'close_browser_once': {'close_dispatched_once', 'browser_stopped', 'outcome_confirmed'},
     'close_fixture_panels': {'only_owned_fixture_tabs_closed', 'unrelated_tabs_retained'},
+    'close_dock_for_idle': {'dock_closed', 'qualification_tab_retained', 'other_browser_unchanged', 'no_browser_start_or_close'},
+    'reopen_dock_after_idle': {'dock_open', 'same_running_browser', 'fresh_attach', 'other_browser_unchanged', 'no_browser_start_or_close'},
+    'observe_media_surfaces': {'all_three_visible', 'canvas_decoded_content_changes', 'video_decoded_content_changes', 'video_playback_frames_advance', 'same_surface_versions_advance', 'unsupported_frame_orange', 'no_input_sent'},
+    'observe_media_frame_change': {'all_three_visible', 'unsupported_frame_blue', 'same_unsupported_surface_version_advance', 'no_input_sent'},
 }
 SCOPE = 'actual CUA qualification Web tab renderer and public WSS application payload'
 METRIC_SCOPE = 'selected target renderer metrics; renderer/process sharing is possible, so do not sum task/heap across tabs'
@@ -140,6 +144,11 @@ def operation_metadata(op, labels, site_labels=()):
         assert isinstance(result['labels'], list) and 1 <= len(result['labels']) <= 2
         assert len(set(result['labels'])) == len(result['labels']) and all(s in labels for s in result['labels'])
     action = result['operation']
+    if action in {'close_dock_for_idle','reopen_dock_after_idle','observe_media_surfaces','observe_media_frame_change'}:
+        assert set(op) == {'operation','label'} and set(result) == {'operation','label'}
+        expected = labels[0] if action in {'close_dock_for_idle','reopen_dock_after_idle'} else labels[1]
+        assert result['label'] == expected
+        return result
     if action.startswith('measure_'):
         keys = {'operation', 'condition', 'index', 'milliseconds', 'labels'}
         if action == 'measure_window':

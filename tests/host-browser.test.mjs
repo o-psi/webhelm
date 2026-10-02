@@ -154,3 +154,21 @@ test('stale conversation reads the current owner before browser attach',async()=
     await adapter.transport({action:'status'});
     assert.equal(sent[0].op,'snapshot');assert.equal(sent[1].incarnation,'fresh');assert.equal(adapter.context().revision,8);
 });
+
+test('mounted public fallback identity clears on private, unavailable and disposal',async()=>{
+ const {JSDOM}=await import('jsdom');const dom=new JSDOM('<main id="viewer"></main>',{url:'https://helm.example'});
+ const root=dom.window.document.querySelector('main');
+ const view=mountBrowserViewer(root,{autoConnect:false,uuid:()=> 'viewer',context:()=>({incarnation:'inc',revision:1}),transport:async()=>({status:status()})});
+ const target={getBoundingClientRect:()=>({left:0,top:0,width:40,height:40})};const player={getMirror:()=>({getNode:id=>id===8?target:null})};
+ try{
+  view.session.accept(status());view.session.phase='live';view.session.emit();
+  view.session.onVisuals([{id:8,version:1,width:40,height:40,data_base64:'AA=='}],player);
+  assert.equal(root.dataset.browserId,'browser');assert.equal(root.dataset.browserIncarnation,'inc');assert.equal(root.dataset.browserDocumentEpoch,'1');
+  assert.equal(root.querySelector('.browser-next-visual').dataset.nodeId,'8');
+  view.session.accept(status({mode:'private',binding:{...binding,capture_epoch:2,controller_epoch:2}}));
+  view.session.onVisuals([{id:8,version:2,width:40,height:40,data_base64:'AA=='}],player);
+  assert.equal(root.dataset.browserId,undefined);assert.equal(root.querySelector('.browser-next-visual').dataset.nodeId,undefined);
+  view.session.accept(status({available:false,running:false,binding:null,mode:null,controller:null}));assert.equal(root.dataset.browserCaptureEpoch,undefined);
+  view.dispose();assert.equal(root.dataset.browserId,undefined);assert.equal(root.children.length,0);
+ }finally{view.dispose();dom.window.close();}
+});

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {JSDOM} from 'jsdom';
-import {installQualificationForm} from '../resources/js/browser-qualification.js';
+import {installQualificationForm,fixedObservationProofs,fixedObservationResponseValid} from '../resources/js/browser-qualification.js';
 
 test('fixed coordination helper adverse contracts stay offline and bounded',{timeout:20000},()=>{
  const result=spawnSync('/usr/bin/python3',['-I','-B','tests/browser-qualification-helper.py'],{cwd:new URL('..',import.meta.url),encoding:'utf8',timeout:15000,maxBuffer:65536});
@@ -37,4 +37,15 @@ test('malformed, wrong identity or oversize response never sends and uncertainty
   f.submit();await settle();assert.equal(calls.length,2);
   f.refresh();await settle();assert.equal(f.button.disabled,true);f.submit();await settle();assert.equal(calls.length,3);
  }finally{f.dom.window.close();}
+});
+
+test('idle and media proof field sets match helper and reject extras or claimed strings',()=>{
+ for(const [operation,keys]of Object.entries(fixedObservationProofs)){
+  const response={schema:1,status:'observed',result:Object.fromEntries(keys.map(key=>[key,true]))};
+  assert.equal(fixedObservationResponseValid({operation},response),true);
+  assert.equal(fixedObservationResponseValid({operation},{...response,result:{...response.result,url:'untrusted'}}),false);
+  assert.equal(fixedObservationResponseValid({operation},{...response,result:{}}),false);
+  assert.equal(fixedObservationResponseValid({operation},{...response,result:Object.fromEntries(keys.map(key=>[key,'true']))}),false);
+  assert.equal(fixedObservationResponseValid({operation},{...response,status:'unknown'}),false);
+ }
 });

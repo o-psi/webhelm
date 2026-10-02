@@ -542,3 +542,8 @@ The Vessel must include native `xai_oauth` support. Older Vessels continue to of
 their supported providers. Expired SuperGrok accounts offer an explicit sign-in
 refresh. Subscription limits and model availability are controlled by xAI; quota
 percentages are unknown and API-key billing is never selected as a fallback.
+
+The bounded browser qualification coordinator's additional idle/media operations
+and exact proof fields are documented in
+[fixed qualification proofs](docs/browser-qualification-fixed-proofs.md).
+Their source contracts are separate from actual native qualification.

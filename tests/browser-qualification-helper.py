@@ -308,5 +308,22 @@ class CoordinationTests(unittest.TestCase):
             helper.validate_result(request, result)
 
 
+class FixedIdleMediaProofContracts(unittest.TestCase):
+    def test_label_bound_metadata_and_exact_boolean_response_schema(self):
+        for action in ['close_dock_for_idle','reopen_dock_after_idle','observe_media_surfaces','observe_media_frame_change']:
+            label='a' if 'idle' in action else 'b'
+            op={'operation':action,'label':label}
+            self.assertEqual(helper.operation_metadata(op,['a','b']),op)
+            required=helper.PROOFS[action]
+            request={'operation':op}
+            helper.validate_result(request,{key:True for key in required})
+            helper.validate_result(request,{key:False for key in required})
+            with self.assertRaises(AssertionError):helper.operation_metadata({**op,'label':'b' if label=='a' else 'a'},['a','b'])
+            for key in ['url','script','milliseconds','labels','value']:
+                with self.assertRaises(AssertionError):helper.operation_metadata({**op,key:'untrusted'},['a','b'])
+            for changed in [{}, {**{key:True for key in required},'secret':'untrusted'}, {key:'true' for key in required}]:
+                with self.assertRaises(AssertionError):helper.validate_result(request,changed)
+
+
 if __name__ == '__main__':
     unittest.main()

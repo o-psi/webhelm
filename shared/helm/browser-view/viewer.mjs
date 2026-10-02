@@ -113,6 +113,7 @@ export class BrowserConnection {
             present.add(item.id);
             let picture=frame.visualNodes.get(item.id);
             if(!picture){picture=document.createElement('img');picture.className='browser-next-frame-visual';picture.alt='';frame.visualLayer.append(picture);frame.visualNodes.set(item.id,picture);}
+            if(this.status?.mode==='private')delete picture.dataset.nodeId;else picture.dataset.nodeId=String(item.id);
             if(picture.dataset.version!==String(item.version)){
                 picture.src=`data:image/jpeg;base64,${item.data_base64}`;
                 picture.dataset.version=String(item.version);
@@ -253,9 +254,13 @@ export class BrowserConnection {
     async recover(){
         if(this.closed||this.busy)return;
         this.issue=null;this.clearMirror();
-        if(!this.status||!this.attached||!this.status.running)return this.connect({start:false});
+        if(!this.status)return this.connect({start:false});
         this.phase='recovering';this.emit();
-        try{await this.request({action:'status'});if(this.attached&&this.status.running)await this.pull();this.schedulePoll();}
+        try{await this.request({action:'status'});
+            // Disconnect sends its exact detach without accepting a late reply.
+            // Decide reattachment from this fresh status, never the old binding.
+            if(!this.attached)return await this.connect({start:false});
+            if(this.status.running)await this.pull();this.schedulePoll();}
         catch{this.fail('status-unavailable');}
     }
     async control(mode){
@@ -525,6 +530,10 @@ export function mountBrowserViewer(root,options={}){
         if(disposed)return;
         const current=connection.status,phase=connection.phase,privateControl=connection.controls&&current?.mode==='private';
         root.dataset.state=phase==='live'?(privateControl?'private':connection.controls?'human':current?.mode==='agent'?'agent':'watching'):phase;
+        const publicBinding=current?.running&&current.mode!=='private'&&connection.attached&&!['disconnected','unavailable','stopped'].includes(phase)?current.binding:null;
+        for(const [name,key] of [['browserId','browser_id'],['browserIncarnation','incarnation'],['browserDocumentEpoch','document_epoch'],['browserCaptureEpoch','capture_epoch']]){
+            if(publicBinding?.[key]!=null)root.dataset[name]=String(publicBinding[key]);else delete root.dataset[name];
+        }
         mirror.style.pointerEvents=connection.canInput||connection.canClaim&&connection.streaming?'auto':'none';
         frameLayer.dataset.control=String(connection.canInput||connection.canClaim&&connection.streaming);
         status.textContent=phase==='live'?privateControl?'Private browsing · Agent paused':connection.controls?'You are browsing':current?.agent_active?'Agent working':'Watching browser'
@@ -664,6 +673,7 @@ export function mountBrowserViewer(root,options={}){
             present.add(item.id);
             let picture=visualNodes.get(item.id);
             if(!picture){picture=node('img',visualLayer,'browser-next-visual');picture.alt='';visualNodes.set(item.id,picture);}
+            if(connection.status?.mode==='private')delete picture.dataset.nodeId;else picture.dataset.nodeId=String(item.id);
             if(picture.dataset.version!==String(item.version)){
                 picture.src=`data:image/jpeg;base64,${item.data_base64}`;
                 picture.dataset.version=String(item.version);
@@ -678,7 +688,7 @@ export function mountBrowserViewer(root,options={}){
     const observer=typeof ResizeObserver!=='undefined'?new ResizeObserver(()=>{paintScale();scheduleViewport();}):null;
     observer?.observe(scroll);
     const refresh=setInterval(()=>void connection.refresh(),2000);
-    function dispose(){if(disposed)return;disposed=true;clearInterval(refresh);clearTimeout(resizeTimer);observer?.disconnect();connection.dispose();root.replaceChildren();}
+    function dispose(){if(disposed)return;disposed=true;clearInterval(refresh);clearTimeout(resizeTimer);observer?.disconnect();connection.dispose();root.replaceChildren();for(const name of ['browserId','browserIncarnation','browserDocumentEpoch','browserCaptureEpoch'])delete root.dataset[name];}
     render();if(options.autoConnect!==false)void connection.connect();
     return {session:connection,disconnect:()=>connection.disconnect(),dispose};
 }
