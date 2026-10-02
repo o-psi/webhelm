@@ -260,3 +260,13 @@ cover exact one-shot CSRF submission, size/identity errors and no automatic retr
 Coordinate the focused run and existing Web typecheck/build/regression gate once
 all relevant source edits are ready. End-to-end enablement remains a separately
 coordinated host action after successful verification and normal Web publication.
+
+The HTTP fixture has a 45-second internal deadline and 1.5-second fetch/body
+deadlines, within its existing 60-second test bound. Unexpected authentication
+or bootstrap status fails immediately. Private `/tmp/helm-coordination-http-*`
+evidence is retained on success and failure (mode0700; bounded child logs and
+last response mode0600), rather than erased by cleanup. Only stage, HTTP status
+and owned retirement metadata is printed; fixture keys, cookies and response
+bodies stay private. TERM/KILL handling awaits the original exit event and checks
+PID/start/UID identity; an unconfirmed retirement fails. This is offline fixture
+cleanup evidence, not production/native browser cleanup acceptance.
