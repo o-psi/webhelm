@@ -270,3 +270,11 @@ and owned retirement metadata is printed; fixture keys, cookies and response
 bodies stay private. TERM/KILL handling awaits the original exit event and checks
 PID/start/UID identity; an unconfirmed retirement fails. This is offline fixture
 cleanup evidence, not production/native browser cleanup acceptance.
+
+The local HTTP render fixture supplies Vite manifest `src` and `file` fields,
+matching Laravel's actual preload contract. Its fake manifest is only for this
+offline page-render test and is not a production build. Fixture `APP_DEBUG` stays
+false; `LOG_CHANNEL=stderr` captures exceptions into the bounded private PHP log.
+The isolated Python unit subprocess also uses `-B` so explicit importlib source
+loading does not write bytecode into the checkout. Production settings are
+unchanged.

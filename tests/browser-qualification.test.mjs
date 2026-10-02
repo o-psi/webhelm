@@ -5,7 +5,7 @@ import {JSDOM} from 'jsdom';
 import {installQualificationForm} from '../resources/js/browser-qualification.js';
 
 test('fixed coordination helper adverse contracts stay offline and bounded',{timeout:20000},()=>{
- const result=spawnSync('/usr/bin/python3',['-I','tests/browser-qualification-helper.py'],{cwd:new URL('..',import.meta.url),encoding:'utf8',timeout:15000,maxBuffer:65536});
+ const result=spawnSync('/usr/bin/python3',['-I','-B','tests/browser-qualification-helper.py'],{cwd:new URL('..',import.meta.url),encoding:'utf8',timeout:15000,maxBuffer:65536});
  assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stderr,/OK/);
 });
 function fixture(fetch){
