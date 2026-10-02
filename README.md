@@ -525,3 +525,14 @@ transition and matching client scope are still being integrated; do not claim
 
 Fixture-only browser qualification coordination, disabled by default: see
 [the expiring coordination runbook](deploy/browser-qualification.md).
+
+### SuperGrok subscription accounts
+
+In profile setup, choose **Provider account → Add subscription account**, then
+select SuperGrok. The private view shows xAI's verification website and a short
+device code; approve it in a browser on any machine. Tokens stay on the selected
+Vessel, and enrollment neither sends a model request nor changes the host default.
+The Vessel must include native `xai_oauth` support. Older Vessels continue to offer
+their supported providers. Expired SuperGrok accounts offer an explicit sign-in
+refresh. Subscription limits and model availability are controlled by xAI; quota
+percentages are unknown and API-key billing is never selected as a fallback.

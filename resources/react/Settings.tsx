@@ -16,7 +16,7 @@ import type {Tab,Workspace} from './workspace';
 
 type Screen='overview'|'location'|'profiles'|'editor'|'accounts'|'models'|'reasoning'|'enrollment'|'delete'|'usage';
 const titles:Record<Screen,string>={overview:'Voyage setup',location:'Location',profiles:'Profiles',editor:'Edit profile',accounts:'Choose account',models:'Choose model',reasoning:'Reasoning & service',enrollment:'Connect ChatGPT',delete:'Delete profile',usage:'Account usage'};
-const expiredOAuth=(account:any)=>account?.binding.transport==='chatgpt_oauth'&&account.state==='ready'&&account.availability==='expired';
+const expiredOAuth=(account:any)=>['chatgpt_oauth','xai_oauth'].includes(account?.binding.transport)&&account.state==='ready'&&account.availability==='expired';
 // Rows and choices are multi-line list items; utilities override the one-line Button geometry.
 const setupRow='setup-row h-auto w-full justify-between gap-3 whitespace-normal px-3.5 py-3 text-left font-normal';
 const setupChoice='setup-choice h-auto w-full flex-col items-start gap-1 whitespace-normal p-3 text-left font-normal';
@@ -168,7 +168,7 @@ export function Settings({fleet,workspace,tab,profileOnly=false,tenant,onClose,o
                     <label className="setup-search">Search accounts<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
                     <div className="setup-choices">{accounts.filter(item=>matches(item.label)).map(item=><div key={JSON.stringify(item.binding)} className="setup-account"><Button variant={sameAccount(selected?.binding,item.binding)?'secondary':'outline'} type="button" className={setupChoice} disabled={busy||!item.ready} aria-pressed={sameAccount(selected?.binding,item.binding)} onClick={()=>{retainEditor();setAccount(JSON.stringify(item.binding));back();}}><strong>{item.label}</strong><small>{item.ready?'Available':item.availability?.replaceAll('_',' ')||'Unavailable'}</small></Button>{refreshButton(item)}</div>)}</div>
                     {!accounts.some(item=>matches(item.label))&&<p>No accounts found.</p>}
-                    <div className="setup-actions"><Button variant="outline" type="button" disabled={busy} onClick={()=>navigate('enrollment')}>Add ChatGPT account</Button><Button variant="ghost" type="button" disabled={busy} onClick={()=>{retainEditor();setAccountsReload(value=>value+1);}}>Reload accounts</Button></div>
+                    <div className="setup-actions"><Button variant="outline" type="button" disabled={busy} onClick={()=>navigate('enrollment')}>Add subscription account</Button><Button variant="ghost" type="button" disabled={busy} onClick={()=>{retainEditor();setAccountsReload(value=>value+1);}}>Reload accounts</Button></div>
                 </>}
                 {screen==='models'&&<>
                     <label className="setup-search">Search models<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
