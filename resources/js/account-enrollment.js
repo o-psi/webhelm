@@ -1,7 +1,12 @@
 import {request, uuid} from './vessel-client.js';
 
 const terminal = new Set(['succeeded','cancelled','expired','denied','uncertain']);
-const verification = 'https://auth.openai.com/codex/device';
+const providers = {
+    chatgpt_oauth: {name:'ChatGPT',endpoint:'https://chatgpt.com/backend-api/codex',verification:'https://auth.openai.com/codex/device'},
+    xai_oauth: {name:'SuperGrok',endpoint:'https://api.x.ai/v1',verification:'https://accounts.x.ai/oauth2/device'},
+};
+const supported = p => p?.transports?.length === 1 && providers[p.transports[0]]?.endpoint === p.endpoint;
+const providerInfo = p => providers[p.transports[0]];
 // Only public enrollment envelopes are durable. Private responses live in this view alone.
 export function accountEnrollment(root, {context, refreshed}) {
     const $ = id => root.querySelector(`#enrollment-${id}`);
@@ -18,7 +23,7 @@ export function accountEnrollment(root, {context, refreshed}) {
         $('start').hidden = !setup;
         $('check').hidden = !pending;
         $('cancel').hidden = !pending;
-        $('title').textContent = ({loading:'Connect ChatGPT',setup:'Connect ChatGPT',pending:'Finish signing in',recovery:'Resume sign-in',done:'Account connected',unavailable:'Sign-in unavailable'})[stage];
+        $('title').textContent = ({loading:'Connect a subscription',setup:'Connect a subscription',pending:'Finish signing in',recovery:'Resume sign-in',done:'Account connected',unavailable:'Sign-in unavailable'})[stage];
         $('check').textContent = stage === 'pending' ? 'I’ve signed in' : 'Check sign-in';
         for (const id of ['start','check','cancel','label','provider']) $(id).disabled = busy || stage === 'loading';
         $('panel').setAttribute('aria-busy',String(busy || stage === 'loading'));
@@ -46,16 +51,18 @@ export function accountEnrollment(root, {context, refreshed}) {
         clear(); n = generation;
         if (terminal.has(status.state)) {
             render(status.state === 'uncertain' ? 'recovery' : status.state === 'succeeded' ? 'done' : 'setup');
-            message(status.state === 'succeeded' ? 'ChatGPT account created. Reloading account choices…' : `Sign-in ${status.state}. Provider effects may already have occurred; no sign-in is retried automatically.`);
+            message(status.state === 'succeeded' ? 'Subscription account created. Reloading account choices…' : `Sign-in ${status.state}. Provider effects may already have occurred; no sign-in is retried automatically.`);
             if (status.state !== 'uncertain') localStorage.removeItem(key(a.context));
             if (status.state === 'succeeded') await refreshed(status.account_id);
             return;
         }
         if (!['starting','pending','exchanging'].includes(status.state)) throw Error();
         render('pending');
-        message(status.state === 'pending' ? 'After signing in on ChatGPT, come back here and choose “I’ve signed in”.' : 'ChatGPT is processing your sign-in. Check again in a moment.');
+        message(status.state === 'pending' ? 'After signing in, come back here and choose “I’ve signed in”.' : 'The provider is processing your sign-in. Check again in a moment.');
         if (status.state === 'pending' && Number.isFinite(status.expires_at) && status.expires_at * 1000 > Date.now()) {
-            if (result.verification_uri !== verification || typeof result.user_code !== 'string' || !/^[A-Za-z0-9-]{1,32}$/.test(result.user_code)) throw Error();
+            const verification = providerInfo(a.provider).verification;
+            if (result.verification_uri !== verification || typeof result.user_code !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(result.user_code)) throw Error();
+            $('link').textContent = `Open ${providerInfo(a.provider).name} sign-in ↗`;
             $('code').textContent = result.user_code; $('link').href = verification; $('private').hidden = false;
             timer = setTimeout(()=>{clear();render('recovery');message('Code expired. Check sign-in for its final status.');},Math.min(status.expires_at*1000-Date.now(),2147483647));
         }
@@ -73,20 +80,25 @@ export function accountEnrollment(root, {context, refreshed}) {
             a.record = saved(c);
             if (kind === 'start') {
                 if (a.record) { render('recovery'); message('An earlier sign-in is retained. Check or cancel it before starting another.'); return; }
-                const alias = `chatgpt-${uuid()}`, label = $('label').value.trim();
+                const alias = `subscription-${uuid()}`, label = $('label').value.trim();
                 if (!label || label.length > 128) {message('Give this account a name, such as Personal or Work.');$('label').focus();return;}
                 const caps = await exchange(a,'capabilities',{});
                 if (!current(a,n)) return;
                 if (caps.vessel_id !== c.connection.vessel_id || (caps.scope !== 'owner' && !caps.rights?.includes('account_enroll'))) {message('This Vessel connection does not permit account enrollment.');return;}
-                const catalogue = await exchange(a,'accounts',{workspace:c.workspace,transport:'chatgpt_oauth'});
+                const catalogue = await exchange(a,'accounts',{workspace:c.workspace});
                 if (!current(a,n)) return;
-                const provider = catalogue.connections?.find(p=>p.id===$('provider').value && p.transports?.includes('chatgpt_oauth'));
-                if (!provider) {message('Choose an allowed ChatGPT provider connection.');return;}
+                const provider = catalogue.connections?.find(p=>p.id===$('provider').value && supported(p));
+                if (!provider) {message('Choose an allowed subscription provider connection.');return;}
+                a.provider = provider;
                 a.record = {command_id:uuid(),enrollment_id:uuid(),workspace:c.workspace,connection_id:provider.id,alias,label,cancel_id:uuid()};
                 localStorage.setItem(key(c),JSON.stringify(a.record));
                 await exchange(a,'enroll_account',envelope(a.record));
             } else {
                 if (!a.record) {message('No retained sign-in for this Vessel and workspace.');return;}
+                const catalogue = await exchange(a,'accounts',{workspace:c.workspace});
+                if (!current(a,n)) return;
+                a.provider = catalogue.connections?.find(p=>p.id===a.record.connection_id && supported(p));
+                if (!a.provider) throw Error();
                 await exchange(a,'resolve_account_enrollment',envelope(a.record));
                 if (kind === 'cancel') {
                     if (!current(a,n)) return;
@@ -116,26 +128,32 @@ export function accountEnrollment(root, {context, refreshed}) {
         hide,
         changed() {if(active && !current(active,generation))clear();},
         async open() {
-            clear(); render('loading'); $('panel').hidden=false; $('provider').replaceChildren(); message('Loading ChatGPT connections…');
+            clear(); render('loading'); $('panel').hidden=false; $('provider').replaceChildren(); message('Loading subscription connections…');
             const c=context(), n=generation;
             if(!c?.connection?.client || !c.workspace){render('unavailable');message('Choose a connected Vessel and workspace first.');return;}
             const a=active={context:c,client:c.connection.client};
             let phase = 'catalogue';
             try {
-                const catalogue=await exchange(a,'accounts',{workspace:c.workspace,transport:'chatgpt_oauth'});
+                const catalogue=await exchange(a,'accounts',{workspace:c.workspace});
                 if(!current(a,n))return;
                 phase = 'picker';
-                for(const p of catalogue.connections || []) if(p.transports?.includes('chatgpt_oauth')) {
+                for(const p of catalogue.connections || []) if(supported(p)) {
                     const option=root.ownerDocument.createElement('option');option.value=p.id;option.textContent=p.label;$('provider').append(option);
                 }
                 $('provider-field').hidden = $('provider').options.length < 2;
+                const updateProvider = () => {
+                    const selected = catalogue.connections.find(p=>p.id===$('provider').value && supported(p));
+                    $('start').textContent = selected ? `Continue with ${providerInfo(selected).name}` : 'Continue';
+                };
+                $('provider').onchange = updateProvider;
+                updateProvider();
                 phase = 'storage';
                 const retained = saved(c);
                 phase = 'picker';
                 render(retained ? 'recovery' : $('provider').options.length ? 'setup' : 'unavailable');
-                if (!retained && !$('provider').options.length) { message('No ChatGPT connection is available on this Vessel. Ask its owner to enable ChatGPT sign-in.'); return; }
+                if (!retained && !$('provider').options.length) { message('No subscription connection is available on this Vessel. Ask its owner to enable sign-in.'); return; }
                 if (!retained) $('label').focus();
-                message(retained ? 'A prior sign-in is retained. Use Check sign-in; starting again is blocked.' : 'Next, you’ll sign in securely on ChatGPT. No password is entered here.');
+                message(retained ? 'A prior sign-in is retained. Use Check sign-in; starting again is blocked.' : 'Next, you’ll sign in securely with the selected provider. No password is entered here.');
             } catch {
                 if (!current(a,n)) return;
                 render('unavailable');

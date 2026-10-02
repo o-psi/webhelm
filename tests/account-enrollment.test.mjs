@@ -8,7 +8,7 @@ import {join} from 'node:path';
 import {accountEnrollment} from '../resources/js/account-enrollment.js';
 
 const tick = () => new Promise(resolve=>setTimeout(resolve,0));
-function fixture() {
+function fixture(transport="chatgpt_oauth") {
     const compiled=mkdtempSync(join(tmpdir(),'helm-enrollment-views-'));
     let rendered;
     try {
@@ -20,11 +20,11 @@ function fixture() {
     globalThis.localStorage=dom.window.localStorage;
     Object.defineProperty(dom.window.navigator,'locks',{value:{request:async (_key,_options,fn)=>fn({})}});
     const root=dom.window.document.querySelector('main'), calls=[], refreshed=[];
-    const f={state:'pending',uri:'https://auth.openai.com/codex/device',fail:false};
+    const f={state:'pending',uri:transport==='xai_oauth'?'https://accounts.x.ai/oauth2/device':'https://auth.openai.com/codex/device',fail:false};
     const client={socket:new dom.window.EventTarget(), async exchange({command:c}) {
         calls.push(c);
         if(c.op==='enroll_account') {f.enrollment=c.enrollment_id;assert.ok(localStorage.length,'public intent exists before effect');if(f.fail)throw Error('private provider diagnostic');}
-        const result=c.op==='capabilities'?{vessel_id:'v',scope:'owner'}:c.op==='accounts'?{connections:[{id:'p',label:'ChatGPT',transports:['chatgpt_oauth']}]}:c.op==='private_account_enrollment'?{status:{enrollment_id:f.enrollment,state:f.state,expires_at:Math.floor(Date.now()/1000)+60,account_id:f.state==='succeeded'?'account':null},user_code:'ABCD-1234',verification_uri:f.uri}:{};
+        const result=c.op==='capabilities'?{vessel_id:'v',scope:'owner'}:c.op==='accounts'?{connections:[{id:'p',label:transport==='xai_oauth'?'SuperGrok':'ChatGPT',endpoint:transport==='xai_oauth'?'https://api.x.ai/v1':'https://chatgpt.com/backend-api/codex',transports:[transport]}]}:c.op==='private_account_enrollment'?{status:{enrollment_id:f.enrollment,state:f.state,expires_at:Math.floor(Date.now()/1000)+60,account_id:f.state==='succeeded'?'account':null},user_code:'ABCD-1234',verification_uri:f.uri}:{};
         return {protocol:1,outcome_unknown:false,result};
     }};
     const connection={id:'c',vessel_id:'v',client};
@@ -83,7 +83,7 @@ test('progressive account setup hides recovery commands until sign-in starts',as
     x.$('start').click();await tick();
     assert.equal(x.$('setup').hidden,true);assert.equal(x.$('start').hidden,true);
     assert.equal(x.$('check').hidden,false);assert.equal(x.$('check').textContent,'I’ve signed in');
-    assert.match(x.calls.find(c=>c.op==='enroll_account').alias,/^chatgpt-/);
+    assert.match(x.calls.find(c=>c.op==='enroll_account').alias,/^subscription-/);
     x.ui.hide();
 });
 test('closing the sign-in popover hides its private contents',async()=>{
@@ -98,4 +98,17 @@ test('catalogue refusal is distinguished from browser storage failure',async()=>
     await x.ui.open();assert.match(x.$('status').textContent,/Vessel could not confirm/);assert.doesNotMatch(x.$('status').textContent,/private diagnostic/);
     const y=fixture();localStorage.setItem('helm-web:enrollment:t:c:v:/work','not-json');
     await y.ui.open();assert.match(y.$('status').textContent,/saved sign-in record/);
+});
+
+test('SuperGrok device enrollment fences its website and recovers without another grant',async()=>{
+ const x=fixture('xai_oauth');await x.ui.open();
+ assert.equal(x.$('start').textContent,'Continue with SuperGrok');
+ x.$('start').click();await tick();assert.equal(x.$('link').href,'https://accounts.x.ai/oauth2/device');
+ assert.match(x.$('link').textContent,/SuperGrok/);
+ assert.equal(x.calls.find(c=>c.op==='enroll_account').connection_id,'p');
+ assert.equal([...Array(localStorage.length)].some((_,i)=>localStorage.getItem(localStorage.key(i)).includes('ABCD-1234')),false);
+ x.ui.hide();await x.ui.open();x.$('check').click();await tick();
+ assert.equal(x.calls.filter(c=>c.op==='enroll_account').length,1);
+ x.f.uri='https://auth.openai.com/codex/device';x.$('check').click();await tick();
+ assert.equal(x.$('link').hasAttribute('href'),false);x.ui.hide();
 });
