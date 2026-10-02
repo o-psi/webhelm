@@ -294,7 +294,7 @@ export function App({bootstrap,draftRepository}: {bootstrap: Bootstrap;draftRepo
         return () => { clearInterval(timer); workspace.close(); fleet.close(); };
     }, [runtime]);
     const [manage,setManage] = useState(()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('manage-vessels'));
-    const [settings,setSettings] = useState<{tab?:Tab}|null>(null);
+    const [settings,setSettings] = useState<{tab?:Tab;location?:{vessel:string;workspace:string}}|null>(null);
     const [webSettingsPage,setWebSettingsPage] = useState<WebSettingsPage|null>(null);
     const [newHasDraft,setNewHasDraft]=useState(false);
     const [newDraftReset,setNewDraftReset]=useState(0),[profileReload,setProfileReload]=useState(0);
@@ -379,13 +379,13 @@ export function App({bootstrap,draftRepository}: {bootstrap: Bootstrap;draftRepo
             <SheetContent ref={setMobilePortal} side="left" showCloseButton={false} className="mobile-navigation"><SheetTitle className="sr-only">Voyages</SheetTitle><SheetDescription className="sr-only">Choose a voyage or manage Vessel connections.</SheetDescription>{mobile&&sidebar}</SheetContent>
         </Sheet>
         {!mobile&&sidebar}
-        <main className="voyage-workspace" aria-label="Conversation"><NewVoyage fleet={fleet} tenant={bootstrap.tenantId} drafts={runtime.drafts} onDraftChange={setNewHasDraft} hidden={Boolean(route)} resetToken={newDraftReset} reloadToken={profileReload} recovery={recovery} onCreated={deliverNewVoyage} onAdvanced={()=>setSettings({})}/>
+        <main className="voyage-workspace" aria-label="Conversation"><NewVoyage fleet={fleet} tenant={bootstrap.tenantId} drafts={runtime.drafts} onDraftChange={setNewHasDraft} hidden={Boolean(route)} resetToken={newDraftReset} reloadToken={profileReload} recovery={recovery} onCreated={deliverNewVoyage} onAdvanced={location=>setSettings({location})}/>
             {route && !selected && <p className="empty" role="status">Waiting for this voyage on its Vessel. If it does not appear, check your connection or access.</p>}
             {selected && <HostBrowser key={selected.key} tab={selected} client={fleet.connections.get(selected.vessel)?.client} workspace={workspace}/> }
             {[...workspace.tabs.values()].map(tab=><Conversation key={tab.key} tab={tab} workspace={workspace} active={selected?.key===tab.key} onSettings={()=>setSettings({tab})} onRecover={()=>recoverInNewVoyage(tab)} connection={fleet.connections.get(tab.vessel)} voyage={fleet.connections.get(tab.vessel)?.voyages.find((item:any)=>item.session_id===tab.session)}/>)}
         </main>
         {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} connections={fleet.connections} tenant={bootstrap.tenantId} onReconnect={()=>fleet.reconnect()} onAccountSettings={()=>{setManage(false);setWebSettingsPage('account');}} onClose={()=>setManage(false)}/>}
-        {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} profileOnly={!settings.tab} tenant={bootstrap.tenantId} onClose={()=>{setSettings(null);setProfileReload(value=>value+1);}} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}
+        {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} location={settings.location} profileOnly={!settings.tab} tenant={bootstrap.tenantId} onClose={()=>{setSettings(null);setProfileReload(value=>value+1);}} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}
         {webSettingsPage&&<WebSettings account={bootstrap} page={webSettingsPage} onPageChange={setWebSettingsPage} appearance={appearance} onAppearanceChange={setAppearance} onManageVessels={()=>{setWebSettingsPage(null);setManage(true);}} onClose={()=>setWebSettingsPage(null)}/>}
         <Dialog open={logoutReview} onOpenChange={setLogoutReview}><DialogContent><DialogHeader><DialogTitle>Sign out with unsent work?</DialogTitle><DialogDescription>Saved message drafts and prepared pictures stay on this browser for this account. If a draft shows a save error, keep working and copy it first. Your voyages continue on their Vessels.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" type="button" onClick={()=>setLogoutReview(false)}>Keep working</Button><Button variant="destructive" type="button" onClick={()=>logoutForm.current?.requestSubmit()}>Sign out</Button></DialogFooter></DialogContent></Dialog>
     </div>;
