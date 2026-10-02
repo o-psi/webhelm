@@ -86,8 +86,10 @@ by this document. Confirm:
 3. Supported private Node path is observed, not inferred. CT106's staged official
    Node v24.21.0 executable is
    `/home/vessel/.local/share/voyage/runtime/node-v24.21.0/node` (not `bin/node`).
-   Its verified archive SHA256 is
-   `7fde7b8afa198da66257f42ee2001d874c7355631e6d1579a5fb5ef1f246df4c`.
+   The verified executable SHA256 is
+   `7fde7b8afa198da66257f42ee2001d874c7355631e6d1579a5fb5ef1f246df4c`;
+   the official archive SHA256 is
+   `fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6`.
    Put the exact executable into `config.host_browser_launch.node`; worker
    discovery otherwise checks `/usr/bin/node` then `/usr/local/bin/node`, and
    existing Node20.19.2 is below the worker floor. Do not change global Node.
@@ -103,6 +105,9 @@ by this document. Confirm:
 
 ## Fixed host startup
 
+All helper and test invocations use `/usr/bin/python3 -I` to exclude user-site
+and Python environment startup. The helper uses only the standard library;
+its tests load the maintained source by explicit absolute importlib path.
 Only server-controlled setup supplies these arguments. Substitute already pinned
 benign fixture identities and privately known absolute paths locally, without
 printing credentials. The setup administrator may create two **new** mode0700
@@ -118,7 +123,7 @@ Use the same preissued `created_at` and `expires_at` Unix seconds in both argv;
 user through the approved host conduit:
 
 ```sh
-/usr/bin/python3 deploy/browser-qualification-helper.py broker \
+/usr/bin/python3 -I deploy/browser-qualification-helper.py broker \
   --key-file PRIVATE_UID33_JOB_KEY --socket PRIVATE_UID33_COORD_SOCKET \
   --job-id JOB_UUID --tenant-id TENANT_UUID --connection-id CONNECTION_UUID \
   --principal-id PRINCIPAL_UUID --vessel-id VESSEL_UUID \
@@ -152,7 +157,7 @@ Apply config through the normal coordinated deployment process; do not weaken
 private permissions to accommodate cache/FPM setup.
 
 ```sh
-/usr/bin/python3 deploy/browser-qualification-helper.py bridge \
+/usr/bin/python3 -I deploy/browser-qualification-helper.py bridge \
   --key-file PRIVATE_UID1000_JOB_KEY --mailbox ORIGINAL_DRIVER_PRIVATE_MAILBOX \
   --port OBSERVED_LOOPBACK_PORT \
   --job-id JOB_UUID --tenant-id TENANT_UUID --connection-id CONNECTION_UUID \

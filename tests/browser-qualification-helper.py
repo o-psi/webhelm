@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -I
 """Offline adverse contracts; no Root, production auth, host effects or sites."""
 import importlib.util
 import hashlib

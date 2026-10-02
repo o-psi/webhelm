@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -I
 """Fixed, expiring BENIGN benchmark coordination, never a command/credential RPC.
 
 broker: PHP's ordinary UID owns a NEW private Unix socket and job-only key.
