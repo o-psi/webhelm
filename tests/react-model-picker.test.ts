@@ -38,8 +38,28 @@ test('model search, favorites and keyboard selection retain current state and fe
         assert.deepEqual(JSON.parse(dom.window.localStorage.getItem('helm:model-favorites:v1')!),['beta']);
         assert.ok(dom.window.document.querySelector('section[aria-label="Favorites"] [data-model-choice]')===choose('Beta'),'Favorites retains the exact Beta choice');
         await type('no match');assert.match(dom.window.document.body.textContent!,/No models match/);
-        await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
-        assert.ok(dom.window.document.activeElement===button('Choose model'),'Escape restores focus to the exact model trigger');assert.equal(actions.length,0);
+        const modelTrigger=button('Choose model');
+        // Radix restores focus in its deferred unmount-autofocus callback. Observe
+        // the real exact-node focus event after React commits the dialog closure;
+        // an arbitrary delay or an immediate activeElement read can race it.
+        let cancelFocusObservation!:()=>void;
+        const focusRestored=new Promise<void>((resolve,reject)=>{
+            const cleanup=()=>{clearTimeout(deadline);dom.window.document.removeEventListener('focusin',observeFocus);};
+            const observeFocus=(event:Event)=>{
+                if(event.target!==modelTrigger)return;
+                cleanup();resolve();
+            };
+            const deadline=setTimeout(()=>{cleanup();reject(new Error('Escape did not restore focus to the exact model trigger.'));},1000);
+            cancelFocusObservation=cleanup;
+            dom.window.document.addEventListener('focusin',observeFocus);
+        });
+        try{
+            await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+            await act(async()=>focusRestored);
+        }finally{cancelFocusObservation();}
+        assert.equal(dom.window.document.querySelector('[role="dialog"]'),null,'Escape dismisses the model dialog');
+        assert.equal(button('Choose model'),modelTrigger,'Escape retains the original trigger identity');
+        assert.equal(dom.window.document.activeElement,modelTrigger,'Escape restores focus to the exact model trigger');assert.equal(actions.length,0);
         await click('Choose model');assert.equal(dom.window.document.querySelector<HTMLInputElement>('input')!.value,'');
         const before=requests;await act(async()=>choose('Alpha').click());assert.equal(requests,before);assert.equal(actions.length,0);
         await click('Choose model');
