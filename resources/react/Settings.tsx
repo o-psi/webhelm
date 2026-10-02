@@ -15,7 +15,7 @@ import {accountChoices,Creation,vesselRead} from './settings';
 import type {Tab,Workspace} from './workspace';
 
 type Screen='overview'|'location'|'profiles'|'editor'|'accounts'|'models'|'reasoning'|'enrollment'|'delete'|'usage';
-const titles:Record<Screen,string>={overview:'Voyage setup',location:'Location',profiles:'Profiles',editor:'Edit profile',accounts:'Choose account',models:'Choose model',reasoning:'Reasoning & service',enrollment:'Connect ChatGPT',delete:'Delete profile',usage:'Account usage'};
+const titles:Record<Screen,string>={overview:'Voyage setup',location:'Location',profiles:'Profiles',editor:'Edit profile',accounts:'Choose account',models:'Choose model',reasoning:'Reasoning & service',enrollment:'Connect a subscription',delete:'Delete profile',usage:'Account usage'};
 const expiredOAuth=(account:any)=>['chatgpt_oauth','xai_oauth'].includes(account?.binding.transport)&&account.state==='ready'&&account.availability==='expired';
 // Rows and choices are multi-line list items; utilities override the one-line Button geometry.
 const setupRow='setup-row h-auto w-full justify-between gap-3 whitespace-normal px-3.5 py-3 text-left font-normal';
@@ -26,6 +26,7 @@ function SetupRow({label,detail,onClick,disabled=false}:{label:string;detail:str
 export function Settings({fleet,workspace,tab,profileOnly=false,tenant,onClose,onCreated}:{fleet:any;workspace:Workspace;tab?:Tab;profileOnly?:boolean;tenant:string;onClose:()=>void;onCreated:(vessel:string,process:any)=>void}){
     const heading=useRef<HTMLHeadingElement>(null),body=useRef<HTMLDivElement>(null);
     const [screen,setScreen]=useState<Screen>(profileOnly?'profiles':'overview'),[search,setSearch]=useState('');
+    const [enrollmentTitle,setEnrollmentTitle]=useState('Connect a subscription');
     const history=useRef<{screen:Screen;focus:HTMLElement|null}[]>([]);
     const [vessel,setVessel]=useState(tab?.vessel||[...fleet.connections.keys()][0]||'');
     const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(''),[accounts,setAccounts]=useState<any[]>([]),[account,setAccount]=useState(''),[models,setModels]=useState<any[]>([]),[model,setModel]=useState(''),[reasoning,setReasoning]=useState(''),[service,setService]=useState('');
@@ -44,7 +45,7 @@ export function Settings({fleet,workspace,tab,profileOnly=false,tenant,onClose,o
     const creation=useRef<Creation|null>(null),origin=useRef({incarnation:tab?.incarnation,revision:tab?.snapshot?.revision});
     const lastVessel=useRef(vessel),editorRevision=useRef<number|null>(null);
     const editorSeed=useRef<any>(null),restoreFocus=useRef<HTMLElement|null>(null);
-    function navigate(next:Screen){history.current.push({screen,focus:document.activeElement as HTMLElement});setSearch('');setScreen(next);}
+    function navigate(next:Screen){if(next==='enrollment')setEnrollmentTitle('Connect a subscription');history.current.push({screen,focus:document.activeElement as HTMLElement});setSearch('');setScreen(next);}
     function back(){if(busy)return;const previous=history.current.pop();restoreFocus.current=previous?.focus||null;setSearch('');setScreen(previous?.screen||'overview');if(screen==='editor')setEditor(null);}
     function show(next:Screen){history.current=[];setSearch('');setScreen(next);}
     useEffect(()=>{body.current?.scrollTo?.(0,0);const focus=restoreFocus.current;restoreFocus.current=null;if(focus?.isConnected)focus.focus();else heading.current?.focus();},[screen]);
@@ -132,7 +133,7 @@ export function Settings({fleet,workspace,tab,profileOnly=false,tenant,onClose,o
     const canSave=!busy&&(profileOnly||!recoveryState.error)&&supportsProfiles&&(screen==='editor'?selected?.ready&&selectedModel:profile&&profileAccount?.ready)&&(!!tab||path.startsWith('/'));
     return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose();}}><DialogContent showCloseButton={false} className="settings-dialog profile-setup block w-[min(480px,calc(100vw-20px))] max-w-none gap-0 p-0 sm:max-w-none" aria-labelledby="profile-setup-title" onInteractOutside={event=>event.preventDefault()} onEscapeKeyDown={event=>{if(busy)event.preventDefault();}}>
         <form onSubmit={event=>{event.preventDefault();void save();}}>
-            <header>{screen!=='overview'&&!(profileOnly&&screen==='profiles')&&<Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Back" onClick={back}><ArrowLeftIcon aria-hidden="true"/></Button>}<DialogTitle asChild><h2 id="profile-setup-title" ref={heading} tabIndex={-1}>{screen==='overview'?(tab?'Voyage setup':'New voyage'):titles[screen]}</h2></DialogTitle><>{screen==='profiles'&&catalogue?.can_manage&&<Button variant="outline" type="button" aria-label="Create profile" disabled={busy} onClick={()=>editProfile('new')}>Create profile</Button>}</><Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Close settings" onClick={onClose}><XIcon aria-hidden="true"/></Button></header>
+            <header>{screen!=='overview'&&!(profileOnly&&screen==='profiles')&&<Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Back" onClick={back}><ArrowLeftIcon aria-hidden="true"/></Button>}<DialogTitle asChild><h2 id="profile-setup-title" ref={heading} tabIndex={-1}>{screen==='overview'?(tab?'Voyage setup':'New voyage'):screen==='enrollment'?enrollmentTitle:titles[screen]}</h2></DialogTitle><>{screen==='profiles'&&catalogue?.can_manage&&<Button variant="outline" type="button" aria-label="Create profile" disabled={busy} onClick={()=>editProfile('new')}>Create profile</Button>}</><Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Close settings" onClick={onClose}><XIcon aria-hidden="true"/></Button></header>
             <div ref={body} className="setup-body" aria-busy={busy}>
                 {screen==='overview'&&<>
                     <p>{tab?'Choose a saved profile for the next run.':'Choose where your voyage runs and the profile it uses.'}</p>
@@ -188,7 +189,7 @@ export function Settings({fleet,workspace,tab,profileOnly=false,tenant,onClose,o
                     <p role="status">{usageNotice||(!usage?.snapshot?.windows?.length?'No usage observation loaded. This is not zero usage.':`Status: ${String(usage.refresh_status||'observed').replaceAll('_',' ')}`)}</p>
                     <Button variant="outline" type="button" disabled={busy||!selected?.ready} onClick={()=>void refreshUsage()}>Refresh usage</Button>
                 </>}
-                {screen==='enrollment'&&connection&&path&&<Enrollment connection={connection} workspace={path} tenant={tenant} autoOpen onRefreshed={()=>{retainEditor();setAccountsReload(value=>value+1);back();}}/>}
+                {screen==='enrollment'&&connection&&path&&<Enrollment connection={connection} workspace={path} tenant={tenant} autoOpen onTitleChanged={setEnrollmentTitle} onRefreshed={()=>{retainEditor();setAccountsReload(value=>value+1);back();}}/>}
                 {screen==='delete'&&<><p>Delete <strong>{deleteTarget?.profile.name}</strong>? Existing voyages keep their current settings.</p><Button variant="destructive" type="button" disabled={busy||!deleteTarget||!catalogue} onClick={()=>{if(deleteTarget.revision!==catalogue.revision){setNotice('Profiles changed. Go back and review this profile before deleting.');return;}void mutate('delete_profile',{profile_id:deleteTarget.profile.id});}}>Delete profile</Button></>}
             </div>
             <footer><p role="status">{recoveryState.error&&!profileOnly?'Recovery storage is unavailable. Do not clear it or repeat uncertain creation.':notice}</p>

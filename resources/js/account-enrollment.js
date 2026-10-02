@@ -5,16 +5,19 @@ const providers = {
     chatgpt_oauth: {name:'ChatGPT',endpoint:'https://chatgpt.com/backend-api/codex',verification:'https://auth.openai.com/codex/device'},
     xai_oauth: {name:'SuperGrok',endpoint:'https://api.x.ai/v1',verification:'https://accounts.x.ai/oauth2/device'},
 };
-const supported = p => p?.transports?.length === 1 && providers[p.transports[0]]?.endpoint === p.endpoint;
+const supported = p => p?.transports?.length === 1 && !!providers[p.transports[0]] && providers[p.transports[0]].endpoint === p.endpoint;
 const providerInfo = p => providers[p.transports[0]];
 // Only public enrollment envelopes are durable. Private responses live in this view alone.
-export function accountEnrollment(root, {context, refreshed}) {
+export function accountEnrollment(root, {context, refreshed, titleChanged = (_title) => {}}) {
     const $ = id => root.querySelector(`#enrollment-${id}`);
-    let generation = 0, active = null, busy = false, timer, stage = 'loading';
+    let generation = 0, active = null, busy = false, timer, stage = 'loading', providerName = null;
     const key = c => `helm-web:enrollment:${root.dataset.tenantId}:${c.connection.id}:${c.connection.vessel_id}:${c.workspace}`;
     function clear() {
         ++generation; clearTimeout(timer);
         $('code').textContent = ''; $('link').removeAttribute('href'); $('private').hidden = true;
+    }
+    function identify(provider) {
+        providerName = provider ? providerInfo(provider).name : null;
     }
     function render(next = stage) {
         stage = next;
@@ -23,7 +26,9 @@ export function accountEnrollment(root, {context, refreshed}) {
         $('start').hidden = !setup;
         $('check').hidden = !pending;
         $('cancel').hidden = !pending;
-        $('title').textContent = ({loading:'Connect a subscription',setup:'Connect a subscription',pending:'Finish signing in',recovery:'Resume sign-in',done:'Account connected',unavailable:'Sign-in unavailable'})[stage];
+        const title = providerName ? `Connect ${providerName}` : 'Connect a subscription';
+        $('title').textContent = title;
+        titleChanged(title);
         $('check').textContent = stage === 'pending' ? 'I’ve signed in' : 'Check sign-in';
         for (const id of ['start','check','cancel','label','provider']) $(id).disabled = busy || stage === 'loading';
         $('panel').setAttribute('aria-busy',String(busy || stage === 'loading'));
@@ -51,7 +56,7 @@ export function accountEnrollment(root, {context, refreshed}) {
         clear(); n = generation;
         if (terminal.has(status.state)) {
             render(status.state === 'uncertain' ? 'recovery' : status.state === 'succeeded' ? 'done' : 'setup');
-            message(status.state === 'succeeded' ? 'Subscription account created. Reloading account choices…' : `Sign-in ${status.state}. Provider effects may already have occurred; no sign-in is retried automatically.`);
+            message(status.state === 'succeeded' ? `${providerName} account connected. Reloading account choices…` : `Sign-in ${status.state}. Provider effects may already have occurred; no sign-in is retried automatically.`);
             if (status.state !== 'uncertain') localStorage.removeItem(key(a.context));
             if (status.state === 'succeeded') await refreshed(status.account_id);
             return;
@@ -79,7 +84,7 @@ export function accountEnrollment(root, {context, refreshed}) {
             a.client.socket?.addEventListener('close',()=>{if(active===a){clear();render('recovery');message('Connection lost. Reconnect, then Check sign-in; do not start again.');}},{once:true});
             a.record = saved(c);
             if (kind === 'start') {
-                if (a.record) { render('recovery'); message('An earlier sign-in is retained. Check or cancel it before starting another.'); return; }
+                if (a.record) { identify(null); render('recovery'); message('An earlier sign-in is retained. Check or cancel it before starting another.'); return; }
                 const alias = `subscription-${uuid()}`, label = $('label').value.trim();
                 if (!label || label.length > 128) {message('Give this account a name, such as Personal or Work.');$('label').focus();return;}
                 const caps = await exchange(a,'capabilities',{});
@@ -89,7 +94,7 @@ export function accountEnrollment(root, {context, refreshed}) {
                 if (!current(a,n)) return;
                 const provider = catalogue.connections?.find(p=>p.id===$('provider').value && supported(p));
                 if (!provider) {message('Choose an allowed subscription provider connection.');return;}
-                a.provider = provider;
+                a.provider = provider; identify(provider); render();
                 a.record = {command_id:uuid(),enrollment_id:uuid(),workspace:c.workspace,connection_id:provider.id,alias,label,cancel_id:uuid()};
                 localStorage.setItem(key(c),JSON.stringify(a.record));
                 await exchange(a,'enroll_account',envelope(a.record));
@@ -98,6 +103,7 @@ export function accountEnrollment(root, {context, refreshed}) {
                 const catalogue = await exchange(a,'accounts',{workspace:c.workspace});
                 if (!current(a,n)) return;
                 a.provider = catalogue.connections?.find(p=>p.id===a.record.connection_id && supported(p));
+                identify(a.provider); render();
                 if (!a.provider) throw Error();
                 await exchange(a,'resolve_account_enrollment',envelope(a.record));
                 if (kind === 'cancel') {
@@ -128,7 +134,7 @@ export function accountEnrollment(root, {context, refreshed}) {
         hide,
         changed() {if(active && !current(active,generation))clear();},
         async open() {
-            clear(); render('loading'); $('panel').hidden=false; $('provider').replaceChildren(); message('Loading subscription connections…');
+            clear(); identify(null); render('loading'); $('panel').hidden=false; $('provider').replaceChildren(); message('Loading subscription connections…');
             const c=context(), n=generation;
             if(!c?.connection?.client || !c.workspace){render('unavailable');message('Choose a connected Vessel and workspace first.');return;}
             const a=active={context:c,client:c.connection.client};
@@ -138,17 +144,19 @@ export function accountEnrollment(root, {context, refreshed}) {
                 if(!current(a,n))return;
                 phase = 'picker';
                 for(const p of catalogue.connections || []) if(supported(p)) {
-                    const option=root.ownerDocument.createElement('option');option.value=p.id;option.textContent=p.label;$('provider').append(option);
+                    const option=root.ownerDocument.createElement('option');option.value=p.id;option.textContent=providerInfo(p).name;$('provider').append(option);
                 }
                 $('provider-field').hidden = $('provider').options.length < 2;
                 const updateProvider = () => {
                     const selected = catalogue.connections.find(p=>p.id===$('provider').value && supported(p));
+                    identify(selected); render();
                     $('start').textContent = selected ? `Continue with ${providerInfo(selected).name}` : 'Continue';
                 };
                 $('provider').onchange = updateProvider;
-                updateProvider();
                 phase = 'storage';
                 const retained = saved(c);
+                if (retained) $('provider').value = retained.connection_id;
+                updateProvider();
                 phase = 'picker';
                 render(retained ? 'recovery' : $('provider').options.length ? 'setup' : 'unavailable');
                 if (!retained && !$('provider').options.length) { message('No subscription connection is available on this Vessel. Ask its owner to enable sign-in.'); return; }

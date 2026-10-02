@@ -19,7 +19,7 @@ function fixture(transport="chatgpt_oauth") {
     dom.window.document.querySelector('#enrollment-label').value='Personal';
     globalThis.localStorage=dom.window.localStorage;
     Object.defineProperty(dom.window.navigator,'locks',{value:{request:async (_key,_options,fn)=>fn({})}});
-    const root=dom.window.document.querySelector('main'), calls=[], refreshed=[];
+    const root=dom.window.document.querySelector('main'), calls=[], refreshed=[], titles=[];
     const f={state:'pending',uri:transport==='xai_oauth'?'https://accounts.x.ai/oauth2/device':'https://auth.openai.com/codex/device',fail:false};
     const client={socket:new dom.window.EventTarget(), async exchange({command:c}) {
         calls.push(c);
@@ -28,9 +28,9 @@ function fixture(transport="chatgpt_oauth") {
         return {protocol:1,outcome_unknown:false,result};
     }};
     const connection={id:'c',vessel_id:'v',client};
-    const ui=accountEnrollment(root,{context:()=>({connection,workspace:'/work'}),refreshed:id=>refreshed.push(id)});
+    const ui=accountEnrollment(root,{context:()=>({connection,workspace:'/work'}),refreshed:id=>refreshed.push(id),titleChanged:title=>titles.push(title)});
     const $=id=>root.querySelector('#enrollment-'+id);
-    return {dom,root,calls,f,connection,ui,$,refreshed};
+    return {dom,root,calls,f,connection,ui,$,refreshed,titles};
 }
 test('ChatGPT enrollment persists only public identities, checks without replay and refreshes success',async()=>{
     const x=fixture();await x.ui.open();x.$('start').click();await tick();
@@ -111,4 +111,32 @@ test('SuperGrok device enrollment fences its website and recovers without anothe
  assert.equal(x.calls.filter(c=>c.op==='enroll_account').length,1);
  x.f.uri='https://auth.openai.com/codex/device';x.$('check').click();await tick();
  assert.equal(x.$('link').hasAttribute('href'),false);x.ui.hide();
+});
+
+
+test('provider identity follows selection and retained SuperGrok instead of the catalogue default',async()=>{
+ const x=fixture('xai_oauth'),original=x.connection.client.exchange;
+ const providers=[{id:'chat',label:'Custom chat name',endpoint:'https://chatgpt.com/backend-api/codex',transports:['chatgpt_oauth']},{id:'p',label:'Misleading custom name',endpoint:'https://api.x.ai/v1',transports:['xai_oauth']}];
+ x.connection.client.exchange=async r=>r.command.op==='accounts'?{protocol:1,outcome_unknown:false,result:{connections:providers}}:original(r);
+ await x.ui.open();
+ assert.equal(x.titles[0],'Connect a subscription');
+ assert.equal(x.titles.at(-1),'Connect ChatGPT');
+ assert.deepEqual([...x.$('provider').options].map(o=>o.textContent),['ChatGPT','SuperGrok']);
+ for(const [id,name] of [['p','SuperGrok'],['chat','ChatGPT'],['p','SuperGrok']]){
+  x.$('provider').value=id;x.$('provider').dispatchEvent(new x.dom.window.Event('change'));
+  assert.equal(x.titles.at(-1),`Connect ${name}`);
+  assert.equal(x.$('title').textContent,`Connect ${name}`);
+  assert.equal(x.$('start').textContent,`Continue with ${name}`);
+ }
+ x.$('start').click();await tick();
+ assert.equal(x.titles.at(-1),'Connect SuperGrok');
+ assert.equal(x.$('link').href,'https://accounts.x.ai/oauth2/device');
+ x.ui.hide();await x.ui.open();
+ assert.equal(x.$('provider').value,'p');
+ assert.equal(x.titles.at(-1),'Connect SuperGrok');
+ x.$('check').click();await tick();assert.equal(x.titles.at(-1),'Connect SuperGrok');
+ x.f.state='succeeded';x.$('check').click();await tick();
+ assert.match(x.$('status').textContent,/SuperGrok account connected/);
+ assert.equal(x.calls.filter(c=>c.op==='enroll_account').length,1);
+ x.ui.dispose();x.dom.window.close();
 });

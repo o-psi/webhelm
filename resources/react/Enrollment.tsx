@@ -6,12 +6,12 @@ import {NativeSelect} from './components/ui/native-select';
 import {accountEnrollment} from '../js/account-enrollment.js';
 
 // The adapter retains private device codes and receipts; React owns the controls.
-export function Enrollment({connection,workspace,tenant,onRefreshed,autoOpen=false}:{connection:any;workspace:string;tenant:string;onRefreshed:()=>void;autoOpen?:boolean}){
+export function Enrollment({connection,workspace,tenant,onRefreshed,onTitleChanged,autoOpen=false}:{connection:any;workspace:string;tenant:string;onRefreshed:()=>void;onTitleChanged?:(title:string)=>void;autoOpen?:boolean}){
     const host=useRef<HTMLDivElement>(null),adapter=useRef<ReturnType<typeof accountEnrollment>|null>(null);
-    const current=useRef({connection,workspace,onRefreshed});current.current={connection,workspace,onRefreshed};
+    const current=useRef({connection,workspace,onRefreshed,onTitleChanged});current.current={connection,workspace,onRefreshed,onTitleChanged};
     useEffect(()=>{
         const root=host.current!;
-        adapter.current=accountEnrollment(root,{context:()=>({connection:current.current.connection,workspace:current.current.workspace}),refreshed:()=>current.current.onRefreshed()});
+        adapter.current=accountEnrollment(root,{context:()=>({connection:current.current.connection,workspace:current.current.workspace}),refreshed:()=>current.current.onRefreshed(),titleChanged:(title:string)=>current.current.onTitleChanged?.(title)});
         if(autoOpen)void adapter.current.open();
         return()=>{adapter.current?.dispose();adapter.current=null;};
     },[connection.id,workspace,autoOpen]);

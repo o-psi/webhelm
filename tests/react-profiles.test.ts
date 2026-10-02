@@ -9,7 +9,7 @@ test('profiles editor saves, duplicates, defaults and deletes without mutating v
  const binding={account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'openai_responses'};
  let catalogue:any={revision:1,can_manage:true,default_profile_id:'first',profiles:[{id:'first',name:'Everyday',account:binding,model:'m',reasoning_effort:'high',service_tier:null}]};const commands:any[]=[];
  const connection:any={id:'c',name:'Vessel',vessel_id:'v',voyages:[],client:{async exchange({command}:any){commands.push(command);let result:any;
- switch(command.op){case 'capabilities':result={vessel_id:'v',scope:'owner',features:['execution_profiles'],workspaces:[{path:'/work',name:'Work'}]};break;case 'accounts':result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Work',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Provider',transports:['openai_responses']}]};break;case 'profiles':result=structuredClone(catalogue);break;case 'account_models':result={account:binding,models:[{id:'m',is_default:true,reasoning_efforts:['high'],service_tiers:[]}]};break;case 'save_profile':assert.equal(command.expected_revision,catalogue.revision);catalogue.profiles=[...catalogue.profiles.filter((p:any)=>p.id!==command.profile.id),command.profile];catalogue.revision++;result=structuredClone(catalogue);break;case 'set_default_profile':catalogue.default_profile_id=command.profile_id;catalogue.revision++;result=structuredClone(catalogue);break;case 'delete_profile':catalogue.profiles=catalogue.profiles.filter((p:any)=>p.id!==command.profile_id);catalogue.revision++;result=structuredClone(catalogue);break;default:throw new Error(command.op);}return {protocol:1,outcome_unknown:false,error:null,result};}}};
+ switch(command.op){case 'capabilities':result={vessel_id:'v',scope:'owner',features:['execution_profiles'],workspaces:[{path:'/work',name:'Work'}]};break;case 'accounts':result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Work',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Provider',transports:['openai_responses']},{id:'chat',label:'ChatGPT',transports:['chatgpt_oauth'],endpoint:'https://chatgpt.com/backend-api/codex'},{id:'grok',label:'SuperGrok',transports:['xai_oauth'],endpoint:'https://api.x.ai/v1'}]};break;case 'profiles':result=structuredClone(catalogue);break;case 'account_models':result={account:binding,models:[{id:'m',is_default:true,reasoning_efforts:['high'],service_tiers:[]}]};break;case 'save_profile':assert.equal(command.expected_revision,catalogue.revision);catalogue.profiles=[...catalogue.profiles.filter((p:any)=>p.id!==command.profile.id),command.profile];catalogue.revision++;result=structuredClone(catalogue);break;case 'set_default_profile':catalogue.default_profile_id=command.profile_id;catalogue.revision++;result=structuredClone(catalogue);break;case 'delete_profile':catalogue.profiles=catalogue.profiles.filter((p:any)=>p.id!==command.profile_id);catalogue.revision++;result=structuredClone(catalogue);break;default:throw new Error(command.op);}return {protocol:1,outcome_unknown:false,error:null,result};}}};
  const {Settings}=await import('../resources/react/Settings');
  const root=createRoot(document.getElementById('root')!);const click=async(label:string)=>{const button=[...document.querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')||b.textContent)===label)!;assert.ok(button,label);await act(async()=>{button.click();});};
  try{await act(async()=>root.render(React.createElement(Settings,{fleet:{connections:new Map([['c',connection]])},workspace:{} as any,tenant:'test',onClose(){},onCreated(){}})));
@@ -23,7 +23,18 @@ test('profiles editor saves, duplicates, defaults and deletes without mutating v
  await action('Everyday copy','Make default');assert.equal(catalogue.default_profile_id,catalogue.profiles[1].id);
  await action('Everyday','Delete');assert.match(document.body.textContent!,/Delete Everyday\?/);assert.equal(catalogue.profiles.length,2,'delete requires its confirmation screen');await click('Delete profile');assert.equal(catalogue.profiles.length,1);assert.equal(catalogue.profiles[0].name,'Everyday copy','deletion targets the menu row, not the selected default');
  await click('Create profile');assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'');
- assert.equal(commands.some(c=>c.op==='set_account_inference'||c.op==='start_account'),false);
+ await act(async()=>document.querySelector<HTMLButtonElement>('.setup-row')!.click());
+ await click('Add subscription account');
+ assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Connect ChatGPT',document.querySelector('#enrollment-status')?.textContent||'');
+ const provider=document.querySelector<HTMLSelectElement>('#enrollment-provider')!;
+ await act(async()=>{provider.value='grok';provider.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});
+ assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Connect SuperGrok');
+ const dialog=document.querySelector('[role="dialog"]')!;
+ assert.equal(document.getElementById(dialog.getAttribute('aria-labelledby')!)!.textContent,'Connect SuperGrok');
+ assert.equal(document.querySelector('#enrollment-start')!.textContent,'Continue with SuperGrok');
+ await act(async()=>{provider.value='chat';provider.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});
+ assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Connect ChatGPT');
+ assert.equal(commands.some(c=>c.op==='set_account_inference'||c.op==='start_account'||c.op==='enroll_account'),false);
 
  }finally{await act(async()=>root.unmount());dom.window.close();}
 });

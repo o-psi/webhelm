@@ -1,6 +1,6 @@
 <section id="enrollment-panel" hidden class="space-y-4" aria-label="Add ChatGPT account" aria-busy="false">
     <div class="flex items-start justify-between gap-3">
-        <div><flux:heading id="enrollment-title" size="sm">Connect ChatGPT</flux:heading><flux:text class="mt-1">Your sign-in stays on your Vessel.</flux:text></div>
+        <div><flux:heading id="enrollment-title" size="sm">Connect a subscription</flux:heading><flux:text class="mt-1">Your sign-in stays on your Vessel.</flux:text></div>
         <flux:button id="enrollment-close" type="button" size="sm" variant="ghost" icon="x-mark" aria-label="Close account sign-in" />
     </div>
     <div id="enrollment-setup" class="space-y-3">
