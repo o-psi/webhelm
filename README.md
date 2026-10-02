@@ -48,6 +48,12 @@ for strict downgrades. Voyage setup remains a separate modal for execution profi
 Shared transport/intent journals retain exact command identities across the
 cutover. Browser viewing, account enrollment,
 advanced voyage actions and the reviewed updater use explicitly disposed adapters.
+Opening the Browser dock carries one start intent for the selected voyage. Socket
+renewal, owner changes and incidental viewer remounts observe and reattach an
+existing browser; they keep a stopped browser stopped. **Start browser** and a
+fresh explicit dock opening can create a browser. Closing the panel only detaches
+the viewer. This lifecycle contract is shared with the core viewer snapshot;
+other clients retain their existing default opening behavior.
 No unknown command is automatically replayed. Provider credentials remain on Vessels.
 
 New user-update preparation, approval and discard require the explicit

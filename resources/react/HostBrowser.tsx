@@ -29,6 +29,7 @@ export function HostBrowser({tab, client, workspace}: {tab: Tab; client: any; wo
     const [viewerRoot,setViewerRoot] = useState<HTMLDivElement|null>(null);
     const panel = useRef<HTMLElement>(null), browserToggle = useRef<HTMLButtonElement>(null),changesToggle=useRef<HTMLButtonElement>(null),filesToggle=useRef<HTMLButtonElement>(null);
     const latest = useRef(tab);
+    const browserStartIntent = useRef<{vessel:string;session:string}|null>(null);
     const returnFocus = useRef<{view:'browser'|'changes'|'files';vessel:string;session:string;incarnation:string|null}|null>(null);
     latest.current = tab;
     const id = useId();
@@ -37,9 +38,12 @@ export function HostBrowser({tab, client, workspace}: {tab: Tab; client: any; wo
     const close = () => {
         const origin=latest.current;
         returnFocus.current={view,vessel:origin.vessel,session:origin.session,incarnation:origin.incarnation};
+        browserStartIntent.current=null;
         setExpanded(false);setOpen(false);
     };
-    const show=(next:'browser'|'changes'|'files')=>{if(open&&view===next){close();return;}returnFocus.current=null;setView(next);setExpanded(false);setOpen(true);};
+    const requestBrowserStart=()=>{const origin=latest.current;browserStartIntent.current={vessel:origin.vessel,session:origin.session};};
+    const show=(next:'browser'|'changes'|'files')=>{if(open&&view===next){close();return;}returnFocus.current=null;if(next==='browser')requestBrowserStart();else browserStartIntent.current=null;setView(next);setExpanded(false);setOpen(true);};
+    const showBrowserView=()=>{if(view!=='browser')requestBrowserStart();setView('browser');};
     const restoreFocus=(origin:NonNullable<typeof returnFocus.current>)=>{
         if(returnFocus.current!==origin)return;
         returnFocus.current=null;
@@ -65,12 +69,17 @@ export function HostBrowser({tab, client, workspace}: {tab: Tab; client: any; wo
     },[]);
     useEffect(() => {
         if (!open || view!=='browser' || !ready || !viewerRoot) return;
+        const intent=browserStartIntent.current;
+        const startOnConnect=intent?.vessel===tab.vessel&&intent?.session===tab.session;
+        // Consume before asynchronous observation; a remount cannot repeat Start.
+        browserStartIntent.current=null;
         const viewer = mountHostBrowser(viewerRoot, {
             client, sessionId: tab.session, incarnation: tab.incarnation,
             context: () => ({revision: latest.current.snapshot?.revision, refresh:latest.current.stale || !latest.current.incarnation}),
-            onClose: close, externalClose:true,
+            onClose: close, externalClose:true, startOnConnect,
         });
-        // Shared viewer auto-connects on mount; disposal detaches, never closes the browser.
+        // Remounts observe/reattach; only an explicit opening may start a stopped browser.
+        // Disposal detaches, never closes the browser.
         return () => {viewer.dispose();};
     }, [open, view, viewerRoot, ready, client, tab.vessel, tab.session, tab.incarnation]);
     useEffect(() => {
@@ -98,7 +107,7 @@ export function HostBrowser({tab, client, workspace}: {tab: Tab; client: any; wo
     const filesAction=<Button variant="outline" ref={filesToggle} className="files-action" type="button" aria-label="Files" aria-expanded={open&&view==='files'} aria-controls={id} title={`Files · ${tab.title}`} onClick={()=>show('files')}><FilesIcon aria-hidden="true"/><span className="dock-action-label">Files</span></Button>;
     const actions=<div className="dock-actions">{changesAction}{filesAction}{mobile?<SheetTrigger asChild>{browserAction}</SheetTrigger>:browserAction}</div>;
     const body=<><header className="task-browser-heading"><div>{mobile?<SheetTitle asChild><h2 id={`${id}-title`}>{view==='browser'?'Browser':view==='files'?'Files':'Changes'}</h2></SheetTitle>:<h2 id={`${id}-title`}>{view==='browser'?'Browser':view==='files'?'Files':'Changes'}</h2>}<span>{tab.title}</span></div><div className="task-browser-heading-actions">{view==='browser'&&<Button variant="ghost" size="sm" className="expand-browser" type="button" hidden={mobile} aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>{expanded?<Minimize2Icon aria-hidden="true"/>:<Maximize2Icon aria-hidden="true"/>}{expanded?'Show chat':'Expand browser'}</Button>}<Button variant="ghost" size="sm" type="button" aria-label="Close panel" title="Close panel; task browser keeps running" onClick={close}><XIcon aria-hidden="true"/>Close panel</Button></div></header>
-            <div className="flex gap-1 border-b px-3 py-2"><Button variant={view==='changes'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='changes'} onClick={()=>{setExpanded(false);setView('changes');}}>Changes</Button><Button variant={view==='files'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='files'} onClick={()=>{setExpanded(false);setView('files');}}>Files</Button><Button variant={view==='browser'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='browser'} onClick={()=>setView('browser')}>Browser</Button></div>
+            <div className="flex gap-1 border-b px-3 py-2"><Button variant={view==='changes'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='changes'} onClick={()=>{setExpanded(false);setView('changes');}}>Changes</Button><Button variant={view==='files'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='files'} onClick={()=>{setExpanded(false);setView('files');}}>Files</Button><Button variant={view==='browser'?'secondary':'ghost'} size="sm" type="button" aria-pressed={view==='browser'} onClick={showBrowserView}>Browser</Button></div>
             {view==='browser'?<>{!ready && <p role="status">Vessel disconnected. The browser will reconnect when this Vessel connection returns.</p>}<div className="task-browser-content" ref={setViewerRoot}/></>:view==='files'?<WorkspaceFiles tab={tab} workspace={workspace}/>:<ReviewChanges tab={tab} workspace={workspace}/>}</>;
     return <div className="react-host-browser">
         {mobile?<Sheet open={open} onOpenChange={next=>{if(!next)close();else setOpen(true);}}>{actions}{open&&<SheetContent onCloseAutoFocus={event=>{

@@ -47,5 +47,5 @@ export function hostBrowserAdapter({client, sessionId, incarnation, context}) {
 }
 
 export function mountHostBrowser(root, options) {
-    return mountBrowserViewer(root, {...hostBrowserAdapter(options), onClose:options.onClose, externalClose:options.externalClose});
+    return mountBrowserViewer(root, {...hostBrowserAdapter(options), onClose:options.onClose, externalClose:options.externalClose, startOnConnect:options.startOnConnect});
 }
