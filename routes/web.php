@@ -29,6 +29,12 @@ Route::middleware([ConsoleOperator::class,ConsoleHeaders::class])->group(functio
     Route::get('/voyages/{vessel}/{session}', \App\Http\Controllers\ReactConsoleController::class)
         ->whereUuid('vessel')->whereUuid('session')->name('console.voyage');
     Route::post('/console/ticket',[ConsoleAuthController::class,'ticket'])->name('console.ticket')->middleware('throttle:console-tickets');
+    Route::get('/console/qualification/browser/{job}', [\App\Http\Controllers\BrowserQualificationController::class, 'show'])
+        ->whereUuid('job')->name('qualification.browser');
+    Route::get('/console/qualification/browser/{job}/request', [\App\Http\Controllers\BrowserQualificationController::class, 'peek'])
+        ->whereUuid('job')->name('qualification.browser.request')->middleware('throttle:60,1');
+    Route::post('/console/qualification/browser/{job}/response', [\App\Http\Controllers\BrowserQualificationController::class, 'reply'])
+        ->whereUuid('job')->name('qualification.browser.response')->middleware('throttle:60,1');
     Route::post('/billing/checkout', BillingCheckoutController::class)->name('billing.checkout')->middleware('throttle:10,1');
     Route::get('/connections',[VesselConnectionController::class,'index'])->name('connections');
     Route::post('/connections',[VesselConnectionController::class,'store'])->name('connections.store')->middleware('throttle:10,1');

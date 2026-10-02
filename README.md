@@ -522,3 +522,6 @@ instruction to complete milestone implementation before one coordinated final
 verification set. It is not production deployment evidence. Core reviewed identity
 transition and matching client scope are still being integrated; do not claim
 #344/#377 acceptance or advertise source-only work as a verified release.
+
+Fixture-only browser qualification coordination, disabled by default: see
+[the expiring coordination runbook](deploy/browser-qualification.md).

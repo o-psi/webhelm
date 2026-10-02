@@ -12,6 +12,9 @@ final class ConsoleAccess {
         return self::enabled() && $request->user()?->tenant_id
             && $request->session()->get('helm_operator_until', 0) > time();
     }
+    public static function pinnedOperator(Request $request, VesselConnection $connection): bool {
+        return self::authenticated($request) && self::current($request, $connection);
+    }
     private static function current(Request $request, VesselConnection $connection): bool {
         $user = User::find($request->user()->id);
         $session = DB::table('sessions')->where('id', $request->session()->getId())->first();
