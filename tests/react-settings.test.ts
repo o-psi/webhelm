@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Creation,accountChoices} from '../resources/react/settings.ts';
+import {Creation,accountChoices,vesselRead} from '../resources/react/settings.ts';
 class Storage {data=new Map<string,string>();get length(){return this.data.size;}key(i:number){return [...this.data.keys()][i]??null;}getItem(key:string){return this.data.get(key)??null;}setItem(key:string,value:string){this.data.set(key,value);}removeItem(key:string){this.data.delete(key);}clear(){this.data.clear();}}
 test('creation uncertainty uses original identity and never submits a prompt',async()=>{
  const storage=new Storage(),creation=new Creation(storage as any,'tenant'),commands:any[]=[];
@@ -12,9 +12,16 @@ test('creation uncertainty uses original identity and never submits a prompt',as
 });
 test('account choices retain full versioned bindings and disable unavailable accounts',()=>{
  const choices=accountChoices({accounts:[{id:'a',connection_id:'c',identity_generation:4,label:'Work',state:'ready',availability:'available'},{id:'b',connection_id:'c',identity_generation:5,label:'Unavailable',state:'expired',availability:'unavailable'}],connections:[{id:'c',revision:7,label:'Provider',transports:['chatgpt_oauth']}]});
- assert.deepEqual(choices[0].binding,{account_id:'a',connection_id:'c',identity_generation:4,connection_revision:7,transport:'chatgpt_oauth'});assert.equal(choices[0].ready,true);assert.equal(choices[1].ready,false);
+ assert.deepEqual(choices[0].binding,{account_id:'a',connection_id:'c',identity_generation:4,connection_revision:7,transport:'chatgpt_oauth'});assert.match(choices[0].label,/Experimental/);assert.equal(choices[0].ready,true);assert.equal(choices[1].ready,false);
 });
 test('creation accepts server canonical workspace with exact session identity',async()=>{
  const storage=new Storage(),creation=new Creation(storage as any,'t');const connection:any={id:'c',vessel_id:'v',voyages:[],client:{async exchange({command}:any){return {protocol:1,outcome_unknown:false,result:{session_id:command.session_id,workspace:'/canonical/work',incarnation:'i'}};}}};
  const process=await creation.start(connection,'/symlink/work/',{model:'m'});assert.equal(process.workspace,'/canonical/work');assert.equal(storage.length,0);
+});
+
+test('model access denial stays distinct and secret-free without retry or billing fallback',async()=>{
+ let calls=0;const connection={client:{async exchange(){calls++;return {protocol:1,outcome_unknown:false,error:'PRIVATE [model_catalog:access_denied] UPSTREAM_BODY'};}}};
+ await assert.rejects(()=>vesselRead(connection,'account_models'),error=>error instanceof Error&&error.message==='The provider denied model discovery for this account. Review provider permissions and model access.');
+ assert.equal(calls,1);
+ await assert.rejects(()=>vesselRead(connection,'profiles'),/Vessel could not confirm/);
 });

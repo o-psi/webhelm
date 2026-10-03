@@ -75,7 +75,7 @@ test('React enrollment island mounts and scrubs private state on unmount',async(
  try{
   await act(async()=>root.render(React.createElement(Enrollment,{connection,workspace:'/work',tenant:'t',onRefreshed:()=>{}})));
   await act(async()=>{dom.window.document.querySelector<HTMLButtonElement>('[data-open]')!.click();});
-  assert.match(dom.window.document.body.textContent!,/No subscription connection is available/);
+  assert.match(dom.window.document.body.textContent!,/No authorized native subscription connection is available/);
   await act(async()=>root.unmount());assert.equal(dom.window.document.querySelector('#enrollment-code'),null);
  }finally{Object.assign(globalThis,saved);dom.window.close();}
 });

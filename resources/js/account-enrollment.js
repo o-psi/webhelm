@@ -2,11 +2,12 @@ import {request, uuid} from './vessel-client.js';
 
 const terminal = new Set(['succeeded','cancelled','expired','denied','uncertain']);
 const providers = {
-    chatgpt_oauth: {name:'ChatGPT',endpoint:'https://chatgpt.com/backend-api/codex',verification:'https://auth.openai.com/codex/device'},
+    chatgpt_oauth: {name:'ChatGPT (experimental)',endpoint:'https://chatgpt.com/backend-api/codex',verification:'https://auth.openai.com/codex/device'},
     xai_oauth: {name:'SuperGrok',endpoint:'https://api.x.ai/v1',verification:'https://accounts.x.ai/oauth2/device'},
 };
-const supported = p => p?.transports?.length === 1 && !!providers[p.transports[0]] && providers[p.transports[0]].endpoint === p.endpoint;
+const supported = p => typeof p?.id === 'string' && p.id.length > 0 && Array.isArray(p.transports) && p.transports.length === 1 && Object.hasOwn(providers,p.transports[0]) && providers[p.transports[0]].endpoint === p.endpoint;
 const providerInfo = p => providers[p.transports[0]];
+const grokPrerequisite = 'SuperGrok requires native xai_oauth support and account-enrollment permission on this Vessel.';
 // Only public enrollment envelopes are durable. Private responses live in this view alone.
 export function accountEnrollment(root, {context, refreshed, titleChanged = (_title) => {}}) {
     const $ = id => root.querySelector(`#enrollment-${id}`);
@@ -93,7 +94,7 @@ export function accountEnrollment(root, {context, refreshed, titleChanged = (_ti
                 const catalogue = await exchange(a,'accounts',{workspace:c.workspace});
                 if (!current(a,n)) return;
                 const provider = catalogue.connections?.find(p=>p.id===$('provider').value && supported(p));
-                if (!provider) {message('Choose an allowed subscription provider connection.');return;}
+                if (!provider) {message(`This subscription provider is no longer available on this connection. No sign-in was started. ${grokPrerequisite}`);return;}
                 a.provider = provider; identify(provider); render();
                 a.record = {command_id:uuid(),enrollment_id:uuid(),workspace:c.workspace,connection_id:provider.id,alias,label,cancel_id:uuid()};
                 localStorage.setItem(key(c),JSON.stringify(a.record));
@@ -159,9 +160,9 @@ export function accountEnrollment(root, {context, refreshed, titleChanged = (_ti
                 updateProvider();
                 phase = 'picker';
                 render(retained ? 'recovery' : $('provider').options.length ? 'setup' : 'unavailable');
-                if (!retained && !$('provider').options.length) { message('No subscription connection is available on this Vessel. Ask its owner to enable sign-in.'); return; }
+                if (!retained && !$('provider').options.length) { message(`No authorized native subscription connection is available. ${grokPrerequisite}`); return; }
                 if (!retained) $('label').focus();
-                message(retained ? 'A prior sign-in is retained. Use Check sign-in; starting again is blocked.' : 'Next, you’ll sign in securely with the selected provider. No password is entered here.');
+                message(retained ? 'A prior sign-in is retained. Use Check sign-in; starting again is blocked.' : `Model access and limits depend on your provider and account. No password is entered here.${(catalogue.connections || []).some(p=>supported(p)&&p.transports[0]==='xai_oauth')?'':` ${grokPrerequisite}`}`);
             } catch {
                 if (!current(a,n)) return;
                 render('unavailable');

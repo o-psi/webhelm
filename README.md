@@ -535,13 +535,17 @@ Fixture-only browser qualification coordination, disabled by default: see
 ### ChatGPT or Grok subscription accounts
 
 In profile setup, choose **Provider account → Add subscription account**, then
-select **ChatGPT** or **SuperGrok** for your eligible subscription. The private
+select **ChatGPT (experimental)** or **SuperGrok** for your eligible subscription. The private
 view shows the selected provider's verification website and a short device code;
 approve it in a browser on any machine. Tokens stay on the selected Vessel, and enrollment neither sends a model request nor changes the host default.
 Grok sign-in requires a Vessel with native `xai_oauth` support. Older Vessels continue to offer
-their supported providers. Expired SuperGrok accounts offer an explicit sign-in
+their supported providers. The picker rechecks native support before starting; a removed
+provider or changed endpoint cannot start enrollment. Expired SuperGrok accounts offer an explicit sign-in
 refresh. Subscription limits and model availability are controlled by the selected provider.
-SuperGrok quota percentages are unknown. API-key billing is separate and is never
+Model choices come from the selected account’s catalogue; saved models absent from it
+are not added as discovered choices. A catalogue entry is not proof of inference
+entitlement. Access denial is distinct from sign-in failure and does not trigger
+a credential refresh or automatic retry. SuperGrok quota percentages are unknown. API-key billing is separate and is never
 selected as a fallback for either subscription provider.
 
 The bounded browser qualification coordinator's additional idle/media operations

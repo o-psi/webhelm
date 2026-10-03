@@ -2,13 +2,17 @@ import {request,uuid} from '../js/vessel-client.js';
 export async function vesselRead(connection:any,op:string,fields:Record<string,unknown>={}) {
     const client=connection?.client;if(!client)throw new Error('Vessel is offline.');
     const response=await client.exchange(request(op,fields));
-    if(connection.client!==client||response?.protocol!==1||response.outcome_unknown!==false||response.error!=null)throw new Error('Vessel could not confirm this request. Reload choices.');
+    if(connection.client!==client||response?.protocol!==1||response.outcome_unknown!==false)throw new Error('Vessel could not confirm this request. Reload choices.');
+    if(response.error!=null){
+        if(op==='account_models'&&typeof response.error==='string'&&response.error.includes('[model_catalog:access_denied]'))throw new Error('The provider denied model discovery for this account. Review provider permissions and model access.');
+        throw new Error('Vessel could not confirm this request. Reload choices.');
+    }
     return response.result;
 }
 export function accountChoices(catalogue:any) {
     return (catalogue.accounts||[]).flatMap((account:any)=>{
         const provider=catalogue.connections?.find((connection:any)=>connection.id===account.connection_id);
-        return (provider?.transports||[]).map((transport:string)=>({label:`${account.label} · ${provider.label} · ${transport.replaceAll('_',' ')}`,state:account.state,availability:account.availability,ready:account.state==='ready'&&account.availability==='available',binding:{account_id:account.id,connection_id:provider.id,identity_generation:account.identity_generation,connection_revision:provider.revision,transport}}));
+        return (provider?.transports||[]).map((transport:string)=>({label:`${account.label} · ${provider.label} · ${transport.replaceAll('_',' ')}${transport==='chatgpt_oauth'?' · Experimental':''}`,state:account.state,availability:account.availability,ready:account.state==='ready'&&account.availability==='available',binding:{account_id:account.id,connection_id:provider.id,identity_generation:account.identity_generation,connection_revision:provider.revision,transport}}));
     });
 }
 // Creation intent is separate from message submission and is never automatically replayed.
