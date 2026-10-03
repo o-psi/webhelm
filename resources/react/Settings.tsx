@@ -23,13 +23,13 @@ const setupChoice='setup-choice h-auto w-full flex-col items-start gap-1 whitesp
 function SetupRow({label,detail,onClick,disabled=false}:{label:string;detail:string;onClick:()=>void;disabled?:boolean}){
     return <Button variant="outline" type="button" className={setupRow} onClick={onClick} disabled={disabled}><span><strong>{label}</strong><small>{detail}</small></span><ChevronRightIcon className="setup-row-chevron" aria-hidden="true"/></Button>;
 }
-export function Settings({fleet,workspace,tab,profileOnly=false,tenant,onClose,onCreated}:{fleet:any;workspace:Workspace;tab?:Tab;profileOnly?:boolean;tenant:string;onClose:()=>void;onCreated:(vessel:string,process:any)=>void}){
+export function Settings({fleet,workspace,tab,location,profileOnly=false,tenant,onClose,onCreated}:{fleet:any;workspace:Workspace;tab?:Tab;location?:{vessel:string;workspace:string};profileOnly?:boolean;tenant:string;onClose:()=>void;onCreated:(vessel:string,process:any)=>void}){
     const heading=useRef<HTMLHeadingElement>(null),body=useRef<HTMLDivElement>(null);
     const [screen,setScreen]=useState<Screen>(profileOnly?'profiles':'overview'),[search,setSearch]=useState('');
     const [enrollmentTitle,setEnrollmentTitle]=useState('Connect a subscription');
     const history=useRef<{screen:Screen;focus:HTMLElement|null}[]>([]);
-    const [vessel,setVessel]=useState(tab?.vessel||[...fleet.connections.keys()][0]||'');
-    const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(''),[accounts,setAccounts]=useState<any[]>([]),[account,setAccount]=useState(''),[models,setModels]=useState<any[]>([]),[model,setModel]=useState(''),[reasoning,setReasoning]=useState(''),[service,setService]=useState('');
+    const [vessel,setVessel]=useState(tab?.vessel||location?.vessel||[...fleet.connections.keys()][0]||'');
+    const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(location?.workspace||''),[accounts,setAccounts]=useState<any[]>([]),[account,setAccount]=useState(''),[models,setModels]=useState<any[]>([]),[model,setModel]=useState(''),[reasoning,setReasoning]=useState(''),[service,setService]=useState('');
     const [capabilityClient,setCapabilityClient]=useState<any>(null);
     const [usage,setUsage]=useState<any>(null),[usageNotice,setUsageNotice]=useState('');
     const [accountsReload,setAccountsReload]=useState(0);
@@ -135,6 +135,7 @@ export function Settings({fleet,workspace,tab,profileOnly=false,tenant,onClose,o
         <form onSubmit={event=>{event.preventDefault();void save();}}>
             <header>{screen!=='overview'&&!(profileOnly&&screen==='profiles')&&<Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Back" onClick={back}><ArrowLeftIcon aria-hidden="true"/></Button>}<DialogTitle asChild><h2 id="profile-setup-title" ref={heading} tabIndex={-1}>{screen==='overview'?(tab?'Voyage setup':'New voyage'):screen==='enrollment'?enrollmentTitle:titles[screen]}</h2></DialogTitle><>{screen==='profiles'&&catalogue?.can_manage&&<Button variant="outline" type="button" aria-label="Create profile" disabled={busy} onClick={()=>editProfile('new')}>Create profile</Button>}</><Button variant="ghost" size="icon" type="button" disabled={busy} aria-label="Close settings" onClick={onClose}><XIcon aria-hidden="true"/></Button></header>
             <div ref={body} className="setup-body" aria-busy={busy}>
+                {profileOnly&&<p>Profiles and accounts on <strong>{connection?.name||vessel}</strong>{path&&` · ${path}`}</p>}
                 {screen==='overview'&&<>
                     <p>{tab?'Choose a saved profile for the next run.':'Choose where your voyage runs and the profile it uses.'}</p>
                     <SetupRow label="Location" detail={[connection?.name,path].filter(Boolean).join(' · ')||'Choose a Vessel and workspace'} disabled={busy} onClick={()=>navigate('location')}/>

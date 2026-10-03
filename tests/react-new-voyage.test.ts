@@ -12,7 +12,7 @@ async function mount({uncertain=false,recovery=null}:{uncertain?:boolean;recover
     const previous={window:globalThis.window,document:globalThis.document,localStorage:globalThis.localStorage};
     Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Event:dom.window.Event});
     const {createRoot}=await import('react-dom/client');
-    const commands:any[]=[],created:any[]=[];
+    const commands:any[]=[],created:any[]=[],advanced:any[]=[];
     const connection:any={id:'c',name:'Fixture Vessel',vessel_id:'v',voyages:[],client:{async exchange({command}:any){
         commands.push(command);
         let result:any;
@@ -27,12 +27,13 @@ async function mount({uncertain=false,recovery=null}:{uncertain?:boolean;recover
         }
         return {protocol:1,outcome_unknown:false,error:null,result};
     }}};
+    const second={...connection,id:'second',name:'Second Vessel',vessel_id:'v2',client:{async exchange(request:any){const reply=await connection.client.exchange(request);if(request.command.op==='capabilities')reply.result.vessel_id='v2';return reply;}}};
     const root=createRoot(document.getElementById('root')!);
-    await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,recovery,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:()=>{}})));
+    await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection],['second',second]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,recovery,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:(location:any)=>advanced.push(location)})));
     await act(async()=>{await new Promise(resolve=>setTimeout(resolve,230));});
     const button=(label:string)=>{const found=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>(item.getAttribute('aria-label')||item.textContent||'').trim()===label);assert.ok(found,label);return found;};
     const dispose=async()=>{await act(async()=>root.unmount());Object.assign(globalThis,previous);dom.window.close();};
-    return {dom,commands,created,button,dispose};
+    return {dom,commands,created,advanced,button,dispose};
 }
 
 test('uncertain message transfer starts as a reviewable draft and sends nothing',async()=>{
@@ -106,4 +107,15 @@ test('first message waits for confirmed access and remains a draft when access i
     assert.equal(calls.includes('submit'),false);
     assert.match(tab.notice,/access mode is not confirmed/);
     assert.equal(tab.draft,'Build a dashboard');
+});
+
+
+test('profile management receives the selected Vessel and workspace, not the first connection',async()=>{
+ const view=await mount({recovery:{vessel:'second',workspace:'/chosen',text:'',hasPictures:false,source:'draft'}});
+ try{
+  assert.equal(view.button('Manage profiles').disabled,false);
+  await act(async()=>view.button('Manage profiles').click());
+  assert.deepEqual(view.advanced,[{vessel:'second',workspace:'/chosen'}]);
+  assert.equal(view.commands.some(c=>c.op==='start_account'||c.op==='submit'),false);
+ }finally{await view.dispose();}
 });
