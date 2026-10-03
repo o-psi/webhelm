@@ -25,7 +25,7 @@ test('profiles editor saves, duplicates, defaults and deletes without mutating v
  await click('Create profile');assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'');
  await act(async()=>document.querySelector<HTMLButtonElement>('.setup-row')!.click());
  await click('Add subscription account');
- assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Connect ChatGPT (experimental)',document.querySelector('#enrollment-status')?.textContent||'');
+ assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Connect ChatGPT',document.querySelector('#enrollment-status')?.textContent||'');
  const provider=document.querySelector<HTMLSelectElement>('#enrollment-provider')!;
  await act(async()=>{provider.value='grok';provider.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});
  assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Connect SuperGrok');
@@ -33,7 +33,7 @@ test('profiles editor saves, duplicates, defaults and deletes without mutating v
  assert.equal(document.getElementById(dialog.getAttribute('aria-labelledby')!)!.textContent,'Connect SuperGrok');
  assert.equal(document.querySelector('#enrollment-start')!.textContent,'Continue with SuperGrok');
  await act(async()=>{provider.value='chat';provider.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});
- assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Connect ChatGPT (experimental)');
+ assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Connect ChatGPT');
  assert.equal(commands.some(c=>c.op==='set_account_inference'||c.op==='start_account'||c.op==='enroll_account'),false);
  assert.ok(commands.filter(c=>c.workspace).every(c=>c.workspace==='/chosen'),'all profile/account reads and writes retain the selected workspace');
 

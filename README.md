@@ -535,7 +535,7 @@ Fixture-only browser qualification coordination, disabled by default: see
 ### ChatGPT or Grok subscription accounts
 
 In profile setup, choose **Provider account → Add subscription account**, then
-select **ChatGPT (experimental)** or **SuperGrok** for your eligible subscription. The private
+select **ChatGPT** or **SuperGrok** for your eligible subscription. The private
 view shows the selected provider's verification website and a short device code;
 approve it in a browser on any machine. Tokens stay on the selected Vessel, and enrollment neither sends a model request nor changes the host default.
 Grok sign-in requires a Vessel with native `xai_oauth` support. Older Vessels continue to offer

@@ -120,9 +120,9 @@ test('provider identity follows selection and retained SuperGrok instead of the 
  x.connection.client.exchange=async r=>r.command.op==='accounts'?{protocol:1,outcome_unknown:false,result:{connections:providers}}:original(r);
  await x.ui.open();
  assert.equal(x.titles[0],'Connect a subscription');
- assert.equal(x.titles.at(-1),'Connect ChatGPT (experimental)');
- assert.deepEqual([...x.$('provider').options].map(o=>o.textContent),['ChatGPT (experimental)','SuperGrok']);
- for(const [id,name] of [['p','SuperGrok'],['chat','ChatGPT (experimental)'],['p','SuperGrok']]){
+ assert.equal(x.titles.at(-1),'Connect ChatGPT');
+ assert.deepEqual([...x.$('provider').options].map(o=>o.textContent),['ChatGPT','SuperGrok']);
+ for(const [id,name] of [['p','SuperGrok'],['chat','ChatGPT'],['p','SuperGrok']]){
   x.$('provider').value=id;x.$('provider').dispatchEvent(new x.dom.window.Event('change'));
   assert.equal(x.titles.at(-1),`Connect ${name}`);
   assert.equal(x.$('title').textContent,`Connect ${name}`);
@@ -143,7 +143,7 @@ test('provider identity follows selection and retained SuperGrok instead of the 
 
 test('older Vessel offers only advertised native providers and explains missing SuperGrok',async()=>{
  const x=fixture();await x.ui.open();
- assert.deepEqual([...x.$('provider').options].map(o=>o.textContent),['ChatGPT (experimental)']);
+ assert.deepEqual([...x.$('provider').options].map(o=>o.textContent),['ChatGPT']);
  assert.match(x.$('status').textContent,/native xai_oauth support and account-enrollment permission/);
  assert.equal(x.calls.some(c=>c.op==='enroll_account'),false);
  x.ui.dispose();x.dom.window.close();

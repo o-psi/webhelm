@@ -2,7 +2,7 @@ import {request, uuid} from './vessel-client.js';
 
 const terminal = new Set(['succeeded','cancelled','expired','denied','uncertain']);
 const providers = {
-    chatgpt_oauth: {name:'ChatGPT (experimental)',endpoint:'https://chatgpt.com/backend-api/codex',verification:'https://auth.openai.com/codex/device'},
+    chatgpt_oauth: {name:'ChatGPT',endpoint:'https://chatgpt.com/backend-api/codex',verification:'https://auth.openai.com/codex/device'},
     xai_oauth: {name:'SuperGrok',endpoint:'https://api.x.ai/v1',verification:'https://accounts.x.ai/oauth2/device'},
 };
 const supported = p => typeof p?.id === 'string' && p.id.length > 0 && Array.isArray(p.transports) && p.transports.length === 1 && Object.hasOwn(providers,p.transports[0]) && providers[p.transports[0]].endpoint === p.endpoint;

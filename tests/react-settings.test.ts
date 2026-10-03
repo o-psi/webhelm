@@ -12,7 +12,7 @@ test('creation uncertainty uses original identity and never submits a prompt',as
 });
 test('account choices retain full versioned bindings and disable unavailable accounts',()=>{
  const choices=accountChoices({accounts:[{id:'a',connection_id:'c',identity_generation:4,label:'Work',state:'ready',availability:'available'},{id:'b',connection_id:'c',identity_generation:5,label:'Unavailable',state:'expired',availability:'unavailable'}],connections:[{id:'c',revision:7,label:'Provider',transports:['chatgpt_oauth']}]});
- assert.deepEqual(choices[0].binding,{account_id:'a',connection_id:'c',identity_generation:4,connection_revision:7,transport:'chatgpt_oauth'});assert.match(choices[0].label,/Experimental/);assert.equal(choices[0].ready,true);assert.equal(choices[1].ready,false);
+ assert.deepEqual(choices[0].binding,{account_id:'a',connection_id:'c',identity_generation:4,connection_revision:7,transport:'chatgpt_oauth'});assert.doesNotMatch(choices[0].label,/experimental/i);assert.equal(choices[0].ready,true);assert.equal(choices[1].ready,false);
 });
 test('creation accepts server canonical workspace with exact session identity',async()=>{
  const storage=new Storage(),creation=new Creation(storage as any,'t');const connection:any={id:'c',vessel_id:'v',voyages:[],client:{async exchange({command}:any){return {protocol:1,outcome_unknown:false,result:{session_id:command.session_id,workspace:'/canonical/work',incarnation:'i'}};}}};
