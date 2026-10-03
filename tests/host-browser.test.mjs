@@ -25,6 +25,10 @@ function fixture(reply){
 // exercises the real rrweb library and page events.
 test('viewer starts once and requires a full DOM snapshot before input',async()=>{
     const old=globalThis.rrweb;
+    const oldObserver=globalThis.MutationObserver;
+    // This empty-document lifecycle stub has no DOM mutations. Real canvas
+    // observation and sizing are covered by the Chromium replay regression.
+    globalThis.MutationObserver=class { observe(){} disconnect(){} };
     globalThis.rrweb={Replayer:class {
         constructor(){this.iframe={contentDocument:{createElement:()=>({}),head:{append(){}}},referrerPolicy:''};}
         enableInteract(){} on(name,callback){if(name==='fullsnapshot-rebuilded')this.ready=callback;}
@@ -43,7 +47,7 @@ test('viewer starts once and requires a full DOM snapshot before input',async()=
         assert.equal(f.sent[3].binding.attachment_id,'viewer');
         assert.equal(f.session.streaming,true);
         assert.equal(f.session.canInput,true);
-    }finally{f.session.dispose();globalThis.rrweb=old;}
+    }finally{f.session.dispose();globalThis.rrweb=old;globalThis.MutationObserver=oldObserver;}
 });
 
 test('private handoff clears replay and refuses queued input from an old fence',async()=>{
