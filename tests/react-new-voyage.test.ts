@@ -224,6 +224,7 @@ test('failed draft catalogue is inspectable and retry is read-only before succes
     const view=await mount({unknownModels:true,scoped:true,revokeWorkspace:true});
     try{
         assert.match(document.body.textContent||'',/Catalogue unavailable/);
+        await view.openConfig();
         const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith('Model:'))!;
         assert.equal(trigger.disabled,false);
         await act(async()=>trigger.click());
