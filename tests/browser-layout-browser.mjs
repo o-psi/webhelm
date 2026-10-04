@@ -64,6 +64,7 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
+                if(c.op==='account_usage'&&window.fixtureUsageDeferred){window.releaseFixtureUsage=()=>{window.fixtureUsageDeferred=false;this.send(text);};return;}
                 if(c.op==='account_models'&&window.fixtureCatalogueMode==='error'){emit({type:'reply',request_id:f.request_id,response:{protocol:1,outcome_unknown:false,error:'Synthetic catalogue unavailable'}});return;}
                 if(c.op==='account_models'&&window.fixtureCatalogueMode==='loading'){window.releaseFixtureCatalogue=()=>{this.send(text);};return;}
                 if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','verified_user_updates','workspace_changes','workspace_file','skills_catalog','workspace_file_catalog'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
@@ -72,6 +73,7 @@ try {
                 else if(c.op==='update_status')result=updateRecord;
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account with a long provider subscription identity and workspace-specific description',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
+                else if(c.op==='account_usage')result={account:c.account,refresh_status:'fresh',snapshot:{windows:[]}};
                 else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model with a long readable catalogue description and capability label',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
                 else if(c.op==='inspect')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',state:'live',workspace:'/work'};
                 else if(c.op==='history')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{revision:1+goal.revision,message_offset:c.offset,next_offset:40,has_more:false,messages:Array.from({length:40-c.offset},(_,n)=>{const i=n+c.offset;return {role:i%5===0?'user':'assistant',message_index:i,content:i%5===0?`Fixture request ${i/5+1}`:`Fixture observation ${i+1}`};})}};
@@ -483,6 +485,21 @@ try {
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     check(await page.getByRole('button',{name:'Files',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Escape after dock switch restored the wrong trigger`);
+    // Read-only Settings navigation: no profile mutation or inference application.
+    const settingsWritesBefore=await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length);
+    await conversation.getByRole('button',{name:/^Account:/}).click();
+    const settings=page.locator('.profile-setup');
+    await settings.getByRole('button',{name:/Provider account/}).click();
+    await settings.getByRole('button',{name:'Account usage',exact:true}).click();
+    await page.evaluate(()=>{window.fixtureUsageDeferred=true;});
+    await settings.getByRole('button',{name:'Refresh usage',exact:true}).click();
+    await settings.getByText('Loading usage…',{exact:true}).waitFor();
+    check(await settings.getByRole('button',{name:'Back',exact:true}).isEnabled(),`${label}: usage read blocks Back`);
+    check(await settings.getByRole('button',{name:'Close settings',exact:true}).isEnabled(),`${label}: usage read blocks Close`);
+    await settings.getByRole('button',{name:'Back',exact:true}).click();
+    await settings.getByRole('button',{name:'Close settings',exact:true}).click();
+    await page.evaluate(()=>window.releaseFixtureUsage());
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length)===settingsWritesBefore,`${label}: dismissing usage read applied settings`);
     // Explicit user close, not malformed initial stopped attach, exercises lifecycle.
     await page.getByRole('button',{name:'Browser',exact:true}).click();
     const viewer=page.locator('.host-browser-viewer');
