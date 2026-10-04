@@ -28,3 +28,12 @@ export class EventInitialization {
         this.reset(); return result;
     }
 }
+
+export function acceptContentChunk(chunk, fence, nextOffset) {
+    if (!sameFence(chunk.fence,fence) || !Number.isSafeInteger(nextOffset) || nextOffset < 0 || chunk.offset !== nextOffset) throw new Error('Content identity or offset mismatch');
+    if (typeof chunk.entity_id !== 'string' || !chunk.entity_id.length || new TextEncoder().encode(chunk.entity_id).length > 256 || typeof chunk.text !== 'string') throw new Error('Invalid content chunk');
+    const bytes = new TextEncoder().encode(chunk.text).length;
+    const end = nextOffset + bytes;
+    if (bytes > MAX_ENTITY_BYTES || !Number.isSafeInteger(chunk.total_bytes) || !Number.isSafeInteger(end) || end > chunk.total_bytes || (bytes === 0 && end !== chunk.total_bytes)) throw new Error('Invalid content extent');
+    return end;
+}

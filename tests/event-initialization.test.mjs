@@ -27,3 +27,13 @@ test('reordered, oversized and wrong-incarnation pages cannot publish', () => {
     reducer.accept({kind:'reset',fence,reason:'retention_gap'});
     assert.throws(() => reducer.accept(complete));
 });
+
+test('content chunks preserve UTF-8 byte offsets and owner fencing', async () => {
+    const {acceptContentChunk} = await import('../resources/js/event-initialization.js');
+    const chunk = {fence,entity_id:'message:0',offset:0,total_bytes:2,text:'é'};
+    assert.equal(acceptContentChunk(chunk,fence,0),2);
+    assert.throws(() => acceptContentChunk(chunk,fence,1));
+    assert.throws(() => acceptContentChunk(chunk,{...fence,incarnation:'other'},0));
+    assert.throws(() => acceptContentChunk({...chunk,text:''},fence,0));
+    assert.throws(() => acceptContentChunk({...chunk,total_bytes:1},fence,0));
+});
