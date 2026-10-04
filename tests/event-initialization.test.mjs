@@ -59,3 +59,12 @@ test('presentation is derived only from canonical typed entities',async()=>{
     assert.equal(view.observation_cursor,40);
     assert.throws(()=>entityPresentation({...scope,fence:{...fence,session_id:'other'}}));
 });
+
+test('typed presentation retains interrupted-work warning and turn navigation',async()=>{
+    const {entityPresentation}=await import('../resources/js/event-initialization.js');
+    const scope={fence,cursor:3,entities:new Map([['session:session',{session_id:'s',revision:1,model:'m',message_offset:90,total_messages:100}],['run:turns',[{run_id:'interrupted',state:'failed'}]],['resource:recovery_notice','Previous work has unknown effects; not repeated.']])};
+    const view=entityPresentation(scope);
+    assert.equal(view.turns[0].run_id,'interrupted');
+    assert.match(view.recovery_notice,/unknown effects/);
+    assert.equal(view.message_offset,90);assert.equal(view.total_messages,100);
+});
