@@ -34,7 +34,7 @@ const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH 
 const report = {capturedAt:new Date().toISOString(),chromium:browser.version(),entry:entry.file,sha256:createHash('sha256').update(await readFile(`${build}/${entry.file}`)).digest('hex'),synthetic:true,viewports:[],failures:[]};
 const check = (value, message) => {if(!value)report.failures.push(message);};
 try {
- for(const viewport of (process.env.LAYOUT_VIEWPORT==='mobile'?[{width:390,height:844}]:[{width:1280,height:900},{width:858,height:882},{width:390,height:844},{width:320,height:568}])) {
+ for(const viewport of (process.env.LAYOUT_VIEWPORT==='mobile'?[{width:390,height:844}]:[{width:1280,height:900},{width:858,height:882},{width:390,height:844},{width:390,height:568},{width:320,height:568}])) {
     const label = viewport.width>600?'desktop':'mobile';
     const context = await browser.newContext({viewport,reducedMotion:'reduce'});
     const page = await context.newPage();
@@ -232,7 +232,7 @@ try {
     check(await page.evaluate(()=>window.fixtureCommands.length===0||!window.fixtureCommands.slice(-1).some(c=>c.op==='submit'||c.op==='steer')),`${label}: link dispatched a message`);
     await page.evaluate(()=>{window.location.hash='';});
     await page.getByRole('button',{name:'Choose model'}).click();
-    const modelDialog=page.getByRole('dialog',{name:'Choose model',exact:true});
+    const modelDialog=page.getByRole('dialog',{name:/^Model:/});
     await modelDialog.locator('[data-model-choice]').filter({hasText:'Fixture model'}).waitFor();
     check(await modelDialog.locator('[data-model-choice][aria-pressed="true"]').count()===1,`${label}: current model is not marked`);
     await modelDialog.getByRole('textbox',{name:'Search models'}).fill('other');
@@ -254,12 +254,16 @@ try {
     check(darkModelTheme.background===darkModelTheme.expectedBackground&&darkModelTheme.color===darkModelTheme.expectedColor&&darkModelTheme.background!==lightModelTheme.background,`${label}: model picker does not adapt to dark appearance`);
     await page.screenshot({path:`${output}/${label}-${viewport.width}-model-picker-dark.png`});
     await page.evaluate(()=>document.documentElement.classList.remove('dark'));
+    const populatedModelBounds=await modelDialog.boundingBox();
     await modelDialog.getByRole('textbox',{name:'Search models'}).fill('missing-model');
+    const emptyModelBounds=await modelDialog.boundingBox();
+    check(Math.abs(populatedModelBounds.y-emptyModelBounds.y)<1&&Math.abs(populatedModelBounds.height-emptyModelBounds.height)<1,`${label}: empty search moves model dialog`);
+
     check(await modelDialog.getByText('No models match your search.',{exact:true}).isVisible(),`${label}: model search empty state missing`);
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='set_account_inference').length===0),`${label}: searching changed inference settings`);
     await page.keyboard.press('Escape');
-    check(await page.getByRole('button',{name:'Choose model',exact:true}).evaluate(el=>el===document.activeElement),`${label}: model picker lost trigger focus`);
-    check(await page.locator('button[aria-label="Choose reasoning"]').isVisible(),`${label}: direct reasoning control is missing`);
+    check(await page.getByRole('button',{name:/^Model:/}).evaluate(el=>el===document.activeElement),`${label}: model picker lost trigger focus`);
+    check(await page.getByRole('button',{name:/^Reasoning:/}).isVisible(),`${label}: direct reasoning control is missing`);
     const draft=conversation.locator('textarea').first();
     const contextLabel=page.getByLabel('Request context accounting');
     check(await contextLabel.textContent()==='Last prepared input: unknown tokens · window: unknown · reserve: unknown · projection 2',`${label}: context accounting changed or invented precision`);
