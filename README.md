@@ -87,10 +87,10 @@ hosts. Voyage setup directs owners of older Vessels there. Existing private keys
 no migration for this interface cutover.
 
 The sidebar keeps attention and active voyages above recent work, with older
-settled voyages available through search or filters. The composer exposes direct
-model and reasoning choices for the current voyage; the new-voyage composer can
-override those choices without editing the saved profile. Tool activity stays
-compact until expanded. The composer’s `/` shortcut and discovery button open
+settled voyages available through search or filters. New and existing voyages use
+the same compact, bottom-docked composer. **Configure** opens destination, model,
+reasoning and access choices on demand; new-draft overrides do not edit the saved
+profile. Tool activity stays compact until expanded. The discovery button opens
 local actions plus the executing Voyage’s advertised tools and filesystem skills
 when `skills_catalog` and workspace read access are available. Selection inserts
 text into the saved draft and never sends it. Tool inventory is a live-run view or
@@ -134,12 +134,13 @@ explicit selected-user branching, bounded Files selection and no automatic run.
 It exposed overlapping edit controls and a missing action-dialog accessible name;
 both were corrected before the final passing layout. Screenshots were inspected.
 These checks are synthetic; exact-source production deployment remains pending.
-Uncertain command notices explain the affected action in the composer;
-exact command IDs remain in expandable receipt details for inspection. If a
+**Review pending work** opens uncertainty recovery on demand; technical notices
+and exact command IDs stay out of the default composer. Receipt details remain
+inspectable. If a
 receipt remains unknown, the original command stays recorded and is never
-automatically resent. A fresh canonical voyage snapshot permits a separately
-initiated new message in the same conversation; other mutations still wait for
-the unresolved receipt. The conversation provides response copying (fetching
+automatically resent. A fresh canonical snapshot permits a separately initiated message only when its
+prepared payload is provably distinct from the uncertain message. Cold unknown
+payloads fail closed; other mutations still wait for the unresolved receipt. The conversation provides response copying (fetching
 complete canonical text when the visible projection is truncated), user-turn
 navigation, and a compact sidebar for scanning long voyage lists. Latest follows
 streamed output and image/layout growth; reading older messages preserves position.
@@ -150,17 +151,20 @@ Incremental output keeps a 64 KiB UTF-8 prefix, matching snapshots, with exact b
 continuation and explicit reads for more output. This bounds the automatic live
 text preview, not all manually expanded history or all browser memory.
 
-Voyages that expose canonical Goal state show a Goal panel above the composer.
-It reads the objective, status, usage, limits and recorded model assessment from
-the executing Voyage. Owner connections can set, edit, pause, resume and clear;
-replacing an existing Goal requires confirmation of that specific Goal. Edits
-retain usage and pause continuation. Automatic continuation requires explicit
-consent and finite limits; token accounting is not a strict billing cap. Pause
-stops future continuation; Stop run requests cancellation of current execution.
-Goal drafts stay in memory, and the browser's recovery journal retains command
-identity without the objective. Lost responses are observed by exact receipt,
-never resent. Goal metadata events trigger an authenticated canonical refresh.
-Older runtimes without Goal state do not show these controls. Coordinated runtime,
+Type `/goal [objective]` in the composer to update canonical Goal metadata without
+sending an inference prompt. New goals use finite defaults with automatic
+continuation disabled; objective edits preserve the observed Goal identity,
+limits and usage. A new configuration draft creates its Voyage once, confirms
+requested access, then updates Goal metadata without starting inference.
+Bare `/goal` reads a concise nonmodal objective/status view. **Manage goal** opens
+usage, budget and lifecycle controls on demand. Clear and automatic continuation
+retain separate consent checks. There is no persistent Goal bar or Goal modal.
+Token accounting is not a strict billing cap. Pause stops future continuation;
+Stop run requests cancellation of current execution. Pictures are refused for
+Goal commands and retained with the draft. Unknown or refused outcomes retain
+intent; confirmed metadata cannot clear newer composer text. Exact receipts are
+observed without replay, and metadata events refresh canonical state. Older
+runtimes without Goal state refuse the unsupported command. Coordinated runtime,
 TUI and release qualification is tracked in
 [#378](https://github.com/o-psi/helm.vessel.voyage/issues/378).
 
