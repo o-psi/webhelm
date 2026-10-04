@@ -49,6 +49,9 @@ test('profile navigation preserves unsaved name/model and keeps the current step
         assert.match(view.text(),/Other model/);
         await view.click('Reasoning & service');
         assert.equal(document.querySelector('[data-slot=slider-thumb]')!.getAttribute('aria-valuemax'),'1','reasoning follows selected model support');
+        assert.equal(document.querySelector('[role=slider]')!.getAttribute('aria-valuetext'),'Provider default','focused thumb announces the semantic reasoning choice');
+        assert.equal(document.querySelector('[role=slider]')!.getAttribute('aria-label'),'Reasoning');
+        assert.equal(document.querySelector('[data-slot=slider]')!.getAttribute('aria-valuetext'),null,'non-slider wrapper has no numeric value announcement');
         await view.click('Back');await view.click('Save profile');
         const saved=view.commands.find(command=>command.op==='save_profile');
         assert.equal(saved.profile.name,'My draft');assert.equal(saved.profile.model,'other');assert.equal(saved.profile.reasoning_effort,null);assert.equal(saved.profile.service_tier,null);
@@ -129,6 +132,8 @@ test('create remains available above an empty or filtered profile list',async()=
         await view.fill('Search profiles','Nothing matches');assert.match(view.text(),/No profiles match/);
         assert.ok(document.querySelector('header [aria-label="Create profile"]'));await view.click('Create profile');
         assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'');
+        assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Create profile');
+        assert.ok(view.button('Cancel profile creation'));
     }finally{await view.dispose();}
 });
 
@@ -142,7 +147,9 @@ test('read-only catalogues allow profile choice without exposing mutation contro
 
 test('failed profile loading offers status recovery without a permanent reload control',async()=>{
     const view=await mount({failProfilesOnce:true});try{
-        assert.match(view.text(),/Profile list unavailable/);await view.click('Check status');await view.click('Profile');
+        assert.match(view.text(),/Profile list unavailable/);await view.click('Profile');
+        assert.match(view.text(),/Profiles unavailable/);assert.doesNotMatch(view.text(),/No saved profiles yet/);
+        await view.click('Check status');
         assert.match(view.text(),/Everyday/);assert.doesNotMatch(view.text(),/Reload profiles|Check status/);
         assert.equal(view.commands.filter(command=>command.op==='profiles').length,2);
         assert.equal(view.commands.some(command=>['save_profile','start_account','account_usage'].includes(command.op)),false);

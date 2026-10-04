@@ -29,6 +29,9 @@ test('model search, favorites and keyboard selection retain current state and fe
         await render();await click('Choose model');
         assert.equal(dom.window.document.activeElement?.getAttribute('aria-label'),'Search models');
         assert.equal(choose('Alpha').getAttribute('aria-pressed'),'true');
+        const dialogClasses=document.querySelector('[role="dialog"]')!.className;
+        assert.match(dialogClasses,/h-\[85dvh\]/,'dialog height is independent of result count');
+        assert.match(document.querySelector('[aria-label="Available models"]')!.className,/flex-1/,'results own the remaining scroll area');
         assert.ok(dom.window.document.querySelector('script')===null,'model labels do not create a script node');
         const input=await type('beta');
         assert.equal(dom.window.document.querySelectorAll('[data-model-choice]').length,1);
@@ -38,6 +41,7 @@ test('model search, favorites and keyboard selection retain current state and fe
         assert.deepEqual(JSON.parse(dom.window.localStorage.getItem('helm:model-favorites:v1')!),['beta']);
         assert.ok(dom.window.document.querySelector('section[aria-label="Favorites"] [data-model-choice]')===choose('Beta'),'Favorites retains the exact Beta choice');
         await type('no match');assert.match(dom.window.document.body.textContent!,/No models match/);
+        assert.equal(document.querySelector('[role="dialog"]')!.className,dialogClasses,'empty search preserves the dialog geometry contract');
         const modelTrigger=button('Choose model');
         // Radix restores focus in its deferred unmount-autofocus callback. Observe
         // the real exact-node focus event after React commits the dialog closure;
