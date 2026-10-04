@@ -294,3 +294,21 @@ test('deferred Fleet bootstrap UI keeps pending and failed connections honest wi
   }finally{await view.dispose();}
  }
 });
+
+
+test('new adapter uses collapsed shared surface and literal goal status has no creation effect',async()=>{
+ const view=await mount();try{
+  assert.equal(document.querySelectorAll('.composer-surface-footer').length,1);
+  assert.equal(document.querySelector('[aria-label="Composer configuration"]'),null);
+  const input=document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!;
+  await act(async()=>{Object.getOwnPropertyDescriptor(view.dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'/goal');input.dispatchEvent(new view.dom.window.Event('input',{bubbles:true}));});
+  await act(async()=>input.dispatchEvent(new view.dom.window.KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true})));
+  assert.equal(view.commands.some(c=>c.op==='start_account'),false);
+  await act(async()=>input.dispatchEvent(new view.dom.window.KeyboardEvent('keydown',{key:'Enter',isComposing:true,bubbles:true})));
+  assert.equal(view.commands.some(c=>c.op==='start_account'),false);
+  await act(async()=>input.dispatchEvent(new view.dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true})));
+  assert.ok(document.querySelector('[aria-label="Goal review"]'));
+  assert.equal(document.querySelector('[role="dialog"]'),null);
+  assert.equal(view.commands.some(c=>c.op==='start_account'),false);
+ }finally{await view.dispose();}
+});
