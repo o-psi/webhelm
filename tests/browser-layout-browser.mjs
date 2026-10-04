@@ -107,7 +107,7 @@ try {
         check(await page.getByRole('menuitem',{name:'Manage Vessels'}).isVisible(),'mobile: Vessel menu did not open inside the sheet');
         await page.keyboard.press('Escape');
         await page.getByRole('button',{name:'Account and appearance'}).click();
-        await page.getByRole('menuitem',{name:'Appearance'}).click();
+        await page.getByRole('menuitem',{name:'Appearance settings',exact:true}).click();
         await page.getByRole('button',{name:'dark',exact:true}).click();
         check(await page.locator('html.dark').count()===1,'mobile: dark appearance did not apply');
         await page.getByRole('button',{name:'Close settings'}).click();
@@ -119,7 +119,7 @@ try {
         check(Math.abs(lightness(selectTheme.actual)-lightness(selectTheme.expected))<0.02,`mobile: native select foreground ${JSON.stringify(selectTheme)}`);
         await page.screenshot({path:`${output}/${label}-${viewport.width}-dark-empty.png`});
         await page.getByRole('button',{name:'Account and appearance'}).click();
-        await page.getByRole('menuitem',{name:'Appearance'}).click();
+        await page.getByRole('menuitem',{name:'Appearance settings',exact:true}).click();
         await page.getByRole('button',{name:'light',exact:true}).click();
         await page.getByRole('button',{name:'Close settings'}).click();
         await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
@@ -159,7 +159,7 @@ try {
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.getByRole('button',{name:'Account and appearance'}).click();
-    await page.getByRole('menuitem',{name:'Appearance'}).click();
+    await page.getByRole('menuitem',{name:'Appearance settings',exact:true}).click();
     await page.getByRole('button',{name:'dark',exact:true}).click();
     await page.getByRole('button',{name:'Close settings'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
@@ -177,7 +177,7 @@ try {
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.getByRole('button',{name:'Account and appearance'}).click();
-    await page.getByRole('menuitem',{name:'Appearance'}).click();
+    await page.getByRole('menuitem',{name:'Appearance settings',exact:true}).click();
     await page.getByRole('button',{name:'light',exact:true}).click();
     await page.getByRole('button',{name:'Close settings'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
