@@ -49,3 +49,13 @@ test('scope memory is bounded and an interrupted generation is replaced', () => 
     const state = reducer.accept({kind:'complete',fence:nextFence,sequence:0,cursor:90});
     assert.equal(state.entities.size,0);
 });
+
+test('presentation is derived only from canonical typed entities',async()=>{
+    const {entityPresentation}=await import('../resources/js/event-initialization.js');
+    const scope={fence,cursor:40,entities:new Map([['session:session',{session_id:'s',revision:9,model:'m'}],['message:message:1',{message_index:1,content:'b'}],['message:message:0',{message_index:0,content:'a'}],['goal:goal',{revision:3,goal:null}]])};
+    const view=entityPresentation(scope);
+    assert.deepEqual(view.messages.map(message=>message.content),['a','b']);
+    assert.equal(view.goal.revision,3);
+    assert.equal(view.observation_cursor,40);
+    assert.throws(()=>entityPresentation({...scope,fence:{...fence,session_id:'other'}}));
+});
