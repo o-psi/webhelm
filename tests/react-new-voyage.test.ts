@@ -7,7 +7,7 @@ import {completeNewVoyage} from '../resources/react/new-voyage-delivery';
 
 const binding={account_id:'account',connection_id:'provider',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 
-async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false,unknownModels=false}:{unknownModels?:boolean;accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
+async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false,unknownModels=false,reorderedProfile=false}:{reorderedProfile?:boolean;unknownModels?:boolean;accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
     const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test',pretendToBeVisual:true});
     // Radix focus traversal and Floating UI must see constructors from this window.
     const globals:Record<string,unknown>={window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,
@@ -26,7 +26,7 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
         let result:any;
         switch(command.op){
             case 'capabilities':result={vessel_id:'v',scope:scoped?'scoped':'owner',rights:['create','account_use','execute'],features:['execution_profiles'],workspaces:revokeWorkspace&&++capabilityReads>1?[]:[{path:'/work',name:'Work'}]};break;
-            case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
+            case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:reorderedProfile?{transport:binding.transport,connection_revision:binding.connection_revision,identity_generation:binding.identity_generation,connection_id:binding.connection_id,account_id:binding.account_id}:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
             case 'accounts':accountReads++;result={accounts:[{id:'account',connection_id:'provider',identity_generation:accountChanged&&accountReads>1?2:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
             case 'account_models':if(failModels)throw Error('Catalogue unavailable');result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
             case 'start_account':if(uncertain)return {protocol:1,outcome_unknown:true,result:null};result={session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'};break;
@@ -239,17 +239,19 @@ test('failed draft catalogue is inspectable and retry is read-only before succes
 });
 
 test('account review resolves reordered exact binding to the observed label and selected radio without effects',async()=>{
-    const view=await mount();
+    const view=await mount({reorderedProfile:true});
     try{
         await act(async()=>view.button('Review account').click());
         const section=document.querySelector<HTMLElement>('[aria-label="Review composer account"]')!;
-        const trigger=section.querySelector<HTMLButtonElement>('button[aria-label="Account: Account"]')!;
+        const expectedLabel='Account · Provider · chatgpt oauth';
+        const trigger=section.querySelector<HTMLButtonElement>(`button[aria-label="Account: ${expectedLabel}"]`)!;
         assert.ok(trigger,'normalized catalogue binding order must not leak raw JSON');
         assert.equal(section.querySelector<HTMLButtonElement>('button[aria-label="Model: Everyday model"]')?.disabled,false);
         await act(async()=>trigger.dispatchEvent(new view.dom.window.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})));
         await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30));});
         const selected=document.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]');
-        assert.equal(selected?.textContent?.trim(),'Account');
+        assert.equal(selected?.textContent?.trim(),expectedLabel);
+        assert.doesNotMatch(trigger.textContent||'',/account_id|identity_generation|connection_revision/);
         assert.equal(view.commands.some(command=>['start_account','submit','save_profile','set_account_inference'].includes(command.op)),false);
     }finally{await view.dispose();}
 });
