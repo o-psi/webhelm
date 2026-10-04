@@ -54,7 +54,10 @@ import {JSDOM} from 'jsdom';
         assert.equal(dom.window.document.querySelector('[role="menuitemradio"][aria-checked="true"]')?.textContent,'Dark');
     } finally {
         await React.act(async()=>root.unmount());
-        for(const [key,descriptor] of saved){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete (globalThis as any)[key];}
+        // Radix defers unmount-autofocus dispatch. Drain it while Event and
+        // document still belong to this JSDOM realm, including React work.
+        await React.act(async()=>{await new Promise(resolve=>setTimeout(resolve,20));});
         dom.window.close();
+        for(const [key,descriptor] of saved){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete (globalThis as any)[key];}
     }
 });
