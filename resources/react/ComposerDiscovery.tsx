@@ -6,7 +6,7 @@ import {Input} from './components/ui/input';
 import type {Tab,Workspace} from './workspace';
 import {parseDiscovery,parseFileDiscovery,type Catalogue,type FileCatalogue} from './composer-discovery';
 
-export function ComposerDiscovery({tab,workspace,onSettings,onAttach,triggerOpen=false,onTriggerHandled,focusComposer}:{tab:Tab;workspace:Workspace;onSettings:()=>void;onAttach:()=>void;triggerOpen?:boolean;onTriggerHandled?:()=>void;focusComposer?:()=>void}){
+export function ComposerDiscovery({tab,workspace,onSettings,onAttach,triggerOpen=false,hideTrigger=false,onTriggerHandled,focusComposer}:{tab:Tab;workspace:Workspace;onSettings:()=>void;onAttach:()=>void;triggerOpen?:boolean;hideTrigger?:boolean;onTriggerHandled?:()=>void;focusComposer?:()=>void}){
     const [open,setOpen]=useState(false),[query,setQuery]=useState(''),[refresh,setRefresh]=useState(0);
     const shortcutFocus=useRef(false);
     const onTriggerHandledRef=useRef(onTriggerHandled);
@@ -60,7 +60,7 @@ export function ComposerDiscovery({tab,workspace,onSettings,onAttach,triggerOpen
             choices[event.key==='ArrowDown'?(index+1)%choices.length:(index+choices.length-1)%choices.length].focus();
         }else if(event.key==='Enter'&&event.currentTarget instanceof HTMLInputElement&&!event.nativeEvent.isComposing){event.preventDefault();firstChoice()?.click();}
     };
-    return <Dialog open={open} onOpenChange={next=>next?setOpen(true):close()}><DialogTrigger asChild><Button variant="ghost" type="button" aria-label="Discover actions, tools, skills, and files" title="Discover actions, tools, skills, and files"><CommandIcon aria-hidden="true"/></Button></DialogTrigger>
+    return <Dialog open={open} onOpenChange={next=>next?setOpen(true):close()}>{!hideTrigger&&<DialogTrigger asChild><Button variant="ghost" type="button" aria-label="Discover actions, tools, skills, and files" title="Discover actions, tools, skills, and files"><CommandIcon aria-hidden="true"/></Button></DialogTrigger>}
         <DialogContent className="max-h-[85dvh] overflow-hidden sm:max-w-lg" onCloseAutoFocus={event=>{if(shortcutFocus.current){event.preventDefault();shortcutFocus.current=false;focusComposer?.();}}}><DialogHeader><DialogTitle>Composer actions</DialogTitle><DialogDescription>Choose an action or insert a request using tools, skills, and workspace files advertised by this Voyage. Selection never sends the message.</DialogDescription></DialogHeader>
             <Input aria-label="Search actions, tools, skills, and files" placeholder="Search actions, tools, skills, and files…" value={query} onChange={event=>setQuery(event.target.value)} onKeyDown={navigate}/>
             <div className="max-h-[50dvh] overflow-y-auto" aria-label="Composer choices">
