@@ -237,3 +237,31 @@ test('failed draft catalogue is inspectable and retry is read-only before succes
         assert.match(document.body.textContent||'',/workspace is no longer permitted/);
     }finally{await view.dispose();}
 });
+
+test('account review resolves reordered exact binding to the observed label and selected radio without effects',async()=>{
+    const view=await mount();
+    try{
+        await act(async()=>view.button('Review account').click());
+        const section=document.querySelector<HTMLElement>('[aria-label="Review composer account"]')!;
+        const trigger=section.querySelector<HTMLButtonElement>('button[aria-label="Account: Account"]')!;
+        assert.ok(trigger,'normalized catalogue binding order must not leak raw JSON');
+        assert.equal(section.querySelector<HTMLButtonElement>('button[aria-label="Model: Everyday model"]')?.disabled,false);
+        await act(async()=>trigger.dispatchEvent(new view.dom.window.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})));
+        await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30));});
+        const selected=document.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]');
+        assert.equal(selected?.textContent?.trim(),'Account');
+        assert.equal(view.commands.some(command=>['start_account','submit','save_profile','set_account_inference'].includes(command.op)),false);
+    }finally{await view.dispose();}
+});
+
+test('account presentation never matches stale generations, revisions or transport',async()=>{
+    const {reviewedAccountOption}=await import('../resources/react/ComposerAccountReview');
+    const reordered={transport:binding.transport,connection_revision:binding.connection_revision,identity_generation:binding.identity_generation,connection_id:binding.connection_id,account_id:binding.account_id};
+    const accounts=[{binding:reordered,label:'Observed account',ready:true}];
+    assert.equal(reviewedAccountOption(accounts,binding).selected,accounts[0]);
+    assert.equal(reviewedAccountOption(accounts,binding).value,JSON.stringify(reordered));
+    for(const changed of [{identity_generation:2},{connection_revision:2},{transport:'openai_responses'}]){
+        const option=reviewedAccountOption(accounts,{...binding,...changed});
+        assert.equal(option.selected,undefined);assert.equal(option.value,'');
+    }
+});
