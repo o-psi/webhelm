@@ -345,6 +345,8 @@ try {
         await page.evaluate(theme=>document.documentElement.classList.toggle('dark',theme==='dark'),theme);
         const visibleGeometry=await page.evaluate(()=>[...document.querySelectorAll('.conversation:not([hidden]) .conversation-header,.conversation:not([hidden]) .tool-group-heading')].map(el=>{const r=el.getBoundingClientRect();return {width:r.width,left:r.left,right:r.right,text:el.textContent};}));
         check(visibleGeometry.every(r=>r.width>0&&r.left>=0&&r.right<=viewport.width),`${label}/${viewport.width}/${theme}: header or summary exceeds viewport`);
+        check(await conversation.locator('.tool-group-heading').filter({hasText:'returned'}).count()>0,`${label}/${theme}: normal tool outcome missing`);
+        check(await conversation.locator('.tool-group-heading').filter({hasText:'unsuccessful'}).count()>0,`${label}/${theme}: warning outcome missing`);
         await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${viewport.height}-${theme}-summary-header.png`});
     }
 
