@@ -49,6 +49,7 @@ test('profile navigation preserves unsaved name/model and keeps the current step
         await view.fill('Profile name','My draft');
         await view.click('Model');await view.fill('Search models','Other');
         assert.equal(modelButtons().length,1,'model search filters the actual choices');
+        assert.ok(document.querySelector('.profile-model-step .profile-model-search'),'model step has its own stable search anchor');
         await act(async()=>modelButtons()[0].click());
         await view.click('Provider account');await view.click('Back');
         assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'My draft');

@@ -162,6 +162,14 @@ try {
     check(await page.getByText('Needs confirmation').count()===0,`${label}: pending pairing panel is still shown`);
     await page.waitForTimeout(180);
     await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-vessel-overview.png`});
+    await page.getByRole('button',{name:'Add Vessel',exact:true}).click();
+    await page.getByRole('button',{name:'Existing credential (advanced)',exact:true}).click();
+    const advancedBounds=await page.locator('.connections-method').evaluate(strip=>{
+        const r=strip.getBoundingClientRect(),p=strip.querySelector('[data-slot="collapsible-content"]').getBoundingClientRect();
+        return {left:r.left,right:r.right,paragraphLeft:p.left,paragraphRight:p.right,client:strip.clientWidth,scroll:strip.scrollWidth,scrollLeft:strip.scrollLeft};
+    });
+    check(advancedBounds.scroll<=advancedBounds.client+1&&advancedBounds.scrollLeft===0&&Math.abs(advancedBounds.left-advancedBounds.paragraphLeft)<1&&Math.abs(advancedBounds.right-advancedBounds.paragraphRight)<1,`${label}: advanced explanation is not contained across the option strip ${JSON.stringify(advancedBounds)}`);
+    await page.getByRole('button',{name:'Back',exact:true}).click();
     await vesselCard.getByRole('button',{name:'View details for Fixture Vessel'}).click();
     const detailBounds=await page.locator('.connections-dialog').evaluate(dialog=>{
         const owner=dialog.getBoundingClientRect();
@@ -506,7 +514,14 @@ try {
     await page.getByRole('menuitem',{name:'Edit',exact:true}).click();
     await settings.getByRole('textbox',{name:'Profile name',exact:true}).fill('Unsaved fixture name');
     await settings.getByRole('button',{name:/^Model/}).click();
-    await settings.getByRole('searchbox',{name:'Search models',exact:true}).fill('Other');
+    const profileSearch=settings.getByRole('searchbox',{name:'Search models',exact:true});
+    await profileSearch.fill('Other');const populatedSearch=await profileSearch.boundingBox();
+    await profileSearch.fill('unmatched-fixture');const emptySearch=await profileSearch.boundingBox();
+    check(Math.abs(populatedSearch.y-emptySearch.y)<1,`${label}: profile search moved on empty results`);
+    await profileSearch.fill('');await profileSearch.hover();await page.mouse.wheel(0,350);
+    const scrolledSearch=await profileSearch.boundingBox();
+    check(scrolledSearch.y>=0&&Math.abs(scrolledSearch.y-populatedSearch.y)<12,`${label}: profile search leaves viewport during wheel scroll`);
+    await profileSearch.fill('Other');
     await settings.getByRole('button',{name:/Other model/}).click();
     await settings.getByRole('button',{name:/Reasoning & service/}).click();
     const reasoning=settings.getByRole('slider',{name:'Reasoning',exact:true});

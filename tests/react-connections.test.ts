@@ -173,3 +173,11 @@ test('maintenance handles old, offline and reconnected Vessels without crossing 
         dom.window.close();
     }
 });
+
+
+test('advanced explanation is a full-strip sibling without changing import behavior',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(new URL('../resources/react/Connections.tsx',import.meta.url),'utf8');
+ assert.match(source,/<Collapsible className="contents" open=\{method==='credential'\}/);
+ assert.match(source,/<CollapsibleContent className="w-full min-w-0"><p>Import an existing grant/);
+});
