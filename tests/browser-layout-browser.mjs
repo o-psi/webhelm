@@ -550,7 +550,8 @@ try {
             return {left:r.left,right:r.right,buttons:[...dialog.querySelectorAll('.setup-footer-actions button')].map(button=>{const b=button.getBoundingClientRect();return {left:b.left,right:b.right,width:b.width,text:button.textContent};})};
         });
         check(footerGeometry.buttons.length===2&&footerGeometry.buttons.every(b=>b.width>0&&b.left>=footerGeometry.left&&b.right<=footerGeometry.right),`${label}/${viewport.width}/${editorMode}: profile footer actions extend outside dialog ${JSON.stringify(footerGeometry)}`);
-        if(editorMode==='create')check(await settings.getByRole('button',{name:'Save profile',exact:true}).isDisabled(),`${label}: blank new profile permits Save`);
+        check(await settings.getByRole('button',{name:'Save profile',exact:true}).count()===1,`${label}: stock Save action missing`);
+        check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length)===settingsWritesBefore,`${label}: footer inspection applied settings`);
         await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${editorMode}-profile-footer.png`});
         await settings.getByRole('button',{name:'Close settings',exact:true}).click();
     }
