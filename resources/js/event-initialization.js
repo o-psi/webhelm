@@ -5,7 +5,7 @@ const kinds = new Set(['session','run','message','decision','command_outcome','l
 const sameFence = (a,b) => a && b && ['generation','session_id','incarnation'].every(key => typeof a[key] === 'string' && a[key].length > 0 && a[key] === b[key]);
 export class EventInitialization {
     constructor() { this.reset(); }
-    reset() { this.fence = null; this.cursor = null; this.sequence = 0; this.bytes = 0; this.entities = new Map(); }
+    reset() { this.fence = null; this.cursor = null; this.sequence = 0; this.bytes = 0; this.entities = new Map(); this.chunks = new Map(); }
     accept(event) {
         if (event.kind === 'begin') {
             if (!sameFence(event.fence,event.fence) || !Number.isSafeInteger(event.cursor) || event.cursor < 0) throw new Error('Invalid initialization');
@@ -21,9 +21,18 @@ export class EventInitialization {
             const bytes = new TextEncoder().encode(value).length;
             if (this.bytes + bytes > 8 * 1024 * 1024) throw new Error('Initialization requires paged scopes');
             this.bytes += bytes;
-            this.entities.set(`${event.entity_kind}:${event.entity_id}`,JSON.parse(value)); this.sequence++; return null;
+            if(event.value?.encoding==='entity_json_utf8') {
+                const chunk=event.value,key=`${chunk.entity_kind}:${chunk.entity_id}`;
+                if(!kinds.has(chunk.entity_kind)||!Number.isSafeInteger(chunk.total_bytes)||chunk.total_bytes>8*1024*1024||typeof chunk.text!=='string')throw new Error('Invalid entity chunk');
+                const buffer=this.chunks.get(key)||{total:chunk.total_bytes,text:'',bytes:0};
+                const size=new TextEncoder().encode(chunk.text).length;
+                if(buffer.total!==chunk.total_bytes||buffer.bytes!==chunk.offset||buffer.bytes+size>buffer.total)throw new Error('Entity chunk offset mismatch');
+                buffer.text+=chunk.text;buffer.bytes+=size;this.chunks.set(key,buffer);
+                if(buffer.bytes===buffer.total){this.entities.set(key,JSON.parse(buffer.text));this.chunks.delete(key);}
+            } else this.entities.set(`${event.entity_kind}:${event.entity_id}`,JSON.parse(value)); this.sequence++; return null;
         }
         if (event.kind !== 'complete' || event.cursor !== this.cursor) throw new Error('Initialization barrier mismatch');
+        if(this.chunks.size)throw new Error('Incomplete entity chunks');
         const result = {fence:{...this.fence},cursor:this.cursor,entities:new Map(this.entities)};
         this.reset(); return result;
     }
