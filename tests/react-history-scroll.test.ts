@@ -104,6 +104,8 @@ test('uncertain earlier message stays inspectable while a fresh composer can sen
     const workspace:any={actionable:()=>true,permitted:()=>true,pending:()=>[{op:'submit',command_id:id}],reconcile:async()=>{checks++;}};
     try{
         await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:true,onSettings:()=>{},onRecover:()=>{},connection:{client:{}},voyage:{}})));
+        assert.equal(dom.window.document.querySelector('.composer-feedback'),null,'technical recovery stays absent until requested');
+        await React.act(async()=>[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Review pending work')!.click());
         const feedback=dom.window.document.querySelector('.composer-feedback')!;
         assert.match(feedback.querySelector('p')!.textContent!,/You can keep chatting/);
         assert.doesNotMatch(feedback.querySelector('p')!.textContent!,new RegExp(id));
@@ -126,6 +128,8 @@ test('unreadable command journal still explains why sending is blocked',async()=
     const workspace:any={actionable:()=>false,permitted:()=>false,pending:()=>{throw new Error('corrupt journal');}};
     try{
         await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:true,onSettings:()=>{},onRecover:()=>{}})));
+        assert.equal(dom.window.document.querySelector('.composer-feedback'),null);
+        await React.act(async()=>[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Review pending work')!.click());
         assert.match(dom.window.document.querySelector('.composer-feedback')!.textContent!,/Recovery record is unavailable/);
         assert.equal(dom.window.document.querySelector<HTMLButtonElement>('.composer [aria-label="Send"]')?.disabled,true);
         assert.ok([...dom.window.document.querySelectorAll('button')].some(button=>button.textContent==='Continue in a new voyage'));
