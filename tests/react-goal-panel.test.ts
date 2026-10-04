@@ -27,6 +27,12 @@ test('Goal dialog requires replacement consent, retains a stale draft, escapes t
         assert.equal(dialog.querySelector('img,script,b'),null);
         assert.match(dialog.textContent!,/<script>bad\(\)<\/script>/);assert.doesNotMatch(dialog.textContent!,/\u202e/);
         await click('Replace goal');
+        const scrollBody=dom.window.document.querySelector('[data-goal-scroll-body]')!;
+        const footer=dom.window.document.querySelector('[data-slot=dialog-footer]')!;
+        assert.equal(scrollBody.contains(footer),false,'Goal actions stay outside the scrolling body');
+        assert.equal(scrollBody.contains(dom.window.document.querySelector('[data-slot=dialog-header]')),false,'Goal heading stays outside the scrolling body');
+        assert.match(scrollBody.className,/overflow-y-auto/);
+        assert.match(footer.className,/shrink-0/);
         const input=dom.window.document.querySelector('textarea')!;
         await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'New private objective');input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
         const checkboxes=[...dom.window.document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
