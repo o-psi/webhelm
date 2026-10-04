@@ -79,7 +79,7 @@ export function Composer({tab, workspace, onSettings, onRecover, connection, voy
     const canStop = tab && activeRun && workspace.actionable(tab) && workspace.permitted(tab,'cancel');
     const [goalReview,setGoalReview]=useState<ComposerGoalReview|null>(null);
     useEffect(()=>setGoalReview(null),[tab?.key,tab?.incarnation]);
-    const send = () => { if(tab&&enabled)void dispatchComposerCommand(workspace,tab.key,tab.draft,{onGoalReview:setGoalReview}).then(result=>{if(!result.handled)void workspace.act(tab.key,sendOp);}).catch(reason=>{tab.notice=reason.message;workspace.changed();}); };
+    const send = () => { if(tab&&enabled)void dispatchComposerCommand(workspace,tab.key,tab.draft,{onGoalReview:setGoalReview}).then(result=>{if(!result.handled)void workspace.act(tab.key,sendOp);else if(result.applied){workspace.draft(tab.key,'');tab.notice='Goal saved paused.';workspace.changed();}}).catch(reason=>{tab.notice=reason.message;workspace.changed();}); };
     const pendingState=(()=>{try{return {entries:tab?workspace.pending(tab):[],error:false};}catch{return {entries:[],error:true};}})();
     const pendingEntries=pendingState.entries;
     const blocked=pendingEntries.length>0||pendingState.error;
