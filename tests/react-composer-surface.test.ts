@@ -6,11 +6,11 @@ import {ComposerSurface} from '../resources/react/ComposerSurface';
 import {InlineGoalControls} from '../resources/react/InlineGoalControls';
 
 test('new and existing adapters share one collapsed surface without default receipt/configuration boilerplate',()=>{
- const render=()=>renderToStaticMarkup(React.createElement(ComposerSurface,{configuration:React.createElement('p',null,'Private configuration'),recovery:React.createElement('p',null,'Receipt details'),toolbar:React.createElement('button',{type:'submit'},'Send')},React.createElement('textarea',{'aria-label':'Message'})));
+ const render=()=>renderToStaticMarkup(React.createElement(ComposerSurface,{configuration:React.createElement('p',null,'Private configuration'),recovery:React.createElement('p',null,'Receipt details'),onSend:()=>{} ,sendDisabled:false},React.createElement('textarea',{'aria-label':'Message'})));
  assert.equal(render(),render());
  const html=render();assert.match(html,/Configure/);assert.match(html,/Review pending work/);
  assert.doesNotMatch(html,/Private configuration|Receipt details|role="dialog"/);
- assert.equal((html.match(/type="submit"/g)||[]).length,1);
+ assert.equal((html.match(/aria-label="Send"/g)||[]).length,1);
 });
 test('paused goal review has explicit finite-limit consent and never applies during render',()=>{
  let effects=0;
