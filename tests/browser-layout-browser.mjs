@@ -489,7 +489,9 @@ try {
     const settingsWritesBefore=await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length);
     await conversation.getByRole('button',{name:/^Account:/}).click();
     const settings=page.locator('.profile-setup');
-    await settings.getByRole('button',{name:/Provider account/}).click();
+    await settings.getByRole('button',{name:/^Profile/}).click();
+    await settings.getByRole('button',{name:'Actions for Fixture profile',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Edit',exact:true}).click();
     await settings.getByRole('button',{name:'Account usage',exact:true}).click();
     await page.evaluate(()=>{window.fixtureUsageDeferred=true;});
     await settings.getByRole('button',{name:'Refresh usage',exact:true}).click();
@@ -499,6 +501,37 @@ try {
     await settings.getByRole('button',{name:'Close settings',exact:true}).click();
     await page.evaluate(()=>window.releaseFixtureUsage());
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length)===settingsWritesBefore,`${label}: dismissing usage read applied settings`);
+    await conversation.getByRole('button',{name:/^Account:/}).click();
+    await settings.getByRole('button',{name:/^Profile/}).click();
+    await settings.getByRole('button',{name:'Actions for Fixture profile',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Edit',exact:true}).click();
+    await settings.getByRole('textbox',{name:'Profile name',exact:true}).fill('Unsaved fixture name');
+    await settings.getByRole('button',{name:/^Model/}).click();
+    await settings.getByRole('textbox',{name:'Search models',exact:true}).fill('Other');
+    await settings.getByRole('button',{name:/Other model/}).click();
+    await settings.getByRole('button',{name:/Reasoning & service/}).click();
+    const reasoning=settings.getByRole('slider',{name:'Reasoning',exact:true});
+    check(await reasoning.getAttribute('aria-valuetext')==='Provider default',`${label}: reasoning exposes numeric rather than semantic default`);
+    await settings.getByRole('button',{name:'Back',exact:true}).click();
+    check(await settings.getByRole('textbox',{name:'Profile name',exact:true}).inputValue()==='Unsaved fixture name',`${label}: navigation lost unsaved profile name`);
+    check(await settings.getByRole('button',{name:/^Model/}).textContent().then(text=>text.includes('Other model')),`${label}: navigation lost unsaved model`);
+    await settings.getByRole('button',{name:'Account usage',exact:true}).click();
+    await page.evaluate(()=>{window.fixtureUsageDeferred=true;});
+    await settings.getByRole('button',{name:'Refresh usage',exact:true}).click();
+    await settings.getByText('Loading usage…',{exact:true}).waitFor();
+    await settings.getByRole('button',{name:'Back',exact:true}).click();
+    check(await settings.getByRole('textbox',{name:'Profile name',exact:true}).inputValue()==='Unsaved fixture name',`${label}: pending usage Back lost draft`);
+    await page.evaluate(()=>window.releaseFixtureUsage());
+    for(const theme of ['light','dark']){
+        await page.evaluate(theme=>document.documentElement.classList.toggle('dark',theme==='dark'),theme);
+        const bounds=await settings.boundingBox();
+        check(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=viewport.width&&bounds.y+bounds.height<=viewport.height,`${label}/${theme}: profile editor clips viewport`);
+        const close=settings.getByRole('button',{name:'Close settings',exact:true});await close.focus();
+        check(await close.evaluate(el=>el===document.activeElement),`${label}/${theme}: profile Close unreachable`);
+        await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${theme}-unsaved-profile.png`});
+    }
+    await settings.getByRole('button',{name:'Close settings',exact:true}).click();
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length)===settingsWritesBefore,`${label}: unsaved navigation applied changes`);
     // Explicit user close, not malformed initial stopped attach, exercises lifecycle.
     await page.getByRole('button',{name:'Browser',exact:true}).click();
     const viewer=page.locator('.host-browser-viewer');
