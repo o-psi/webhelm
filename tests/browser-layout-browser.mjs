@@ -64,6 +64,8 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
+                if(c.op==='account_models'&&window.fixtureCatalogueMode==='error'){emit({type:'reply',request_id:f.request_id,response:{protocol:1,outcome_unknown:false,error:'Synthetic catalogue unavailable'}});return;}
+                if(c.op==='account_models'&&window.fixtureCatalogueMode==='loading'){window.releaseFixtureCatalogue=()=>{window.fixtureCatalogueMode='normal';this.send(text);};return;}
                 if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','verified_user_updates','workspace_changes','workspace_file','skills_catalog','workspace_file_catalog'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,channel:c.channel,release_id:'a'.repeat(64),version:c.channel==='nightly'?'1.0.3-nightly.20260928.1.1':'1.0.2',expires_at:Math.floor(Date.now()/1000)+3600,description:'Verified development build from fixture source',services:['vessel.service']};
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
@@ -201,6 +203,8 @@ try {
     check(await goalView.getByText('Verify the synthetic output <script>plain text</script>',{exact:true}).isVisible(),`${label}: canonical Goal objective missing`);
     check(await goalView.locator('script').count()===0,`${label}: Goal objective executed as HTML`);
     await goalView.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
+    const goalBounds=await goalView.boundingBox();
+    check(goalBounds.width>0&&goalBounds.x>=0&&goalBounds.y>=0&&goalBounds.x+goalBounds.width<=viewport.width&&goalBounds.y+goalBounds.height<=viewport.height,`${label}: short viewport clips Goal dialog`);
     await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-goal-state.png`});
     await page.keyboard.press('Escape');
     check(await page.getByRole('button',{name:'Goal · Paused',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Goal close lost focus`);
