@@ -21,7 +21,7 @@ test('React shell renders safely without Livewire and uses the production consol
         assert.match(output.querySelector('main')?.textContent || '', /What should we work on\?/);
         assert.ok(output.querySelector('#voyage-vessel-filter'));
         assert.equal(output.querySelectorAll('main form[aria-label="New voyage composer"]').length, 1);
-        assert.equal(output.querySelector('main button[type="submit"]')?.textContent, 'Send');
+        assert.equal(output.querySelector('main button[aria-label="Send"]')?.textContent, 'Send');
         assert.ok(output.querySelector('[aria-label="Open voyage navigation"]'));
         assert.ok(output.querySelector('[aria-label="Account and appearance"]'));
         assert.equal(output.querySelector('form')?.getAttribute('method'), 'post');

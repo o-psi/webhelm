@@ -93,6 +93,15 @@ test('actual composer preserves keyboard, run transitions and command safety gat
         await keyboard();
         assert.ok(dom.window.document.querySelector('[aria-label="Goal review"]'),'bare goal status is nonmodal while message receipt is pending');
         assert.equal(dom.window.document.querySelector('[role="dialog"]'),null);assert.equal(effects.length,beforeGoal,'goal status never dispatches inference');
+        pending=[];tab.draft='/goal Build';tab.notice='';
+        let finish!: (value:boolean)=>void;
+        workspace.goalUpdate=async()=>await new Promise<boolean>(resolve=>{finish=resolve;});
+        workspace.draft=(key,text)=>{assert.equal(key,tab.key);tab.draft=text;};workspace.changed=()=>{};
+        await render();await keyboard();
+        tab.draft='New text typed while metadata is pending';
+        await React.act(async()=>{finish(true);await Promise.resolve();});
+        assert.equal(tab.draft,'New text typed while metadata is pending','confirmed goal cannot erase newer user input');
+        assert.equal(effects.length,beforeGoal,'definition remains metadata only');
     }finally{
         await React.act(async()=>root.unmount());
         for(const key of keys){const descriptor=saved.get(key);if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete (globalThis as any)[key];}
