@@ -75,6 +75,11 @@ export class Workspace {
             return known===undefined||known===payload;
         });
     }
+    private pruneMessagePayloads(){
+        const live=new Set<string>();
+        for(const tab of this.tabs.values())for(const entry of this.pending(tab))live.add(JSON.stringify([tab.key,tab.incarnation,entry.command_id]));
+        for(const key of this.messagePayloads.keys())if(!live.has(key))this.messagePayloads.delete(key);
+    }
     pending(tab: Tab) { return this.connections().get(tab.vessel)?.journal?.entries().filter((entry: any) => entry.session_id === tab.session) || []; }
     actionable(tab: Tab, op = '') {
         try {
@@ -244,6 +249,8 @@ export class Workspace {
             if(this.closed||this.connections().get(tab.vessel)?.client!==client||tab.incarnation!==incarnation||tab.snapshot.revision!==origin.revision)throw new Error('Voyage changed before submission. Nothing submitted.');
             stage = 'submit';
             connection.journal.prepare(command.command);
+            this.pruneMessagePayloads();
+            if(['submit','submit_content','steer'].includes(op))this.messagePayloads.set(JSON.stringify([tab.key,incarnation,command.command.command_id]),messageFingerprint);
             const response = await client.exchange(command);
             const basicKnown = resolved(response, command.command.command_id, tab.session);
             const goalKnown = op!=='goal_update'||Boolean(response.error)||notApplied(receiptStatus(response))||goalReceipt(response.result?.result,{state:origin.goal,action:fields.action as GoalAction,command:command.command.command_id});
@@ -267,7 +274,7 @@ export class Workspace {
                 tab.notice = uncertainNotice(op);
             }
         }
-        finally { tab.busy = false; if (stage === 'submit') tab.stale = true; this.changed(); await this.refresh(key); }
+        finally { this.pruneMessagePayloads(); tab.busy = false; if (stage === 'submit') tab.stale = true; this.changed(); await this.refresh(key); }
     }
     async inspect(key:string,scope:InspectionScope,path:string){
         const tab=this.tabs.get(key);
@@ -308,7 +315,7 @@ export class Workspace {
                 tab.pictures.push(picture);this.saveDraft(tab);
             }
         } catch (error) { success = false; tab.notice = error instanceof Error ? error.message : 'Picture unavailable.'; }
-        finally { tab.busy = false; this.changed(); }
+        finally { this.pruneMessagePayloads(); tab.busy = false; this.changed(); }
         return success;
     }
     removePicture(key: string, id: string) {
@@ -377,7 +384,7 @@ export class Workspace {
             if (tab.snapshot !== snapshot) throw new Error('History changed. Refresh before loading earlier messages.');
             tab.snapshot = {...snapshot, messages: [...messages, ...snapshot.messages], message_offset: start};
         } catch { /* Automatic history loading retries after a short pause; keep action notices intact. */ }
-        finally { tab.busy = false; this.changed(); }
+        finally { this.pruneMessagePayloads(); tab.busy = false; this.changed(); }
     }
     async expand(key: string, index: number) {
         const tab = this.tabs.get(key); if (!tab || !this.actionable(tab)) return;
@@ -394,7 +401,7 @@ export class Workspace {
             const expanded = {...JSON.parse(text), message_index: index, projection_truncated: false};
             tab.snapshot = {...tab.snapshot, messages: tab.snapshot.messages.map((message: any) => message.message_index === index ? expanded : message)};
         } catch (error) { tab.notice = error instanceof Error ? error.message : 'Message unavailable.'; }
-        finally { tab.busy = false; this.changed(); }
+        finally { this.pruneMessagePayloads(); tab.busy = false; this.changed(); }
     }
     async reconcile(key: string) {
         const tab = this.tabs.get(key); if (!tab || tab.busy) return;
@@ -417,7 +424,7 @@ export class Workspace {
             const pending=this.pending(tab);
             tab.notice=pending.length===1&&tab.receiptStates[pending[0].command_id]==='unknown_after_restart'?`The Vessel cannot confirm whether your ${actionName(pending[0].op)} was applied after a restart. Review this conversation before sending similar work in a new voyage.`:pending.length===1?uncertainNotice(pending[0].op):pending.length>1?`We can’t confirm ${pending.length} actions yet. Check the conversation and receipts before trying again.`:lastSettled?settledNotice(lastSettled.op,lastSettled.status):tab.notice;
         } catch { tab.notice = 'We can’t check the receipt right now. Check the current voyage before trying again.'; }
-        finally { tab.busy = false; this.changed(); }
+        finally { this.pruneMessagePayloads(); tab.busy = false; this.changed(); }
     }
     async observePending(key: string) {
         const tab = this.tabs.get(key);
@@ -428,5 +435,5 @@ export class Workspace {
         await this.reconcile(key);
         for (const entry of entries) if (!this.pending(tab).some((pending: any) => pending.command_id === entry.command_id)) this.autoReceiptReads.delete(entry.command_id);
     }
-    close() { this.tabs.forEach(tab => tab.pictures.forEach(picture => URL.revokeObjectURL(picture.url))); this.closed = true; this.streams.forEach(stream => stream.stop()); this.streams.clear(); this.observedClients.clear(); this.eventRetryAt.clear(); this.legacyEvents.clear(); this.autoReceiptReads.clear(); this.listeners.clear(); }
+    close() { this.tabs.forEach(tab => tab.pictures.forEach(picture => URL.revokeObjectURL(picture.url))); this.closed = true; this.messagePayloads.clear(); this.streams.forEach(stream => stream.stop()); this.streams.clear(); this.observedClients.clear(); this.eventRetryAt.clear(); this.legacyEvents.clear(); this.autoReceiptReads.clear(); this.listeners.clear(); }
 }

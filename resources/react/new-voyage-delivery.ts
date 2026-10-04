@@ -15,14 +15,6 @@ export async function completeNewVoyage(workspace:Workspace,key:string,message:N
         tab.notice='Some pictures could not be prepared. Review the retained draft before sending.';
         workspace.changed();return;
     }
-    if(message.goalIntent){
-        // Recovery transfers intent only. Never replay either creation or metadata.
-        if(!message.send||!message.applyAccess)return;
-        const review=reviewGoal(tab.snapshot,tab.incarnation);
-        if(review.state.goal)throw Error('Review the existing goal before applying this retained intent.');
-        await workspace.goalUpdate(key,review,{action:'set',...message.goalIntent});
-        return;
-    }
     if(!message.applyAccess)return;
     if(!workspace.actionable(tab)||!workspace.permitted(tab,'set_access')){
         tab.notice='Voyage created. Access could not be reviewed yet; your message is unsent.';
@@ -35,6 +27,14 @@ export async function completeNewVoyage(workspace:Workspace,key:string,message:N
             tab.notice='Voyage created, but the chosen access mode is not confirmed. Your message is unsent. Check the access receipt.';
             workspace.changed();return;
         }
+    }
+    if(message.goalIntent){
+        // Recovery transfers intent only. Never replay either creation or metadata.
+        if(!message.send||!message.applyAccess)return;
+        const review=reviewGoal(tab.snapshot,tab.incarnation);
+        if(review.state.goal)throw Error('Review the existing goal before applying this retained intent.');
+        await workspace.goalUpdate(key,review,{action:'set',...message.goalIntent});
+        return;
     }
     if(!message.send)return;
     if(!workspace.actionable(tab)||!workspace.permitted(tab,'submit')){

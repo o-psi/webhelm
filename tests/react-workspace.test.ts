@@ -433,3 +433,16 @@ test('failed durable send marker prevents submission without discarding the draf
     f.workspace.draft(key,'Do not lose me');await f.workspace.act(key,'submit');
     assert.equal(f.commands.filter(c=>c.op==='submit').length,0);assert.equal(f.workspace.tabs.get(key)?.draft,'Do not lose me');assert.match(f.workspace.tabs.get(key)?.draftState?.message||'',/Quota/);assert.match(f.workspace.tabs.get(key)?.notice||'',/no message was submitted/);f.workspace.close();
 });
+
+test('actual uncertain dispatch retains fingerprint and permits only distinct fresh payload',async()=>{
+    const f=fixture();const key=f.workspace.open('vessel','s','Session');
+    await f.workspace.refresh(key);f.workspace.draft(key,'Exact uncertain message');f.mode('unknown');
+    await f.workspace.act(key,'submit');
+    const tab=f.workspace.tabs.get(key)!;
+    assert.equal(f.connection.journal.entries().length,1);
+    assert.equal(f.workspace.actionable(tab,'submit'),false,'same payload cannot be replayed');
+    f.workspace.draft(key,'Distinct new message');
+    assert.equal(f.workspace.actionable(tab,'submit'),true,'fresh distinct payload remains permitted');
+    assert.equal(f.commands.filter(c=>c.op==='submit').length,1);
+    f.workspace.close();
+});

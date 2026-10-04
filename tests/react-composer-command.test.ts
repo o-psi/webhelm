@@ -12,8 +12,8 @@ test('only literal goal command boundaries intercept inference',()=>{
 });
 function fixture(){
     const calls:string[]=[];
-    const tab:any={snapshot:{session_id:'s',goal:{revision:0,goal:null}},incarnation:'i',stale:false};
-    const workspace:any={tabs:new Map([['k',tab]]),refresh:async()=>{calls.push('read');},restoreDraft:async()=>{},draft:()=>{},goalUpdate:async(_key:any,_review:any,action:any)=>{calls.push('goal');assert.equal(action.continue_automatically,false);},act:async()=>{calls.push('inference');}};
+    const tab:any={snapshot:{session_id:'s',access:'approval',goal:{revision:0,goal:null}},incarnation:'i',stale:false};
+    const workspace:any={tabs:new Map([['k',tab]]),refresh:async()=>{calls.push('read');},restoreDraft:async()=>{},draft:()=>{},goalUpdate:async(_key:any,_review:any,action:any)=>{calls.push('goal');assert.equal(action.continue_automatically,false);},actionable:()=>true,permitted:()=>true,act:async()=>{calls.push('inference');}};
     return {workspace,calls};
 }
 test('status and objective only read and open explicit paused review',async()=>{
