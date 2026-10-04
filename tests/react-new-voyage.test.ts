@@ -39,7 +39,7 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
     if(bootstrapPending){connection.client=null;connection.status='Connecting…';connection.connecting=true;}
     const second={...connection,id:'second',name:'Second Vessel',vessel_id:'v2',client:{async exchange(request:any){const reply=await connection.client.exchange(request);if(request.command.op==='capabilities')reply.result.vessel_id='v2';return reply;}}};
     const root=createRoot(document.getElementById('root')!);
-    await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection],['second',second]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,recovery,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:(location:any)=>advanced.push(location)})));
+    await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map(bootstrapPending?[['c',connection]]:[['c',connection],['second',second]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,recovery,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:(location:any)=>advanced.push(location)})));
     await act(async()=>{await new Promise(resolve=>setTimeout(resolve,230));});
     const button=(label:string)=>{const found=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>(item.getAttribute('aria-label')||item.textContent||'').trim()===label);assert.ok(found,label);return found;};
     const dispose=async()=>{
@@ -66,7 +66,9 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
         assert.ok(option);await act(async()=>option.click());
     };
     const releaseBootstrap=async(success:boolean)=>{connection.connecting=false;connection.status=success?'Connected':'Connection refused';connection.client=success?readyClient:null;await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,onCreated:()=>assert.fail('Bootstrap must not create a voyage'),onAdvanced:()=>{}})));};
-    return {releaseBootstrap,dom,commands,created,advanced,button,dispose,choose,chooseModel,allowModels:()=>{failModels=false;}};
+    const openConfig=async()=>{if(!document.querySelector('[aria-label="Composer configuration"]'))await act(async()=>button('Configure').click());};
+    const openRecovery=async()=>{if(!document.querySelector('[aria-label="Pending work review"]'))await act(async()=>button('Review pending work').click());};
+    return {openConfig,openRecovery,releaseBootstrap,dom,commands,created,advanced,button,dispose,choose,chooseModel,allowModels:()=>{failModels=false;}};
 }
 
 test('uncertain message transfer starts as a reviewable draft and sends nothing',async()=>{
@@ -102,7 +104,7 @@ test('uncertain creation is never replayed and recovery transfers an unsent draf
         assert.equal(view.created.length,0);
         assert.equal(view.button('Send').disabled,true);
         assert.equal(view.commands.filter(command=>command.op==='start_account').length,1);
-        await act(async()=>view.button('Check creation · Fixture Vessel').click());
+        await view.openRecovery();await act(async()=>view.button('Check creation · Fixture Vessel').click());
         assert.equal(view.commands.filter(command=>command.op==='start_account').length,1);
         assert.equal(view.commands.filter(command=>command.op==='resolve_start_account').length,1);
         assert.equal(view.created[0].message.text,'Keep this draft');
@@ -116,7 +118,7 @@ test('direct model and reasoning choices create one voyage without editing the s
     try{
         await view.chooseModel();
         await view.choose('Reasoning','low');
-        await act(async()=>view.button('Create without message').click());
+        await view.openConfig();await act(async()=>view.button('Create without message').click());
         const start=view.commands.find(command=>command.op==='start_account');
         assert.equal(start.model,'other');assert.equal(start.reasoning_effort,'low');assert.equal(start.service_tier,null);
         assert.equal(view.commands.some(command=>command.op==='save_profile'),false);
@@ -142,8 +144,8 @@ test('first message waits for confirmed access and remains a draft when access i
 test('profile management receives the selected Vessel and workspace, not the first connection',async()=>{
  const view=await mount({recovery:{vessel:'second',workspace:'/chosen',text:'',hasPictures:false,source:'draft'}});
  try{
-  assert.equal(view.button('Manage profiles').disabled,false);
-  await act(async()=>view.button('Manage profiles').click());
+  await view.openConfig();assert.equal(view.button('Manage profiles').disabled,false);
+  await view.openConfig();await act(async()=>view.button('Manage profiles').click());
   assert.deepEqual(view.advanced,[{vessel:'second',workspace:'/chosen'}]);
   assert.equal(view.commands.some(c=>c.op==='start_account'||c.op==='submit'),false);
  }finally{await view.dispose();}
@@ -152,10 +154,10 @@ test('profile management receives the selected Vessel and workspace, not the fir
 test('scoped workspace recovery uses an authorized choice and rechecks revocation before creation',async()=>{
  const view=await mount({scoped:true,revokeWorkspace:true,recovery:{vessel:'c',workspace:'/forbidden',text:'Keep my draft',hasPictures:false,source:'draft'}});
  try{
-  assert.equal(view.button('Workspace').textContent,'/work');
-  await act(async()=>view.button('Manage profiles').click());assert.equal(view.advanced[0].workspace,'/work');
-  assert.equal(view.button('Create without message').disabled,false);
-  await act(async()=>view.button('Create without message').click());
+  await view.openConfig();assert.equal(view.button('Workspace').textContent,'/work');
+  await view.openConfig();await act(async()=>view.button('Manage profiles').click());assert.equal(view.advanced[0].workspace,'/work');
+  await view.openConfig();assert.equal(view.button('Create without message').disabled,false);
+  await view.openConfig();await act(async()=>view.button('Create without message').click());
   assert.match(document.body.textContent!,/workspace is no longer permitted/);
   assert.equal(view.commands.some(command=>command.op==='start_account'),false);
   assert.equal(document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!.value,'Keep my draft');
@@ -165,13 +167,13 @@ test('scoped workspace recovery uses an authorized choice and rechecks revocatio
 test('composer account review retains the reviewed model on reopen without saving a profile',async()=>{
     const view=await mount();
     try{
-        await act(async()=>view.button('Review account').click());
+        await view.openConfig();await act(async()=>view.button('Review account').click());
         await view.choose('Model','Other model');
         await act(async()=>view.button('Use account and model').click());
-        await act(async()=>view.button('Review account').click());
+        await view.openConfig();await act(async()=>view.button('Review account').click());
         assert.ok([...document.querySelectorAll('button')].some(item=>item.getAttribute('aria-label')==='Model: Other model'));
         await act(async()=>view.button('Cancel account review').click());
-        await act(async()=>view.button('Create without message').click());
+        await view.openConfig();await act(async()=>view.button('Create without message').click());
         const start=view.commands.find(command=>command.op==='start_account');
         assert.deepEqual(start.account,binding);assert.equal(start.model,'other');assert.equal(start.reasoning_effort,null);
         assert.equal(view.commands.some(command=>command.op==='save_profile'),false);
@@ -181,9 +183,9 @@ test('composer account review retains the reviewed model on reopen without savin
 test('reviewed account generation change prevents creation',async()=>{
     const view=await mount({accountChanged:true});
     try{
-        await act(async()=>view.button('Review account').click());
+        await view.openConfig();await act(async()=>view.button('Review account').click());
         await act(async()=>view.button('Use account and model').click());
-        await act(async()=>view.button('Create without message').click());
+        await view.openConfig();await act(async()=>view.button('Create without message').click());
         assert.equal(view.commands.some(command=>command.op==='start_account'),false);
         assert.match(document.body.textContent||'',/selected account is unavailable/);
     }finally{await view.dispose();}
@@ -195,7 +197,7 @@ test('reviewed account generation change prevents creation',async()=>{
         await view.chooseModel();
         await view.choose('Service tier','flex');
         assert.equal(view.commands.some(command=>['start_account','submit','set_account_inference'].includes(command.op)),false);
-        await act(async()=>view.button('Create without message').click());
+        await view.openConfig();await act(async()=>view.button('Create without message').click());
         assert.equal(view.commands.find(command=>command.op==='start_account')?.service_tier,'flex');
         assert.equal(view.commands.some(command=>command.op==='save_profile'),false);
     }finally{await view.dispose();}
@@ -204,6 +206,7 @@ test('reviewed account generation change prevents creation',async()=>{
 test('all five draft controls share presentation and unavailable catalogue never fabricates options or effects',async()=>{
     const view=await mount({unknownModels:true});
     try{
+        await view.openConfig();
         for(const name of ['Account','Model','Service tier','Reasoning','Access']){
             assert.ok([...document.querySelectorAll('button')].some(item=>item.getAttribute('aria-label')?.startsWith(name+':')),name);
         }
@@ -213,7 +216,7 @@ test('all five draft controls share presentation and unavailable catalogue never
         }
         await view.choose('Access','Read only');
         assert.equal(view.commands.some(command=>['start_account','submit','set_access','set_account_inference','save_profile'].includes(command.op)),false);
-        assert.equal(view.button('Create without message').disabled,false,'unchanged saved profile is usable without a fabricated catalogue override');
+        await view.openConfig();assert.equal(view.button('Create without message').disabled,false,'unchanged saved profile is usable without a fabricated catalogue override');
     }finally{await view.dispose();}
 });
 
@@ -236,7 +239,7 @@ test('failed draft catalogue is inspectable and retry is read-only before succes
         assert.ok(recovered);assert.equal(recovered.disabled,false);
         const other=[...document.querySelectorAll<HTMLButtonElement>('[data-model-choice]')].find(item=>item.textContent?.includes('Other model'))!;
         await act(async()=>other.click());
-        await act(async()=>view.button('Create without message').click());
+        await view.openConfig();await act(async()=>view.button('Create without message').click());
         assert.equal(view.commands.some(command=>command.op==='start_account'),false,'revoked workspace still blocks creation after catalogue recovery');
         assert.match(document.body.textContent||'',/workspace is no longer permitted/);
     }finally{await view.dispose();}
@@ -245,7 +248,7 @@ test('failed draft catalogue is inspectable and retry is read-only before succes
 test('account review resolves reordered exact binding to the observed label and selected radio without effects',async()=>{
     const view=await mount({reorderedProfile:true});
     try{
-        await act(async()=>view.button('Review account').click());
+        await view.openConfig();await act(async()=>view.button('Review account').click());
         const section=document.querySelector<HTMLElement>('[aria-label="Review composer account"]')!;
         const expectedLabel='Account · Provider · chatgpt oauth';
         const trigger=section.querySelector<HTMLButtonElement>(`button[aria-label="Account: ${expectedLabel}"]`)!;
