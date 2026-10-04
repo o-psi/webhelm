@@ -1,3 +1,4 @@
+import {ComposerAccountReview} from './ComposerAccountReview';
 import {DraftSlot,type DraftRepository} from './drafts';
 import React, {useEffect, useRef, useState} from 'react';
 import {ArrowUpIcon,PaperclipIcon,Settings2Icon,XIcon} from 'lucide-react';
@@ -32,9 +33,10 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[preparing,setPreparing]=useState(false);
     const input=useRef<HTMLTextAreaElement>(null),pictureInput=useRef<HTMLInputElement>(null),creation=useRef<Creation|null>(null),capsGeneration=useRef(0),profilesGeneration=useRef(0),modelsGeneration=useRef(0);
     const profile=catalogue?.profiles?.find((item:any)=>item.id===profileId);
-    const profileAccount=accounts.find(item=>sameAccount(item.binding,profile?.account));
-    const selectedModel=modelChoice||profile?.model||'';
-    const selectedReasoning=reasoningChoice===null?(modelChoice?'':profile?.reasoning_effort||''):reasoningChoice;
+    const [accountOverride,setAccountOverride]=useState<{account:any;model:string}|null>(null),[accountReview,setAccountReview]=useState(false);
+    const profileAccount=accounts.find(item=>sameAccount(item.binding,accountOverride?.account||profile?.account));
+    const selectedModel=modelChoice||accountOverride?.model||profile?.model||'';
+    const selectedReasoning=reasoningChoice===null?(modelChoice||accountOverride?'':profile?.reasoning_effort||''):reasoningChoice;
     const modelContext=profile&&profileAccount?.ready?JSON.stringify([vessel,path,profile.id,profileAccount.binding,connection?.client===choicesFor?.client?choicesFor?.reloadToken:null]):null;
     const modelsReady=modelContext!==null&&modelChoicesFor===modelContext;
     const currentModel=modelOptions.find(item=>item.id===selectedModel);
@@ -95,7 +97,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
         },180);
         return()=>{window.clearTimeout(timer);profilesGeneration.current++;};
     },[caps,path,vessel,connection?.client,reloadToken]);
-    useEffect(()=>{setModelChoice(null);setReasoningChoice(null);},[profileId,path,vessel]);
+    useEffect(()=>{setModelChoice(null);setReasoningChoice(null);setAccountOverride(null);setAccountReview(false);},[profileId,path,vessel]);
     useEffect(()=>{
         const epoch=++modelsGeneration.current;setModelOptions([]);setModelChoicesFor(null);
         if(!profile||!profileAccount?.ready||!connection?.client||!modelContext)return;
@@ -106,7 +108,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
         return()=>{modelsGeneration.current++;};
     },[modelContext,connection?.client]);
     const pending=(()=>{try{creation.current??=new Creation(localStorage,tenant);return {records:creation.current.pending(),error:false};}catch{return {records:[],error:true};}})();
-    const validOverride=!modelChoice&&!reasoningChoice||modelsReady&&Boolean(currentModel)&&(!selectedReasoning||currentModel.reasoning_efforts?.includes(selectedReasoning));
+    const validOverride=!accountOverride&&!modelChoice&&!reasoningChoice||modelsReady&&Boolean(currentModel)&&(!selectedReasoning||currentModel.reasoning_efforts?.includes(selectedReasoning));
     const canCreate=Boolean(draftReady&&!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&(caps.scope==='owner'||caps.workspaces?.some((choice:any)=>choice.path===path))&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready&&validOverride);
     const canSend=canCreate&&(caps.scope==='owner'||caps.rights?.includes('execute'));
     const hasMessage=Boolean(text.trim()||pictures.length);
@@ -139,15 +141,16 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
             if(latestCaps.scope!=='owner'&&!latestCaps.workspaces?.some((choice:any)=>choice.path===path))throw new Error('This workspace is no longer permitted. Choose a current workspace before sending.');
             const currentProfile=latestCatalogue.profiles?.find((item:any)=>item.id===selected.id);
             if(latestCatalogue.revision!==selectedRevision||!currentProfile||JSON.stringify(profileSettings(currentProfile))!==JSON.stringify(profileSettings(selected)))throw new Error('Saved profiles changed. Review the selected profile before sending.');
-            if(!accountChoices(latestAccounts).some((item:any)=>item.ready&&sameAccount(item.binding,currentProfile.account)))throw new Error('The selected account is unavailable. Choose another profile.');
+            if(!accountChoices(latestAccounts).some((item:any)=>item.ready&&sameAccount(item.binding,(accountOverride?.account||currentProfile.account))))throw new Error('The selected account is unavailable. Choose another profile.');
             const settings=profileSettings(currentProfile);
-            if(modelChoice!==null||reasoningChoice!==null){
+            if(accountOverride)settings.account=accountOverride.account;
+            if(accountOverride||modelChoice!==null||reasoningChoice!==null){
                 const latestModels=await vesselRead(connection,'account_models',{workspace:path,account:settings.account});
                 if(!sameAccount(latestModels.account,settings.account))throw new Error('Account identity changed. Review model choices.');
                 const chosen=latestModels.models?.find((item:any)=>item.id===selectedModel);
                 if(!chosen||selectedReasoning&&!chosen.reasoning_efforts?.includes(selectedReasoning))throw new Error('Model or reasoning choices changed. Review them before sending.');
                 settings.model=selectedModel;settings.reasoning_effort=selectedReasoning||null;
-                if(modelChoice!==null)settings.service_tier=null;
+                if(accountOverride||modelChoice!==null)settings.service_tier=null;
             }
             creation.current??=new Creation(localStorage,tenant);
             await draftSlot?.sending();
@@ -170,6 +173,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
         <div className="new-voyage-content m-auto w-full max-w-3xl">
             <h1 className="mb-6 text-center text-3xl font-medium tracking-tight">What should we work on?</h1>
             {recovery&&<div className="new-voyage-recovery mx-auto mb-4 max-w-2xl rounded-lg border p-3 text-sm" role="status"><strong>Continue from {recovery.source}</strong><p className="mb-0 mt-1">The earlier action may have happened. Review this draft before sending; repeating the same request could duplicate work. The original receipt remains in its voyage.{recovery.hasPictures?' Reattach any pictures you still need.':''}</p></div>}
+            {accountReview&&profile&&<ComposerAccountReview connection={connection} workspace={path} accounts={accounts} selection={{account:accountOverride?.account||profile.account,model:selectedModel}} onClose={()=>setAccountReview(false)} onApply={(value:any)=>{setAccountOverride(value);setModelChoice(null);setReasoningChoice('');setAccountReview(false);}}/>}
             <form className="composer" aria-label="New voyage composer" onSubmit={event=>{event.preventDefault();void create(true);}} onPaste={event=>{if(event.clipboardData.files.length){event.preventDefault();void addPictures([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(event.dataTransfer.files.length){event.preventDefault();void addPictures([...event.dataTransfer.files]);}}}>
                 <Card className="composer-box gap-2 p-3 shadow-sm" size="sm">
                     {notice&&<p className="composer-feedback" role="status">{notice}</p>}
@@ -189,7 +193,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
                     <div className="grid min-w-0 gap-[3px]"><span className="text-[11px] text-muted-foreground">Workspace</span><WorkspacePicker key={`${tenant}:${vessel}:${connection?.vessel_id}`} tenant={tenant} vessel={JSON.stringify([vessel,connection?.vessel_id])} vesselName={connection?.name||'Vessel'} value={path} choices={caps?.workspaces||[]} allowCustom={caps?.scope==='owner'} disabled={busy||!caps} onChoose={setPath}/></div>
                     <label>Profile<SelectCombobox value={profileId} disabled={busy||!catalogue} onChange={event=>setProfileId(event.target.value)}>{!catalogue&&<option value="">Loading profiles…</option>}{(catalogue?.profiles||[]).map((item:any)=><option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}</SelectCombobox></label>
                 </div>
-                <div className="new-voyage-secondary"><small className="new-voyage-account" title={profile?profileSummary(profile,accounts):''}>{profile?(profileAccount?.label||'Account unavailable')+' · '+(modelChoice?'Model override for this voyage':'Saved profile')+(modelChoice?' · service tier resets to provider default':''):''}</small><Button variant="ghost" type="button" disabled={busy||!connection?.client||!path.startsWith('/')||!caps?.features?.includes('execution_profiles')} onClick={()=>onAdvanced({vessel,workspace:path})}><Settings2Icon aria-hidden="true"/>Manage profiles</Button><Button variant="ghost" type="button" disabled={!canCreate} onClick={()=>void create(false)}>Create without message</Button></div>
+                <div className="new-voyage-secondary"><Button variant="ghost" type="button" disabled={busy||!profile||!connection?.client} onClick={()=>setAccountReview(true)}>Review account</Button><small className="new-voyage-account" title={profile?profileSummary(profile,accounts):''}>{profile?(profileAccount?.label||'Account unavailable')+' · '+(accountOverride?'Account override for this voyage':modelChoice?'Model override for this voyage':'Saved profile')+(modelChoice?' · service tier resets to provider default':''):''}</small><Button variant="ghost" type="button" disabled={busy||!connection?.client||!path.startsWith('/')||!caps?.features?.includes('execution_profiles')} onClick={()=>onAdvanced({vessel,workspace:path})}><Settings2Icon aria-hidden="true"/>Manage profiles</Button><Button variant="ghost" type="button" disabled={!canCreate} onClick={()=>void create(false)}>Create without message</Button></div>
                 <small className="new-voyage-hint">Send creates a voyage and confirms access before starting your message.</small>
             </form>
             {pending.records.length>0&&<div className="new-voyage-recovery mx-auto mt-4 flex max-w-2xl flex-wrap items-center gap-2 rounded-lg border p-3 text-sm"><p className="mb-0 w-full">Creation outcome needs review. Your draft is kept; no message will be sent during recovery.</p>{pending.records.map((record:any)=><Button variant="outline" key={record.key} disabled={busy} onClick={()=>void reconcile(record)}>Check creation · {fleet.connections.get(record.vessel)?.name||'Vessel'}</Button>)}</div>}

@@ -7,20 +7,20 @@ import {completeNewVoyage} from '../resources/react/new-voyage-delivery';
 
 const binding={account_id:'account',connection_id:'provider',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 
-async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false}:{uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
+async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false}:{accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
     const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test'});
     const previous={window:globalThis.window,document:globalThis.document,localStorage:globalThis.localStorage};
     Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Event:dom.window.Event});
     const {createRoot}=await import('react-dom/client');
     const commands:any[]=[],created:any[]=[],advanced:any[]=[];
-    let capabilityReads=0;
+    let capabilityReads=0,accountReads=0;
     const connection:any={id:'c',name:'Fixture Vessel',vessel_id:'v',voyages:[],client:{async exchange({command}:any){
         commands.push(command);
         let result:any;
         switch(command.op){
             case 'capabilities':result={vessel_id:'v',scope:scoped?'scoped':'owner',rights:['create','account_use','execute'],features:['execution_profiles'],workspaces:revokeWorkspace&&++capabilityReads>1?[]:[{path:'/work',name:'Work'}]};break;
             case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
-            case 'accounts':result={accounts:[{id:'account',connection_id:'provider',identity_generation:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
+            case 'accounts':accountReads++;result={accounts:[{id:'account',connection_id:'provider',identity_generation:accountChanged&&accountReads>1?2:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
             case 'account_models':result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low']}]};break;
             case 'start_account':if(uncertain)return {protocol:1,outcome_unknown:true,result:null};result={session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'};break;
             case 'resolve_start_account':result={command_id:command.command_id,session_id:command.session_id,status:'created',process:{session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'}};break;
@@ -132,4 +132,33 @@ test('scoped workspace recovery uses an authorized choice and rechecks revocatio
   assert.equal(view.commands.some(command=>command.op==='start_account'),false);
   assert.equal(document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!.value,'Keep my draft');
  }finally{await view.dispose();}
+});
+
+test('composer account review retains the reviewed model on reopen without saving a profile',async()=>{
+    const view=await mount();
+    try{
+        await act(async()=>view.button('Review account').click());
+        const model=document.querySelector<HTMLSelectElement>('select[aria-label="Review model"]')!;
+        assert.ok(model);
+        await act(async()=>{model.value='other';model.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
+        await act(async()=>view.button('Use account and model').click());
+        await act(async()=>view.button('Review account').click());
+        assert.equal(document.querySelector<HTMLSelectElement>('select[aria-label="Review model"]')!.value,'other');
+        await act(async()=>view.button('Cancel account review').click());
+        await act(async()=>view.button('Create without message').click());
+        const start=view.commands.find(command=>command.op==='start_account');
+        assert.deepEqual(start.account,binding);assert.equal(start.model,'other');assert.equal(start.reasoning_effort,null);
+        assert.equal(view.commands.some(command=>command.op==='save_profile'),false);
+    }finally{await view.dispose();}
+});
+
+test('reviewed account generation change prevents creation',async()=>{
+    const view=await mount({accountChanged:true});
+    try{
+        await act(async()=>view.button('Review account').click());
+        await act(async()=>view.button('Use account and model').click());
+        await act(async()=>view.button('Create without message').click());
+        assert.equal(view.commands.some(command=>command.op==='start_account'),false);
+        assert.match(document.body.textContent||'',/selected account is unavailable/);
+    }finally{await view.dispose();}
 });
