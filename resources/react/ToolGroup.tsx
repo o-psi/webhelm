@@ -1,6 +1,7 @@
 import {Button} from './components/ui/button';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
-import React,{useState} from 'react';
+import React from 'react';
+import {useDisclosure,type DisclosureScope} from './activity-disclosures';
 import {ChevronRightIcon} from 'lucide-react';
 import {actionDescription,actionDuration,actionStatus} from '../js/tool-presentation.js';
 // Disclosure rows read as transcript text, not centered buttons; utilities override Button geometry.
@@ -24,8 +25,8 @@ export function threadRows(messages:any[]):ThreadRow[]{
     });
     return rows;
 }
-function Entry({entry,running,messageStart,decisions,renderMessage}:{entry:ToolEntry;running:boolean;messageStart:number;decisions:boolean;renderMessage:(message:any)=>React.ReactNode}){
-    const [open,setOpen]=useState(false);
+function Entry({entry,running,messageStart,decisions,renderMessage,scope}:{scope?:DisclosureScope;entry:ToolEntry;running:boolean;messageStart:number;decisions:boolean;renderMessage:(message:any)=>React.ReactNode}){
+    const [open,setOpen]=useDisclosure(scope,`entry:${entry.key}`);
     const active=running&&Number.isSafeInteger(messageStart)&&entry.request?.message_index>=messageStart;
     const status=actionStatus(entry.call||{},entry.result,active,decisions);
     const label=[status,actionDuration(entry.result),entry.call?actionDescription(entry.call):entry.result?.name||'Tool result'].filter(Boolean).join(' · ');
@@ -34,7 +35,7 @@ function Entry({entry,running,messageStart,decisions,renderMessage}:{entry:ToolE
 }
 export function activitySummary(entries:ToolEntry[],running:boolean,messageStart:number,decisions:boolean){
     const counts=new Map<string,number>();
-    const categories:Record<string,string>={shell:'command',write_file:'file edit',apply_patch:'file edit',read_file:'file read',search_files:'search',list_directory:'directory listing',host_browser:'browser action'};
+    const categories:Record<string,string>={shell:'command',write_file:'file edit',apply_patch:'file edit',read_file:'file read',search_files:'search',list_directory:'directory listing',host_browser:'browser action',process:'process'};
     let failed=0,pending=0,completed=0,totalMs=0,timed=0;
     for(const entry of entries){
         const name=entry.call?.function?.name||entry.call?.name||entry.result?.name||'tool action';
@@ -48,13 +49,13 @@ export function activitySummary(entries:ToolEntry[],running:boolean,messageStart
         const elapsed=entry.result?.tool_outcome?.elapsed_ms;
         if(Number.isFinite(elapsed)&&elapsed>=0){totalMs+=elapsed;timed++;}
     }
-    const kinds=[...counts].map(([name,count])=>`${count} ${name}${count===1?'':'s'}`).join(' · ');
+    const kinds=[...counts].map(([name,count])=>`${count} ${name}${count===1?'':name==='process'?'es':'s'}`).join(' · ');
     const outcomes=[completed&&`${completed} returned`,failed&&`${failed} unsuccessful action${failed===1?'':'s'}`,pending&&`${pending} ${running?'pending':'unconfirmed'}`].filter(Boolean).join(' · ');
     const timing=timed?`${actionDuration({tool_outcome:{elapsed_ms:totalMs}})} tool time${timed<entries.length?' (partial)':''}`:'';
-    return {kinds,outcomes,timing,failed};
+    return {kinds,outcomes,timing,failed,pending,completed};
 }
-export function ToolGroup({entries,running,messageStart,decisions,renderMessage}:{entries:ToolEntry[];running:boolean;messageStart:number;decisions:boolean;renderMessage:(message:any)=>React.ReactNode}){
-    const [open,setOpen]=useState(false);
-    const {kinds,outcomes,timing,failed}=activitySummary(entries,running,messageStart,decisions);
-    return <section className="tool-group" aria-label="Tool actions" title="Tool time sums recorded action durations and may overlap. Unsuccessful actions do not mean the run failed."><Button variant="ghost" type="button" className="tool-group-heading h-auto min-h-7 w-full justify-start gap-2 px-1 text-left text-xs text-muted-foreground" aria-expanded={open} onClick={()=>setOpen(value=>!value)}><ChevronRightIcon className={`size-3.5 ${open?'rotate-90':''}`} aria-hidden="true"/><span className="min-w-0 flex-1 truncate">{kinds}{timing&&` · ${timing}`}</span><span className={failed?'text-destructive':''}>{outcomes}</span></Button>{open&&<div className="grid gap-1 border-l pl-2">{entries.map(entry=><Entry key={entry.key} entry={entry} running={running} messageStart={messageStart} decisions={decisions} renderMessage={renderMessage}/>)}</div>}</section>;
+export function ToolGroup({entries,running,messageStart,decisions,renderMessage,scope,groupKey}:{scope?:DisclosureScope;groupKey?:string;entries:ToolEntry[];running:boolean;messageStart:number;decisions:boolean;renderMessage:(message:any)=>React.ReactNode}){
+    const [open,setOpen]=useDisclosure(scope,groupKey||`group:${entries[0]?.key}`);
+    const {kinds,timing,failed,pending,completed}=activitySummary(entries,running,messageStart,decisions);
+    return <section className="tool-group" aria-label="Tool actions" title="Tool time sums recorded action durations and may overlap. Unsuccessful actions do not mean the run failed."><Button variant="ghost" type="button" className="tool-group-heading h-auto min-h-7 w-full items-start justify-start gap-2 whitespace-normal px-1 text-left text-xs text-muted-foreground" aria-expanded={open} onClick={()=>setOpen(!open)}><ChevronRightIcon className={`size-3.5 shrink-0 ${open?'rotate-90':''}`}  aria-hidden="true"/><span className="min-w-0 flex-1 break-words">{kinds}{timing&&` · ${timing}`}</span><span className="flex min-w-0 max-w-[45%] flex-wrap justify-end gap-x-2 gap-y-1 text-right">{completed>0&&<span>{completed} returned</span>}{failed>0&&<span className="text-destructive">{failed} unsuccessful action{failed===1?'':'s'}</span>}{pending>0&&<span>{pending} {running?'pending':'unconfirmed'}</span>}</span></Button>{open&&<div className="grid gap-1 border-l pl-2">{entries.map(entry=><Entry key={entry.key} scope={scope} entry={entry} running={running} messageStart={messageStart} decisions={decisions} renderMessage={renderMessage}/>)}</div>}</section>;
 }
