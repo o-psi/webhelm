@@ -20,7 +20,7 @@ import {Creation,accountChoices,vesselRead} from './settings';
 import {preparePicture,MAX_PICTURE_BYTES,MAX_PICTURES} from './prepare-picture';
 
 export type NewVoyageMessage = {goalIntent?:ComposerGoalIntent;text:string; pictures:File[]; access:'read-only'|'approval'|'unrestricted'; send:boolean; applyAccess:boolean};
-export type RecoveryDraft = {vessel:string; workspace:string; text:string; hasPictures:boolean; source:string};
+export type RecoveryDraft = {vessel:string; workspace:string; text:string; hasPictures:boolean; source:string;goalIntent?:ComposerGoalIntent};
 
 export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,reloadToken,recovery,onCreated,onAdvanced}:{fleet:any;tenant:string;drafts?:DraftRepository;onDraftChange?:(present:boolean)=>void;hidden:boolean;resetToken:number;reloadToken:number;recovery?:RecoveryDraft|null;onCreated:(vessel:string,process:any,message:NewVoyageMessage)=>Promise<void>|void;onAdvanced:(location:{vessel:string;workspace:string})=>void}){
     const connections=[...fleet.connections.values()] as any[];
@@ -140,12 +140,14 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
         }catch(error){setNotice(error instanceof Error?error.message:'Picture unavailable.');}
         finally{setPreparing(false);}
     }
+    const retainedGoalIntent=useRef<ComposerGoalIntent|undefined>(recovery?.goalIntent);
     const [goalObjective,setGoalObjective]=useState<string|null>(null),[goalStatus,setGoalStatus]=useState(false);
     async function create(send:boolean,goalIntent?:ComposerGoalIntent){
         const command=parseComposerCommand(text);
         if(send&&!goalIntent&&command.kind!=='message'){if(command.kind==='goal-status')setGoalStatus(true);else setGoalObjective(command.objective);return;}
         if(!canCreate||send&&(!canSend||!hasMessage))return;
         if(send&&new TextEncoder().encode(text).length>65536){setNotice('Message must be 65536 UTF-8 bytes or fewer.');return;}
+        retainedGoalIntent.current=goalIntent;
         setBusy(true);setNotice('Checking the selected Vessel and profile…');
         try{
             const client=connection.client, selected=profile, selectedRevision=catalogue.revision;
@@ -181,7 +183,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
         try{
             creation.current??=new Creation(localStorage,tenant);
             const target=fleet.connections.get(record.vessel),process=await creation.current.reconcile(target,record);
-            if(process)await onCreated(target.id,process,{text,pictures:[...pictures],access,send:false,applyAccess:false});
+            if(process)await onCreated(target.id,process,{text,pictures:[...pictures],access,send:false,applyAccess:false,goalIntent:retainedGoalIntent.current});
             else setNotice('Creation was not admitted. Review the draft before trying again.');
         }catch(error){setNotice(error instanceof Error?error.message:'Creation receipt unavailable.');}
         finally{setBusy(false);}
@@ -192,7 +194,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
             {recovery&&<div className="new-voyage-recovery mx-auto mb-4 max-w-2xl rounded-lg border p-3 text-sm" role="status"><strong>Continue from {recovery.source}</strong><p className="mb-0 mt-1">The earlier action may have happened. Review this draft before sending; repeating the same request could duplicate work. The original receipt remains in its voyage.{recovery.hasPictures?' Reattach any pictures you still need.':''}</p></div>}
             {accountReview&&profile&&<ComposerAccountReview connection={connection} workspace={path} accounts={accounts} selection={{account:accountOverride?.account||profile.account,model:selectedModel}} onClose={()=>setAccountReview(false)} onApply={(value:any)=>{setAccountOverride(value);setModelChoice(null);setReasoningChoice('');setServiceChoice(null);setAccountReview(false);}}/>}
             <form className="composer" aria-label="New voyage composer" onSubmit={event=>{event.preventDefault();void create(true);}} onPaste={event=>{if(event.clipboardData.files.length){event.preventDefault();void addPictures([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(event.dataTransfer.files.length){event.preventDefault();void addPictures([...event.dataTransfer.files]);}}}>
-                <ComposerSurface configuration={<>                     <div className="new-voyage-primary"><ComposerOptions className="new-voyage-inference">
+                <ComposerSurface toolbar={<div className="new-voyage-send-actions"><Button variant="ghost" size="icon" type="button" aria-label="Attach pictures" title="Attach pictures" disabled={busy||preparing} onClick={()=>pictureInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button><Button type="submit" size="icon" aria-label="Send" title="Send message" disabled={!canSend||!hasMessage}><ArrowUpIcon aria-hidden="true"/><span className="sr-only">{busy?'Working…':'Send'}</span></Button></div>} configuration={<>                     <div className="new-voyage-primary"><ComposerOptions className="new-voyage-inference">
                         <ComposerOptionTrigger name="Account" label={profileAccount?.label||'Unavailable'} disabled={busy||!profile||!connection?.client} onClick={()=>setAccountReview(true)}/>
                         <ModelPicker trigger={<ComposerOptionTrigger name="Model" label={modelLabel(currentModel,selectedModel||'Loading models…')} disabled={busy||!profileAccount?.ready||!connection?.client}/>} open={modelOpen} onOpenChange={setModelOpen} models={modelOptions} current={selectedModel} provider={profileAccount?.label||'Account'} loading={!modelsReady&&!modelError} error={modelError} disabled={busy||!profileAccount?.ready||!connection?.client||!modelContext} onChoose={value=>{setModelChoice(value);setReasoningChoice('');setServiceChoice(null);setModelOpen(false);}} onRefresh={()=>setModelsRefresh(value=>value+1)}/>
                         <ComposerChoice name="Reasoning" value={selectedReasoning} disabled={busy||!modelsReady||!currentModel} options={[{value:'',label:'Provider default'},...(currentModel?.reasoning_efforts||[]).map((value:string)=>({value,label:value}))]} onChange={setReasoningChoice}/>
@@ -205,7 +207,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
                     {draftSlot&&showDraftFeedback(draftSlot)&&<div className="composer-feedback" role="status"><p>{draftSlot.message}</p>{draftSlot.value.delivery==='review'&&<p>This draft may already belong to a created voyage. Check creation and the conversation before sending again.</p>}{(text||pictures.length>0)&&<Button variant="ghost" size="sm" type="button" disabled={busy||!draftReady} onClick={()=>{setText('');setPictures([]);void draftSlot.discard().catch(()=>{});}}>Discard draft</Button>}</div>}
                     {pending.error&&<p className="composer-feedback" role="alert">Recovery storage is unavailable. Creating a voyage is disabled.</p>}
                     {pictures.length>0&&<div className="new-voyage-pictures flex flex-wrap gap-2">{pictures.map((picture,index)=><div className="flex max-w-40 items-center gap-1 rounded-md border px-2 text-xs" key={`${picture.name}:${index}`}><span className="truncate" title={picture.name}>{picture.name}</span><Button variant="ghost" size="icon-xs" type="button" aria-label={`Remove ${picture.name}`} disabled={busy} onClick={()=>setPictures(current=>current.filter((_,i)=>i!==index))}><XIcon aria-hidden="true"/></Button></div>)}</div>}
-<div className="new-voyage-send-actions"><Button variant="ghost" size="icon" type="button" aria-label="Attach pictures" title="Attach pictures" disabled={busy||preparing} onClick={()=>pictureInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button><Button type="submit" size="icon" aria-label="Send" title="Send message" disabled={!canSend||!hasMessage}><ArrowUpIcon aria-hidden="true"/><span className="sr-only">{busy?'Working…':'Send'}</span></Button></div>
+
                     <ComposerInput ref={input} rows={3} value={text} disabled={busy||!draftReady} onChange={event=>setText(event.target.value)} onSend={()=>void create(true)} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
                     {modelError&&<p className="composer-feedback" role="alert">{modelError} Saved profile settings are unchanged; model overrides are unavailable. <Button type="button" variant="ghost" disabled={busy||!connection?.client||!profileAccount?.ready} onClick={()=>setModelsRefresh(value=>value+1)}>Retry model catalogue</Button></p>}
                     <Input ref={pictureInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void addPictures(files);}}/>
