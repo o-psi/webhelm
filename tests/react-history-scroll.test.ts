@@ -99,7 +99,7 @@ test('uncertain earlier message stays inspectable while a fresh composer can sen
     Object.assign(globalThis, {window:dom.window, document:dom.window.document, requestAnimationFrame:(fn:FrameRequestCallback)=>fn(0), IS_REACT_ACT_ENVIRONMENT:true});
     const root=createRoot(dom.window.document.querySelector('#mount')!);
     const id='a0c1465a-f47c-47aa-8a17-04c786833419';
-    const tab:any={key:'t',title:'Voyage',snapshot:{messages:[]},decisions:[],pictures:[],draft:'Retained',notice:'We can’t confirm whether your message went through. Check the conversation and receipt before trying again.',busy:false};
+    const tab:any={key:'t',title:'Voyage',snapshot:{messages:[]},decisions:[],pictures:[],draftState:{message:'Draft saved on this browser.',value:{delivery:'review'}},draft:'Retained',notice:'We can’t confirm whether your message went through. Check the conversation and receipt before trying again.',busy:false};
     let checks=0;
     const workspace:any={actionable:()=>true,permitted:()=>true,pending:()=>[{op:'submit',command_id:id}],reconcile:async()=>{checks++;}};
     try{
@@ -109,7 +109,7 @@ test('uncertain earlier message stays inspectable while a fresh composer can sen
         const feedback=dom.window.document.querySelector('.composer-feedback')!;
         assert.match(feedback.querySelector('p')!.textContent!,/You can keep chatting/);
         assert.doesNotMatch(feedback.querySelector('p')!.textContent!,new RegExp(id));
-        assert.equal(dom.window.document.querySelectorAll('.composer-feedback').length,1);
+        assert.equal(dom.window.document.querySelectorAll('.composer-feedback').length,2,'journal and restored-draft details are available only after requesting recovery');
         assert.equal(feedback.querySelector('details')!.open,false);
         assert.match(feedback.querySelector('code')!.textContent!,new RegExp(id));
         await React.act(async()=>dom.window.document.querySelector<HTMLButtonElement>('.composer-feedback button')!.click());
