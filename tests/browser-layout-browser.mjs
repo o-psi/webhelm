@@ -64,6 +64,9 @@ try {
                 if(f.type==='authenticate'){emit({type:'hello',protocol:1,vessel_id:'v',socket_id:'fixture-socket'});return;}
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
+                if(c.op==='profiles'&&window.fixtureProfilesMode==='loading'){window.releaseFixtureProfiles=()=>{window.fixtureProfilesMode='empty';this.send(text);};return;}
+                if(c.op==='profiles'&&window.fixtureProfilesMode==='empty'){emit({type:'reply',request_id:f.request_id,response:{protocol:1,outcome_unknown:false,result:{revision:2,can_manage:false,default_profile_id:null,profiles:[]}}});return;}
+                if(c.op==='controls'&&window.fixtureDiscoveryErrors&&['skills','files'].includes(c.section)){emit({type:'reply',request_id:f.request_id,response:{protocol:1,outcome_unknown:false,error:`Synthetic ${c.section} catalogue unavailable`}});return;}
                 if(c.op==='account_usage'&&window.fixtureUsageDeferred){window.releaseFixtureUsage=()=>{window.fixtureUsageDeferred=false;this.send(text);};return;}
                 if(c.op==='account_models'&&window.fixtureCatalogueMode==='error'){emit({type:'reply',request_id:f.request_id,response:{protocol:1,outcome_unknown:false,error:'Synthetic catalogue unavailable'}});return;}
                 if(c.op==='account_models'&&window.fixtureCatalogueMode==='loading'){window.releaseFixtureCatalogue=()=>{this.send(text);};return;}
@@ -555,6 +558,26 @@ try {
         await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${editorMode}-profile-footer.png`});
         await settings.getByRole('button',{name:'Close settings',exact:true}).click();
     }
+    const readOnlyBefore=await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','operator_tool','submit','steer'].includes(c.op)).length);
+    await page.evaluate(()=>{window.fixtureProfilesMode='loading';});
+    await conversation.getByRole('button',{name:/^Account:/}).click();
+    await settings.getByRole('button',{name:/^Profile/}).click();
+    await settings.getByText('Loading profiles…',{exact:true}).waitFor();
+    check(await settings.getByText('No saved profiles yet.',{exact:true}).count()===0,`${label}: loading profiles falsely empty`);
+    await page.evaluate(()=>window.releaseFixtureProfiles());
+    await settings.getByText('No saved profiles yet.',{exact:true}).waitFor();
+    check(await settings.getByRole('button',{name:'Create profile',exact:true}).count()===0,`${label}: read-only catalogue exposes creation`);
+    await settings.getByRole('button',{name:'Close settings',exact:true}).click();
+    await page.evaluate(()=>{window.fixtureProfilesMode='normal';window.fixtureDiscoveryErrors=true;});
+    await conversation.getByRole('button',{name:'Discover actions, tools, skills, and files',exact:true}).click();
+    const errorDiscovery=page.getByRole('dialog',{name:'Composer actions',exact:true});
+    await errorDiscovery.getByRole('alert').filter({hasText:'Skills catalogue:'}).waitFor();
+    await errorDiscovery.getByRole('alert').filter({hasText:'Workspace files:'}).waitFor();
+    check(await errorDiscovery.getByRole('alert').filter({hasText:'Skills catalogue:'}).count()===1,`${label}: skills error duplicated`);
+    check(await errorDiscovery.getByRole('alert').filter({hasText:'Workspace files:'}).count()===1,`${label}: files error duplicated`);
+    await page.keyboard.press('Escape');
+    await page.evaluate(()=>{window.fixtureDiscoveryErrors=false;});
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','operator_tool','submit','steer'].includes(c.op)).length)===readOnlyBefore,`${label}: read-only loading/error audit executed effects`);
     // Explicit user close, not malformed initial stopped attach, exercises lifecycle.
     await page.getByRole('button',{name:'Browser',exact:true}).click();
     const viewer=page.locator('.host-browser-viewer');
