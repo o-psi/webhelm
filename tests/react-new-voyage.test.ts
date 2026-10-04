@@ -8,11 +8,16 @@ import {completeNewVoyage} from '../resources/react/new-voyage-delivery';
 const binding={account_id:'account',connection_id:'provider',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 
 async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false,unknownModels=false}:{unknownModels?:boolean;accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
-    const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test'});
-    const previous={window:globalThis.window,document:globalThis.document,localStorage:globalThis.localStorage};
-    Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Event:dom.window.Event});
+    const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test',pretendToBeVisual:true});
+    // Radix focus traversal and Floating UI must see constructors from this window.
+    const globals:Record<string,unknown>={window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,
+        getComputedStyle:dom.window.getComputedStyle.bind(dom.window),requestAnimationFrame:dom.window.requestAnimationFrame.bind(dom.window),cancelAnimationFrame:dom.window.cancelAnimationFrame.bind(dom.window)};
+    for(const name of ['Node','NodeFilter','Element','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','HTMLButtonElement','Event','KeyboardEvent','MouseEvent','CustomEvent','MutationObserver']){
+        globals[name]=(dom.window as any)[name];
+    }
+    const previous=new Map(Object.keys(globals).map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
+    for(const [name,value] of Object.entries(globals))Object.defineProperty(globalThis,name,{configurable:true,writable:true,value});
     const {createRoot}=await import('react-dom/client');
-    Object.assign(globalThis,{getComputedStyle:dom.window.getComputedStyle,Node:dom.window.Node,MutationObserver:dom.window.MutationObserver,CustomEvent:dom.window.CustomEvent,HTMLButtonElement:dom.window.HTMLButtonElement,PointerEvent:dom.window.MouseEvent,ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:(callback:()=>void)=>setTimeout(callback,0),cancelAnimationFrame:clearTimeout});
     const {NewVoyage}=await import('../resources/react/NewVoyage');
     const commands:any[]=[],created:any[]=[],advanced:any[]=[];
     let capabilityReads=0,accountReads=0;
@@ -35,7 +40,14 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
     await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection],['second',second]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,recovery,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:(location:any)=>advanced.push(location)})));
     await act(async()=>{await new Promise(resolve=>setTimeout(resolve,230));});
     const button=(label:string)=>{const found=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>(item.getAttribute('aria-label')||item.textContent||'').trim()===label);assert.ok(found,label);return found;};
-    const dispose=async()=>{await act(async()=>root.unmount());Object.assign(globalThis,previous);dom.window.close();};
+    const dispose=async()=>{
+        await act(async()=>root.unmount());
+        // Let portal focus restoration and animation-frame cleanup settle while its
+        // owning window is still installed; never leak constructors to the next test.
+        await act(async()=>{await new Promise<void>(resolve=>dom.window.requestAnimationFrame(()=>dom.window.requestAnimationFrame(()=>resolve())));});
+        dom.window.close();
+        for(const [name,descriptor] of previous){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else Reflect.deleteProperty(globalThis,name);}
+    };
     const choose=async(name:string,value:string)=>{
         const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith(name+':'))!;
         assert.ok(trigger,name);
