@@ -328,3 +328,14 @@
 .profile-setup .setup-actions{flex-wrap:wrap;gap:8px}
 .profile-setup .setup-actions>button{white-space:normal;height:auto;min-height:36px}
 @media(max-width:600px){.conversation-header{padding-right:144px}.conversation-title h1{white-space:normal;overflow-wrap:anywhere}.conversation-header .status-label{display:flex}}
+
+/* Composer settings wrap at every nesting level; no horizontally hidden controls. */
+.composer-options{flex-wrap:wrap;overflow:visible;min-width:0;max-width:100%;width:auto}
+.composer-options>.composer-settings{flex:1 1 100%;min-width:0;max-width:100%;flex-shrink:1}
+.composer-settings,.composer-inference{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0;max-width:100%}
+.composer-settings>.composer-inference{flex:1 1 auto;min-width:0;max-width:100%;flex-shrink:1}
+.composer-options .composer-inference{flex-wrap:wrap;flex-shrink:1}
+.composer-option-trigger{min-width:0;max-width:100%;height:auto;min-height:36px;white-space:normal;flex-shrink:1}
+.composer-option-trigger .composer-option-label{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left;overflow:visible;text-overflow:clip}
+.new-voyage-inference.composer-settings{display:flex;flex-wrap:wrap;min-width:0;max-width:100%;overflow:visible}
+@media(max-width:600px){.new-voyage-primary{display:flex;flex-wrap:wrap}.new-voyage-inference.composer-settings{flex:1 1 100%;width:100%}}

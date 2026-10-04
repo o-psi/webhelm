@@ -71,8 +71,8 @@ try {
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
                 else if(c.op==='update_status')result=updateRecord;
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
-                else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
-                else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
+                else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account with a long provider subscription identity and workspace-specific description',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
+                else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model with a long readable catalogue description and capability label',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
                 else if(c.op==='inspect')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',state:'live',workspace:'/work'};
                 else if(c.op==='history')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{revision:1+goal.revision,message_offset:c.offset,next_offset:40,has_more:false,messages:Array.from({length:40-c.offset},(_,n)=>{const i=n+c.offset;return {role:i%5===0?'user':'assistant',message_index:i,content:i%5===0?`Fixture request ${i/5+1}`:`Fixture observation ${i+1}`};})}};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}},...Array.from({length:18},(_,i)=>({session_id:`33333333-3333-4333-8333-${String(i).padStart(12,'0')}`,incarnation:'i',name:`${i<12?'Background working':i<16?'Completed':'Awaiting decision'} fixture ${i}`,state:'live',catalogue:{summary:{run_state:i<12?'running':i<16?'completed':'awaiting_decision'}}}))];
@@ -101,6 +101,21 @@ try {
     check(await page.getByRole('form',{name:'New voyage composer'}).isVisible(),`${label}: new voyage composer is missing`);
     check(await page.getByRole('textbox',{name:'Message'}).isVisible(),`${label}: new voyage message is missing`);
     check(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),`${label}: empty draft permits sending`);
+    async function inspectComposerControls(form,phase){
+        const geometry=await form.evaluate(el=>{
+            const composer=el.getBoundingClientRect();
+            return {composer:{left:composer.left,right:composer.right},viewport:innerWidth,controls:[...el.querySelectorAll('.composer-settings .composer-option-trigger')].map(button=>{
+                const r=button.getBoundingClientRect();return {name:button.getAttribute('aria-label'),left:r.left,right:r.right,width:r.width,height:r.height};
+            })};
+        });
+        for(const name of ['Account','Model','Reasoning','Service tier','Access']){
+            const control=geometry.controls.find(item=>item.name?.startsWith(name+':')||(name==='Access'&&item.name==='Review access mode'));
+            check(Boolean(control),`${label} ${phase}: ${name} trigger missing`);
+            if(control)check(control.width>0&&control.height>0&&control.left>=Math.max(0,geometry.composer.left)-1&&control.right<=Math.min(geometry.viewport,geometry.composer.right)+1,`${label} ${phase}: ${name} clipped ${JSON.stringify({control,geometry})}`);
+        }
+        return geometry;
+    }
+    const draftControlGeometry=await inspectComposerControls(page.getByRole('form',{name:'New voyage composer'}),'draft');
     await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-empty.png`});
     if(label==='desktop') await page.locator('.voyage-card').filter({hasText:'Browser layout fixture'}).click();
     if(label==='mobile'){
@@ -295,6 +310,7 @@ try {
     check(await page.getByRole('button',{name:/^Model:/}).evaluate(el=>el===document.activeElement),`${label}: model picker lost trigger focus`);
     check(await page.getByRole('button',{name:/^Reasoning:/}).isVisible(),`${label}: direct reasoning control is missing`);
     const draft=conversation.locator('textarea').first();
+    const existingControlGeometry=await inspectComposerControls(conversation.getByRole('form',{name:'Message composer'}),'existing');
     const contextLabel=page.getByLabel('Request context accounting');
     check(await contextLabel.textContent()==='Last prepared input: unknown tokens · window: unknown · reserve: unknown · projection 2',`${label}: context accounting changed or invented precision`);
     check(await contextLabel.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: context status overflows`);
@@ -463,7 +479,7 @@ try {
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     check(await page.getByRole('button',{name:'Files',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Escape after dock switch restored the wrong trigger`);
-    report.viewports.push({runOutcome,label,viewport,before,opened,privateState,closed,commands,errors});
+    report.viewports.push({runOutcome,label,viewport,before,opened,privateState,closed,commands,errors,draftControlGeometry,existingControlGeometry});
     await context.close();
  }
 } catch(error) {
