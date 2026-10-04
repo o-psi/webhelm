@@ -54,8 +54,11 @@ test('account menu escapes identity, exposes selected appearance and preserves a
         assert.equal(dom.window.document.activeElement?.getAttribute('aria-label'),'Account and appearance');
     } finally {
         await React.act(async()=>root.unmount());
+        // Radix defers unmount focus cleanup; retain the JSDOM event realm
+        // until its callbacks and React work settle, including on assertion failure.
+        await React.act(async()=>{await new Promise(resolve=>setTimeout(resolve,20));});
+        dom.window.close();
         for (const [key,descriptor] of saved) {if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete (globalThis as any)[key];}
         if(savedAct)Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',savedAct);else delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
-        dom.window.close();
     }
 });
