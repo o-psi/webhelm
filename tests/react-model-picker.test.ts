@@ -52,7 +52,7 @@ test('model search, favorites and keyboard selection retain current state and fe
         const focusRestored=new Promise<void>((resolve,reject)=>{
             const cleanup=()=>{clearTimeout(deadline);dom.window.document.removeEventListener('focusin',observeFocus);};
             const observeFocus=(event:Event)=>{
-                if(event.target!==modelTrigger)return;
+                if(event.target!==originalTrigger)return;
                 cleanup();resolve();
             };
             const deadline=setTimeout(()=>{cleanup();reject(new Error('Escape did not restore focus to the exact model trigger.'));},1000);
