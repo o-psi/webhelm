@@ -72,7 +72,7 @@ try {
                 else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
                 else if(c.op==='inspect')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',state:'live',workspace:'/work'};
                 else if(c.op==='history')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{revision:1+goal.revision,message_offset:c.offset,next_offset:40,has_more:false,messages:Array.from({length:40-c.offset},(_,n)=>{const i=n+c.offset;return {role:i%5===0?'user':'assistant',message_index:i,content:i%5===0?`Fixture request ${i/5+1}`:`Fixture observation ${i+1}`};})}};
-                else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}}];
+                else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}},...Array.from({length:18},(_,i)=>({session_id:`33333333-3333-4333-8333-${String(i).padStart(12,'0')}`,incarnation:'i',name:`${i<12?'Background working':i<16?'Completed':'Awaiting decision'} fixture ${i}`,state:'live',catalogue:{summary:{run_state:i<12?'running':i<16?'completed':'awaiting_decision'}}}))];
                 else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1+goal.revision,observation_cursor:5+goal.revision,goal,context_status:'Last prepared input: unknown tokens · window: unknown · reserve: unknown · projection 2',context_observation:{projection_generation:2,count:{input_tokens:null}},messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
                 else if(c.op==='workspace_file')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{path:c.path,text:'# Current file preview\n',truncated:false,observed_at_ms:Date.now(),observed_bytes:23,file_bytes:23,preview_sha256:'a'.repeat(64)}};
                 else if(c.op==='workspace_changes')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{scope:c.scope,path:c.path||'.',text:c.scope==='status'?' M src/fixture.ts\0?? docs/new.md\0':'diff --git a/src/fixture.ts b/src/fixture.ts\n@@ -1 +1 @@\n-old\n+new\n',truncated:false,observed_at_ms:Date.now()}};
@@ -99,7 +99,7 @@ try {
     check(await page.getByRole('textbox',{name:'Message'}).isVisible(),`${label}: new voyage message is missing`);
     check(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),`${label}: empty draft permits sending`);
     await page.screenshot({path:`${output}/${label}-${viewport.width}-empty.png`});
-    if(label==='desktop') await page.locator('.voyage-card').click();
+    if(label==='desktop') await page.locator('.voyage-card').filter({hasText:'Browser layout fixture'}).click();
     if(label==='mobile'){
         await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
         check(await page.locator('[data-slot="sheet-content"]').isVisible(),'mobile: shadcn navigation sheet did not open');
@@ -181,7 +181,7 @@ try {
     await page.getByRole('button',{name:'light',exact:true}).click();
     await page.getByRole('button',{name:'Close settings'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
-    await page.locator('.voyage-card').click();
+    await page.locator('.voyage-card').filter({hasText:'Browser layout fixture'}).click();
     if(label==='mobile')await page.locator('.mobile-navigation').waitFor({state:'hidden'});
     const conversation=page.locator('.conversation:not([hidden])');
     await page.getByRole('button',{name:'Set goal',exact:true}).click();
@@ -231,8 +231,8 @@ try {
     await conversation.getByRole('status').filter({hasText:'different conversation revision'}).waitFor();
     check(await page.evaluate(()=>window.fixtureCommands.length===0||!window.fixtureCommands.slice(-1).some(c=>c.op==='submit'||c.op==='steer')),`${label}: link dispatched a message`);
     await page.evaluate(()=>{window.location.hash='';});
-    await page.getByRole('button',{name:'Choose model'}).click();
-    const modelDialog=page.getByRole('dialog',{name:/^Model:/});
+    await page.getByRole('button',{name:/^Model:/}).click();
+    const modelDialog=page.getByRole('dialog',{name:'Choose model',exact:true});
     await modelDialog.locator('[data-model-choice]').filter({hasText:'Fixture model'}).waitFor();
     check(await modelDialog.locator('[data-model-choice][aria-pressed="true"]').count()===1,`${label}: current model is not marked`);
     await modelDialog.getByRole('textbox',{name:'Search models'}).fill('other');
@@ -340,6 +340,13 @@ try {
         return {toggle:rect('.task-browser-action'),toggleHit:toggle.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)),panel:rect('.task-browser-panel'),composer:rect('.conversation:not([hidden]) form'),draft:rect('.conversation:not([hidden]) textarea'),transcript:rect('.conversation:not([hidden]) .transcript'),scrollTop:transcript.scrollTop,scrollHeight:transcript.scrollHeight,documentWidth:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('.conversation:not([hidden]) *')].filter(el=>el.getBoundingClientRect().right>innerWidth+1).map(el=>({tag:el.tagName,cls:el.className,text:el.textContent.slice(0,70),right:el.getBoundingClientRect().right})),primary:rect('.browser-primary'),privacy:rect('.browser-privacy'),activeLabel:document.activeElement.getAttribute('aria-label'),sameTranscript:transcript===window.savedTranscript,sameDraft:document.querySelector('.conversation:not([hidden]) textarea')===window.savedDraft};
     });
     const before=await geometry();
+    for(const theme of ['light','dark']){
+        await page.evaluate(theme=>document.documentElement.classList.toggle('dark',theme==='dark'),theme);
+        const visibleGeometry=await page.evaluate(()=>[...document.querySelectorAll('.conversation:not([hidden]) .conversation-header,.conversation:not([hidden]) .tool-group-heading')].map(el=>{const r=el.getBoundingClientRect();return {width:r.width,left:r.left,right:r.right,text:el.textContent};}));
+        check(visibleGeometry.every(r=>r.width>0&&r.left>=0&&r.right<=viewport.width),`${label}/${viewport.width}/${theme}: header or summary exceeds viewport`);
+        await page.screenshot({path:`${output}/${label}-${viewport.width}-${viewport.height}-${theme}-summary-header.png`});
+    }
+
     const headerGeometry=await conversation.locator('.conversation-header').evaluate(el=>{
         const status=el.querySelector('.status-label')?.getBoundingClientRect();
         const changes=document.querySelector('.dock-actions .review-action')?.getBoundingClientRect();
