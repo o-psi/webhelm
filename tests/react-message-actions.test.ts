@@ -147,3 +147,35 @@ test('stock edit dialog escapes text, keeps the existing draft by default and fo
         assert.equal(tab.draft,'Existing unsent text\n\n<script>untrusted text</script>');assert.equal(tab.pictures.length,1);assert.equal(dom.window.document.activeElement?.getAttribute('aria-label'),'Message');assert.deepEqual(calls,[]);
     }finally{await act(async()=>root.unmount());for(const [name,descriptor] of saved){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete(globalThis as any)[name];}dom.window.close();}
 });
+
+test('full Conversation preserves tool disclosure through bounded canonical expansion, live result arrival and stale approvals without effects',async()=>{
+ const dom=new JSDOM('<div id="mount"></div>',{url:'https://example.test',pretendToBeVisual:true});
+ const saved={window:globalThis.window,document:globalThis.document,getComputedStyle:globalThis.getComputedStyle,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame};
+ Object.defineProperty(dom.window,'matchMedia',{value:()=>({matches:true,addEventListener(){},removeEventListener(){}})});
+ Object.assign(globalThis,{window:dom.window,document:dom.window.document,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),requestAnimationFrame:(fn:FrameRequestCallback)=>setTimeout(()=>fn(0),0),cancelAnimationFrame:clearTimeout,IS_REACT_ACT_ENVIRONMENT:true});
+ const {createRoot}=await import('react-dom/client');const {Conversation}=await import('../resources/react/App.tsx');
+ const root=createRoot(document.querySelector('#mount')!);const {workspace,tab,calls}=draftFixture();
+ tab.pictures=[];tab.draft='';tab.scope='owner';tab.snapshot={revision:7,message_offset:0,messages:[{role:'assistant',message_index:4,content:'',projection_truncated:true,tool_calls:[{id:'call',function:{name:'read_file',arguments:'{"path":"fixture"}'}}]}],run:{run_id:'run',state:'awaiting_decision',message_start:4}};
+ tab.decisions=[{decision_id:'d',incarnation:owner,run_id:'run',expires_at_ms:Date.now()+60000,request:{kind:'approval',approval:{reason:'Read fixture only',command:'read_file'}}}];
+ const reads:any[]=[];let changeRevision=false;
+ const canonical:any={4:{role:'assistant',content:'',tool_calls:[{id:'call',function:{name:'read_file',arguments:'{"path":"complete-fixture"}'}}]},5:{role:'tool',tool_call_id:'call',content:'Complete canonical result'}};
+ workspace.read=async(_key,op,options:any)=>{assert.equal(op,'message_chunk');reads.push(options);const text=JSON.stringify(canonical[options.index]);const cut=20;if(changeRevision)tab.snapshot.revision++;return {data:options.offset===0?text.slice(0,cut):text.slice(cut),has_more:options.offset===0,next_offset:options.offset===0?cut:text.length,total_bytes:text.length};};
+ const render=()=>root.render(React.createElement(Conversation,{tenant:'tenant',tab,workspace,active:true,onSettings:()=>{}}));
+ const click=async(selector:string)=>act(async()=>{document.querySelector<HTMLButtonElement>(selector)!.click();});
+ try{
+  await act(async()=>render());assert.equal(document.querySelectorAll('[data-tool-id]').length,0);
+  const approve=()=>[...document.querySelectorAll('button')].find(button=>button.textContent==='Approve')!;
+  assert.equal(approve().disabled,false);assert.equal(approve().closest('.tool-group'),null);
+  await click('.tool-group-heading');await click('[data-tool-id="call"] button');assert.match(document.querySelector('[data-tool-id="call"]')!.textContent!,/Awaiting approval/);
+  await act(async()=>workspace.expand(tab.key,4));await act(async()=>render());assert.match(document.querySelector('[data-tool-id="call"]')!.textContent!,/complete-fixture/);
+  assert.deepEqual(reads.map(read=>[read.index,read.offset,read.limit,read.expected_revision]),[[4,0,65536,7],[4,20,65536,7]]);
+  tab.snapshot.messages.push({role:'tool',message_index:5,tool_call_id:'call',content:'Projected',projection_truncated:true});await act(async()=>render());
+  assert.equal(document.querySelectorAll('[data-tool-id="call"]').length,1);assert.equal(document.querySelector('[data-tool-id="call"]')!.getAttribute('data-state'),'open');
+  await act(async()=>workspace.expand(tab.key,5));await act(async()=>render());assert.equal(document.querySelectorAll('[data-message-index="5"]').length,1);assert.match(document.body.textContent!,/Complete canonical result/);
+  await act(async()=>root.render(null));await act(async()=>render());assert.equal(document.querySelector('[data-tool-id="call"]')!.getAttribute('data-state'),'open');assert.match(document.body.textContent!,/Complete canonical result/);
+  tab.stale=true;await act(async()=>render());assert.equal(approve().disabled,true);const readCount=reads.length;await act(async()=>workspace.expand(tab.key,5));assert.equal(reads.length,readCount);
+  tab.stale=false;tab.snapshot.messages[1]={...tab.snapshot.messages[1],content:'Projected again',projection_truncated:true};changeRevision=true;
+  await act(async()=>workspace.expand(tab.key,5));await act(async()=>render());assert.equal(tab.notice,'History changed.');assert.equal(tab.snapshot.messages[1].content,'Projected again');assert.equal(tab.snapshot.messages[1].projection_truncated,true);
+  assert.equal(calls.length,0,'no provider, approval, receipt or mutation effects');
+ }finally{await act(async()=>root.unmount());Object.assign(globalThis,saved);dom.window.close();}
+});
