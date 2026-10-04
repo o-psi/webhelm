@@ -107,7 +107,7 @@ test('uncertain earlier message stays inspectable while a fresh composer can sen
         assert.equal(dom.window.document.querySelector('.composer-feedback'),null,'technical recovery stays absent until requested');
         await React.act(async()=>[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Review pending work')!.click());
         const feedback=dom.window.document.querySelector('.composer-feedback')!;
-        assert.match(feedback.querySelector('p')!.textContent!,/You can keep chatting/);
+        assert.match(feedback.querySelector('p')!.textContent!,/An earlier message is unconfirmed/);
         assert.doesNotMatch(feedback.querySelector('p')!.textContent!,new RegExp(id));
         assert.equal(dom.window.document.querySelectorAll('.composer-feedback').length,2,'journal and restored-draft details are available only after requesting recovery');
         assert.equal(feedback.querySelector('details')!.open,false);
