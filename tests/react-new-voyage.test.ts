@@ -2,16 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {NewVoyage} from '../resources/react/NewVoyage';
+
 import {completeNewVoyage} from '../resources/react/new-voyage-delivery';
 
 const binding={account_id:'account',connection_id:'provider',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 
-async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false}:{accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
+async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false,unknownModels=false}:{unknownModels?:boolean;accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
     const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test'});
     const previous={window:globalThis.window,document:globalThis.document,localStorage:globalThis.localStorage};
     Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Event:dom.window.Event});
     const {createRoot}=await import('react-dom/client');
+    Object.assign(globalThis,{getComputedStyle:dom.window.getComputedStyle,Node:dom.window.Node,MutationObserver:dom.window.MutationObserver,CustomEvent:dom.window.CustomEvent,HTMLButtonElement:dom.window.HTMLButtonElement,PointerEvent:dom.window.MouseEvent,ResizeObserver:class{observe(){}unobserve(){}disconnect(){}},requestAnimationFrame:(callback:()=>void)=>setTimeout(callback,0),cancelAnimationFrame:clearTimeout});
+    const {NewVoyage}=await import('../resources/react/NewVoyage');
     const commands:any[]=[],created:any[]=[],advanced:any[]=[];
     let capabilityReads=0,accountReads=0;
     const connection:any={id:'c',name:'Fixture Vessel',vessel_id:'v',voyages:[],client:{async exchange({command}:any){
@@ -21,7 +23,7 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
             case 'capabilities':result={vessel_id:'v',scope:scoped?'scoped':'owner',rights:['create','account_use','execute'],features:['execution_profiles'],workspaces:revokeWorkspace&&++capabilityReads>1?[]:[{path:'/work',name:'Work'}]};break;
             case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
             case 'accounts':accountReads++;result={accounts:[{id:'account',connection_id:'provider',identity_generation:accountChanged&&accountReads>1?2:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
-            case 'account_models':result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
+            case 'account_models':if(unknownModels)throw Error('Catalogue unavailable');result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
             case 'start_account':if(uncertain)return {protocol:1,outcome_unknown:true,result:null};result={session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'};break;
             case 'resolve_start_account':result={command_id:command.command_id,session_id:command.session_id,status:'created',process:{session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'}};break;
             default:throw new Error(command.op);
@@ -34,7 +36,21 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
     await act(async()=>{await new Promise(resolve=>setTimeout(resolve,230));});
     const button=(label:string)=>{const found=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>(item.getAttribute('aria-label')||item.textContent||'').trim()===label);assert.ok(found,label);return found;};
     const dispose=async()=>{await act(async()=>root.unmount());Object.assign(globalThis,previous);dom.window.close();};
-    return {dom,commands,created,advanced,button,dispose};
+    const choose=async(name:string,value:string)=>{
+        const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith(name+':'))!;
+        assert.ok(trigger,name);
+        await act(async()=>trigger.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})));
+        await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30));});
+        const option=[...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(item=>item.textContent?.trim()===value)!;
+        assert.ok(option,value);await act(async()=>option.click());
+    };
+    const chooseModel=async()=>{
+        const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith('Model:'))!;
+        await act(async()=>trigger.click());
+        const option=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.textContent?.includes('Other model')&&!item.getAttribute('aria-label')?.includes('favorites'))!;
+        assert.ok(option);await act(async()=>option.click());
+    };
+    return {dom,commands,created,advanced,button,dispose,choose,chooseModel};
 }
 
 test('uncertain message transfer starts as a reviewable draft and sends nothing',async()=>{
@@ -82,12 +98,8 @@ test('uncertain creation is never replayed and recovery transfers an unsent draf
 test('direct model and reasoning choices create one voyage without editing the saved profile',async()=>{
     const view=await mount();
     try{
-        const selects=[...document.querySelectorAll<HTMLSelectElement>('select')];
-        const model=selects.find(select=>select.closest('label')?.textContent?.startsWith('Model'))!;
-        const reasoning=selects.find(select=>select.closest('label')?.textContent?.startsWith('Reasoning'))!;
-        assert.equal(model.disabled,false);
-        await act(async()=>{model.value='other';model.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
-        await act(async()=>{reasoning.value='low';reasoning.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
+        await view.chooseModel();
+        await view.choose('Reasoning','low');
         await act(async()=>view.button('Create without message').click());
         const start=view.commands.find(command=>command.op==='start_account');
         assert.equal(start.model,'other');assert.equal(start.reasoning_effort,'low');assert.equal(start.service_tier,null);
@@ -138,12 +150,10 @@ test('composer account review retains the reviewed model on reopen without savin
     const view=await mount();
     try{
         await act(async()=>view.button('Review account').click());
-        const model=document.querySelector<HTMLSelectElement>('select[aria-label="Review model"]')!;
-        assert.ok(model);
-        await act(async()=>{model.value='other';model.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
+        await view.choose('Model','Other model');
         await act(async()=>view.button('Use account and model').click());
         await act(async()=>view.button('Review account').click());
-        assert.equal(document.querySelector<HTMLSelectElement>('select[aria-label="Review model"]')!.value,'other');
+        assert.ok([...document.querySelectorAll('button')].some(item=>item.getAttribute('aria-label')==='Model: Other model'));
         await act(async()=>view.button('Cancel account review').click());
         await act(async()=>view.button('Create without message').click());
         const start=view.commands.find(command=>command.op==='start_account');
@@ -166,14 +176,27 @@ test('reviewed account generation change prevents creation',async()=>{
  test('draft service tier is catalogue backed, edits send nothing and first creation carries it',async()=>{
     const view=await mount();
     try{
-        const select=(label:string)=>[...document.querySelectorAll<HTMLSelectElement>('select')].find(item=>item.closest('label')?.textContent?.startsWith(label))!;
-        await act(async()=>{const model=select('Model');model.value='other';model.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
-        const service=select('Service tier');
-        assert.deepEqual([...service.options].map(item=>item.value),['','flex']);
-        await act(async()=>{service.value='flex';service.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
+        await view.chooseModel();
+        await view.choose('Service tier','flex');
         assert.equal(view.commands.some(command=>['start_account','submit','set_account_inference'].includes(command.op)),false);
         await act(async()=>view.button('Create without message').click());
         assert.equal(view.commands.find(command=>command.op==='start_account')?.service_tier,'flex');
         assert.equal(view.commands.some(command=>command.op==='save_profile'),false);
+    }finally{await view.dispose();}
+});
+
+test('all five draft controls share presentation and unavailable catalogue never fabricates options or effects',async()=>{
+    const view=await mount({unknownModels:true});
+    try{
+        for(const name of ['Account','Model','Service tier','Reasoning','Access']){
+            assert.ok([...document.querySelectorAll('button')].some(item=>item.getAttribute('aria-label')?.startsWith(name+':')),name);
+        }
+        for(const name of ['Model','Service tier','Reasoning']){
+            const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith(name+':'))!;
+            assert.equal(trigger.disabled,true);
+        }
+        await view.choose('Access','Read only');
+        assert.equal(view.commands.some(command=>['start_account','submit','set_access','set_account_inference','save_profile'].includes(command.op)),false);
+        assert.equal(view.button('Create without message').disabled,false,'unchanged saved profile is usable without a fabricated catalogue override');
     }finally{await view.dispose();}
 });

@@ -1,3 +1,6 @@
+import {ComposerOptions,ComposerChoice,ComposerOptionTrigger} from './ComposerOptions';
+import {ModelPicker} from './ModelPicker';
+import {modelLabel} from './ModelLabel';
 import {ComposerAccountReview} from './ComposerAccountReview';
 import {DraftSlot,type DraftRepository} from './drafts';
 import React, {useEffect, useRef, useState} from 'react';
@@ -27,6 +30,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(''),[catalogue,setCatalogue]=useState<any>(null),[accounts,setAccounts]=useState<any[]>([]),[profileId,setProfileId]=useState('');
     const [choicesFor,setChoicesFor]=useState<{vessel:string;path:string;client:any;reloadToken:number}|null>(null);
     const [modelOptions,setModelOptions]=useState<any[]>([]),[modelChoicesFor,setModelChoicesFor]=useState<string|null>(null);
+    const [modelOpen,setModelOpen]=useState(false),[modelsRefresh,setModelsRefresh]=useState(0);
     const [serviceChoice,setServiceChoice]=useState<string|null>(null);
     const [modelChoice,setModelChoice]=useState<string|null>(null),[reasoningChoice,setReasoningChoice]=useState<string|null>(null);
     const [text,setText]=useState(''),[pictures,setPictures]=useState<File[]>([]),[access,setAccess]=useState<NewVoyageMessage['access']>('approval');
@@ -106,7 +110,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
             setModelOptions(value.models||[]);setModelChoicesFor(modelContext);
         }).catch(()=>{/* Saved profiles can still be used when model discovery is unavailable. */});
         return()=>{modelsGeneration.current++;};
-    },[modelContext,connection?.client]);
+    },[modelContext,connection?.client,modelsRefresh]);
     const pending=(()=>{try{creation.current??=new Creation(localStorage,tenant);return {records:creation.current.pending(),error:false};}catch{return {records:[],error:true};}})();
     const selectedService=serviceChoice===null?(modelChoice||accountOverride?'':profile?.service_tier||''):serviceChoice;
     const validService=serviceChoice===null||modelsReady&&Boolean(currentModel)&&(!selectedService||currentModel.service_tiers?.includes(selectedService));
@@ -186,12 +190,13 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
                     {pictures.length>0&&<div className="new-voyage-pictures flex flex-wrap gap-2">{pictures.map((picture,index)=><div className="flex max-w-40 items-center gap-1 rounded-md border px-2 text-xs" key={`${picture.name}:${index}`}><span className="truncate" title={picture.name}>{picture.name}</span><Button variant="ghost" size="icon-xs" type="button" aria-label={`Remove ${picture.name}`} disabled={busy} onClick={()=>setPictures(current=>current.filter((_,i)=>i!==index))}><XIcon aria-hidden="true"/></Button></div>)}</div>}
                     <ComposerInput ref={input} rows={3} value={text} disabled={busy||!draftReady} onChange={event=>setText(event.target.value)} onSend={()=>void create(true)} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
                     <Input ref={pictureInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void addPictures(files);}}/>
-                    <div className="new-voyage-primary"><div className="new-voyage-inference">
-                        <label className="new-voyage-choice"><span className="sr-only">Model</span><SelectCombobox value={selectedModel} disabled={busy||!modelsReady} onChange={event=>{setModelChoice(event.target.value);setReasoningChoice('');setServiceChoice(null);}}>{!modelsReady&&<option value={selectedModel}>{selectedModel||'Loading models…'}</option>}{modelsReady&&modelOptions.map((item:any)=><option key={item.id} value={item.id}>{item.display_name||item.id}</option>)}</SelectCombobox></label>
-                        <label className="new-voyage-choice"><span className="sr-only">Reasoning</span><SelectCombobox value={selectedReasoning} disabled={busy||!modelsReady||!currentModel} onChange={event=>setReasoningChoice(event.target.value)}><option value="">Default</option>{[...new Set<string>([...(currentModel?.reasoning_efforts||[]),...(selectedReasoning?[selectedReasoning]:[])])].map(value=><option key={value} value={value}>{value}</option>)}</SelectCombobox></label>
-                        <label className="new-voyage-choice"><span className="sr-only">Service tier</span><SelectCombobox value={selectedService} disabled={busy||!modelsReady||!currentModel} onChange={event=>setServiceChoice(event.target.value)}><option value="">Provider default</option>{[...new Set<string>([...(currentModel?.service_tiers||[]),...(selectedService?[selectedService]:[])])].map(value=><option key={value} value={value}>{value}</option>)}</SelectCombobox></label>
-                        <label className="new-voyage-choice"><span className="sr-only">Access</span><SelectCombobox value={access} disabled={busy} onChange={event=>setAccess(event.target.value as NewVoyageMessage['access'])}><option value="read-only">Read only</option><option value="approval">Approval</option><option value="unrestricted">Full access</option></SelectCombobox></label>
-                    </div><div className="new-voyage-send-actions"><Button variant="ghost" size="icon" type="button" aria-label="Attach pictures" title="Attach pictures" disabled={busy||preparing} onClick={()=>pictureInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button><Button type="submit" size="icon" aria-label="Send" title="Send message" disabled={!canSend||!hasMessage}><ArrowUpIcon aria-hidden="true"/><span className="sr-only">{busy?'Working…':'Send'}</span></Button></div></div>
+                    <div className="new-voyage-primary"><ComposerOptions className="new-voyage-inference">
+                        <ComposerOptionTrigger name="Account" label={profileAccount?.label||'Unavailable'} disabled={busy||!profile||!connection?.client} onClick={()=>setAccountReview(true)}/>
+                        <ModelPicker trigger={<ComposerOptionTrigger name="Model" label={modelLabel(currentModel,selectedModel||'Loading models…')} disabled={busy||!modelsReady}/>} open={modelOpen} onOpenChange={setModelOpen} models={modelOptions} current={selectedModel} provider={profileAccount?.label||'Account'} loading={!modelsReady} error="" disabled={busy||!modelsReady} onChoose={value=>{setModelChoice(value);setReasoningChoice('');setServiceChoice(null);setModelOpen(false);}} onRefresh={()=>setModelsRefresh(value=>value+1)}/>
+                        <ComposerChoice name="Reasoning" value={selectedReasoning} disabled={busy||!modelsReady||!currentModel} options={[{value:'',label:'Provider default'},...(currentModel?.reasoning_efforts||[]).map((value:string)=>({value,label:value}))]} onChange={setReasoningChoice}/>
+                        <ComposerChoice name="Service tier" value={selectedService} disabled={busy||!modelsReady||!currentModel} options={[{value:'',label:'Provider default'},...(currentModel?.service_tiers||[]).map((value:string)=>({value,label:value}))]} onChange={setServiceChoice}/>
+                        <ComposerChoice name="Access" value={access} disabled={busy} options={[{value:'read-only',label:'Read only'},{value:'approval',label:'Approval'},{value:'unrestricted',label:'Full access'}]} onChange={value=>setAccess(value as NewVoyageMessage['access'])}/>
+                    </ComposerOptions><div className="new-voyage-send-actions"><Button variant="ghost" size="icon" type="button" aria-label="Attach pictures" title="Attach pictures" disabled={busy||preparing} onClick={()=>pictureInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button><Button type="submit" size="icon" aria-label="Send" title="Send message" disabled={!canSend||!hasMessage}><ArrowUpIcon aria-hidden="true"/><span className="sr-only">{busy?'Working…':'Send'}</span></Button></div></div>
                 </ComposerBox>
                 <div className="new-voyage-context">
                     <label>Vessel<SelectCombobox value={vessel} disabled={busy} onChange={event=>{setVessel(event.target.value);setPath('');setProfileId('');}}>{connections.map(item=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</SelectCombobox></label>

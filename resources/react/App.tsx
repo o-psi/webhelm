@@ -1,3 +1,4 @@
+import {ComposerOptions,ComposerOptionTrigger} from './ComposerOptions';
 import {BrowserDrafts,type DraftRepository} from './drafts';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuLabel,DropdownMenuTrigger} from './components/ui/dropdown-menu';
 import {SelectCombobox} from './components/ui/select-combobox';
@@ -84,9 +85,12 @@ export function Composer({tab, workspace, onSettings, onRecover, connection, voy
             <Button variant="ghost" type="button" onClick={onSettings} title="Voyage settings" aria-label="Voyage settings"><Settings2Icon aria-hidden="true"/><span className="sr-only">Voyage settings</span></Button>
             {tab&&<ComposerDiscovery tab={tab} workspace={workspace} onSettings={onSettings} onAttach={()=>fileInput.current?.click()} triggerOpen={discoveryRequested} onTriggerHandled={()=>setDiscoveryRequested(false)} focusComposer={()=>composerInput.current?.focus()}/>}
             <Button variant="ghost" type="button" disabled={!tab||tab.busy||attaching} aria-label="Attach pictures" title="Attach pictures" onClick={()=>fileInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button>
+            <ComposerOptions className="flex flex-wrap items-center">
+            <ComposerOptionTrigger name="Account" label={tab?.snapshot?.inference?.account?.label||'Review account'} disabled={!tab||!workspace.actionable(tab)} onClick={onSettings}/>
             {tab&&connection&&tab.snapshot?.inference&&<InferenceControls tab={tab} workspace={workspace} connection={connection}/>}
             {tab&&connection&&<ExecutionPanel tab={tab} connection={connection}/>}
             {connection&&voyage&&<VoyageActions connection={connection} voyage={voyage} onChanged={()=>workspace.connectionChanged()} accessTrigger triggerLabel={`Access: ${{'read-only':'Read only',approval:'Approval',unrestricted:'Full access'}[tab?.snapshot?.access as 'read-only'|'approval'|'unrestricted']||'Unknown'}`}/>}
+            </ComposerOptions>
         </div>{running && <Button variant="outline" type="button" aria-label="Stop run" disabled={!canStop} onClick={() => tab && void workspace.act(tab.key,'cancel')}><SquareIcon aria-hidden="true"/>{stopping?'Stopping…':'Stop run'}</Button>}<Button variant="default" aria-label={sendOp === 'steer' ? 'Send to current run' : 'Send'} disabled={!enabled || (!tab?.draft.trim() && !tab?.pictures.length)}><ArrowUpIcon aria-hidden="true"/>{sendOp === 'steer' ? 'Send to current run' : 'Send'}</Button></div><small className="composer-hint">Enter to send · Shift+Enter for a new line · / for actions</small></ComposerBox>
     </form>;
 }
