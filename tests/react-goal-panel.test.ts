@@ -24,7 +24,7 @@ test('Goal dialog requires replacement consent, retains a stale draft, escapes t
         await render();await click('Goal · Paused');
         const dialog=dom.window.document.querySelector('[role="dialog"]')!;
         assert.equal(dialog.contains(dom.window.document.activeElement),true);
-        assert.equal(dialog.querySelector('img,script,b'),null);
+        assert.ok(dialog.querySelector('img,script,b')===null,'untrusted Goal text must not create HTML elements');
         assert.match(dialog.textContent!,/<script>bad\(\)<\/script>/);assert.doesNotMatch(dialog.textContent!,/\u202e/);
         await click('Replace goal');
         const input=dom.window.document.querySelector('textarea')!;
@@ -38,7 +38,7 @@ test('Goal dialog requires replacement consent, retains a stale draft, escapes t
         assert.match(dom.window.document.querySelector('[role="alert"]')!.textContent!,/changed since review/);
         assert.equal(input.value,'New private objective');assert.equal(actions.length,0);
         await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
-        assert.equal(dom.window.document.querySelector('[role="dialog"]'),null);
+        assert.ok(dom.window.document.querySelector('[role="dialog"]')===null,'Escape must close the Goal dialog');
         // Radix restores focus after its deferred unmount lifecycle. Bound the
         // observation rather than racing that timer, and never stringify React's
         // cyclic DOM/Fiber tree in a strict-equality assertion failure.
