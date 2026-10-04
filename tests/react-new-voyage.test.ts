@@ -7,7 +7,7 @@ import {completeNewVoyage} from '../resources/react/new-voyage-delivery';
 
 const binding={account_id:'account',connection_id:'provider',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 
-async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false,unknownModels=false,reorderedProfile=false}:{reorderedProfile?:boolean;unknownModels?:boolean;accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
+async function mount({bootstrapPending=false,uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false,unknownModels=false,reorderedProfile=false}:{reorderedProfile?:boolean;unknownModels?:boolean;accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
     const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test',pretendToBeVisual:true});
     // Radix focus traversal and Floating UI must see constructors from this window.
     const globals:Record<string,unknown>={window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,
@@ -35,6 +35,8 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
         }
         return {protocol:1,outcome_unknown:false,error:null,result};
     }}};
+    const readyClient=connection.client;
+    if(bootstrapPending){connection.client=null;connection.status='Connecting…';connection.connecting=true;}
     const second={...connection,id:'second',name:'Second Vessel',vessel_id:'v2',client:{async exchange(request:any){const reply=await connection.client.exchange(request);if(request.command.op==='capabilities')reply.result.vessel_id='v2';return reply;}}};
     const root=createRoot(document.getElementById('root')!);
     await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection],['second',second]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,recovery,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:(location:any)=>advanced.push(location)})));
@@ -62,7 +64,8 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
         const option=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.textContent?.includes('Other model')&&!item.getAttribute('aria-label')?.includes('favorites'))!;
         assert.ok(option);await act(async()=>option.click());
     };
-    return {dom,commands,created,advanced,button,dispose,choose,chooseModel,allowModels:()=>{failModels=false;}};
+    const releaseBootstrap=async(success:boolean)=>{connection.connecting=false;connection.status=success?'Connected':'Connection refused';connection.client=success?readyClient:null;await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,onCreated:()=>assert.fail('Bootstrap must not create a voyage'),onAdvanced:()=>{}})));};
+    return {releaseBootstrap,dom,commands,created,advanced,button,dispose,choose,chooseModel,allowModels:()=>{failModels=false;}};
 }
 
 test('uncertain message transfer starts as a reviewable draft and sends nothing',async()=>{
@@ -275,4 +278,19 @@ test('pending Fleet bootstrap is connecting, confirmed failures keep their obser
  assert.equal(vesselAvailability({client:null,connecting:true,status:'Disconnected'}),'Connecting to Vessel…');
  assert.equal(vesselAvailability({client:null,connecting:false,status:'Connection refused'}),'Connection refused');
  assert.equal(vesselAvailability({client:{},status:'Connected'}),'Connected');
+});
+
+
+test('deferred Fleet bootstrap UI keeps pending and failed connections honest without creating',async()=>{
+ for(const success of [true,false]){
+  const view=await mount({bootstrapPending:true});try{
+   assert.match(document.body.textContent!,/Connecting to Vessel/);
+   assert.doesNotMatch(document.body.textContent!,/Vessel is offline/);
+   assert.equal(view.button('Send').disabled,true);
+   await view.releaseBootstrap(success);
+   if(success)assert.doesNotMatch(document.body.textContent!,/Connection refused|Vessel is offline/);
+   else{assert.match(document.body.textContent!,/Connection refused/);assert.equal(view.button('Send').disabled,true);}
+   assert.equal(view.commands.some(c=>['start_account','submit','steer'].includes(c.op)),false);
+  }finally{await view.dispose();}
+ }
 });

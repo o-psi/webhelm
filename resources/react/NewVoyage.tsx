@@ -88,7 +88,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
             setCaps(value);setPath(current=>value.scope==='owner'?current||value.workspaces?.[0]?.path||'':value.workspaces?.some((choice:any)=>choice.path===current)?current:value.workspaces?.[0]?.path||'');setNotice('');
         }).catch(error=>{if(epoch===capsGeneration.current)setNotice(error instanceof Error?error.message:'Vessel unavailable.');});
         return()=>{capsGeneration.current++;};
-    },[vessel,connection?.client,connection?.status,connection?.connecting]);
+    },[vessel,connection?.client,connection?.client?null:connection?.status,connection?.client?null:connection?.connecting]);
     useEffect(()=>{
         const epoch=++profilesGeneration.current;
         setCatalogue(null);setAccounts([]);setChoicesFor(null);
