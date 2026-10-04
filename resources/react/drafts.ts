@@ -116,3 +116,8 @@ export class DraftSlot {
     async sending(){this.set({...this.value,delivery:'review'});await this.flush();}
     async retry(){this.failed=false;await this.flush();}
 }
+
+/** Hide only empty successful-clear feedback, never review or storage failures. */
+export function showDraftFeedback(slot:{message:string;failed?:boolean;value:Draft}){
+    return slot.failed||slot.value.delivery==='review'||Boolean(slot.value.text||slot.value.pictures.length)||slot.message!=='Draft cleared on this browser.';
+}

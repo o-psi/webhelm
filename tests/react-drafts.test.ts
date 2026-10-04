@@ -58,3 +58,14 @@ test('workspace waits for hydration, restores voyage-scoped content, and sends n
     const other=workspace.open('other-vessel','s','Other');await workspace.restoreDraft(other);assert.equal(workspace.tabs.get(other)?.draft,'');
     workspace.draft(key,'Edited after restore');await workspace.saveDrafts();workspace.close();assert.equal(repo.values.get(key)?.value.text,'Edited after restore');
 });
+
+
+test('empty cleared draft feedback is quiet without hiding review or failed storage',async()=>{
+ const {showDraftFeedback}=await import('../resources/react/drafts');
+ const slot={message:'Draft cleared on this browser.',failed:false,value:{text:'',pictures:[]}};
+ assert.equal(showDraftFeedback(slot),false);
+ assert.equal(showDraftFeedback({...slot,failed:true}),true);
+ assert.equal(showDraftFeedback({...slot,value:{...slot.value,delivery:'review' as const}}),true);
+ assert.equal(showDraftFeedback({...slot,message:'Draft storage unavailable'}),true);
+ assert.equal(showDraftFeedback({...slot,value:{text:'unsent',pictures:[]}}),true);
+});
