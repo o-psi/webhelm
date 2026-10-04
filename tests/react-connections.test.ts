@@ -67,6 +67,8 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         await click('View details for Workstation');
         assert.ok(query('.connections-details .connections-status.is-connected'));
         assert.match(query('.connections-maintenance')!.textContent!, /Software updates/);
+        assert.match(query('.connections-details')!.className,/grid-cols-1/,'detail grid has a bounded single track');
+        assert.match(query('.connections-maintenance')!.className,/min-w-0/,'maintenance can shrink below intrinsic control width');
         assert.equal(query('#update-current')!.textContent, '1.0.2');
         assert.ok(query('#update-check'), 'the selected Vessel has update controls');
         assert.doesNotMatch(query('.connections-maintenance')!.textContent!, /Newer release published/);

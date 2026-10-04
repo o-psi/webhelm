@@ -160,6 +160,12 @@ try {
     await page.waitForTimeout(180);
     await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-vessel-overview.png`});
     await vesselCard.getByRole('button',{name:'View details for Fixture Vessel'}).click();
+    const detailBounds=await page.locator('.connections-dialog').evaluate(dialog=>{
+        const owner=dialog.getBoundingClientRect();
+        return {owner:{left:owner.left,right:owner.right},items:[...dialog.querySelectorAll('.connections-body,.connections-details,.connections-maintenance,.connections-status')].map(el=>{const r=el.getBoundingClientRect();return {name:el.className,left:r.left,right:r.right,width:r.width,client:el.clientWidth,scroll:el.scrollWidth};})};
+    });
+    check(detailBounds.items.every(r=>r.width>0&&r.left>=detailBounds.owner.left&&r.right<=detailBounds.owner.right&&r.scroll<=r.client+1),`${label}/${viewport.width}: Vessel detail body/grid/maintenance/badge overflow ${JSON.stringify(detailBounds)}`);
+
     await page.locator('.connections-maintenance #update-current').getByText('1.0.2').waitFor();
     check(await page.locator('.connections-maintenance').getByText('Newer release published').count()===0,`${label}: another channel falsely claims a newer release`);
     check(await page.locator('.connections-maintenance').getByText('Published on another channel').isVisible(),`${label}: cross-channel build is not identified`);

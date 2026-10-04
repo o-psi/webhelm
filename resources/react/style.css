@@ -341,3 +341,10 @@
 
 /* Reserve the existing navigation/action controls without a visible title/status bar. */
 .conversation>.transcript{padding-top:60px}
+
+/* Vessel detail grid items must shrink below their intrinsic update-control width. */
+.connections-details>*{min-width:0;max-width:100%}
+.connections-maintenance [data-slot="card-content"],.connections-maintenance [data-slot="card-header"]{min-width:0}
+.connections-maintenance button{max-width:100%;white-space:normal;overflow-wrap:anywhere;height:auto;min-height:36px}
+.connections-maintenance [data-slot="select-combobox-wrapper"]{min-width:0;max-width:100%}
+.connections-details dt,.connections-details dd{min-width:0;overflow-wrap:anywhere}
