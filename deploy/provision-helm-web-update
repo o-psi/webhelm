@@ -23,9 +23,13 @@ if ! command -v sudo >/dev/null; then
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends sudo
 fi
+install -d -o root -g root -m 755 /usr/local/libexec
+install -o root -g root -m 755 "$source_dir/helm-web-update-policy" /usr/local/libexec/helm-web-update-policy
+install -o root -g root -m 644 "$source_dir/helm-web-update.timer" /etc/systemd/system/helm-web-update.timer
 install -o root -g root -m 755 "$source_dir/helm-web-update" /usr/local/sbin/helm-web-update
 install -o root -g root -m 644 "$source_dir/helm-web-update.service" /etc/systemd/system/helm-web-update.service
 install -o root -g root -m 440 "$source_dir/helm-web-update.sudoers" /etc/sudoers.d/helm-web-update
 visudo -cf /etc/sudoers.d/helm-web-update >/dev/null
 systemctl daemon-reload
+systemctl enable --now helm-web-update.timer
 echo 'Scoped Helm Web updater provisioned. Vessel may request only the fixed job.'

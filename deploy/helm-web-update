@@ -38,9 +38,25 @@ run_update() {
     [[ $EUID == 0 ]] || { echo 'Root service required' >&2; exit 1; }
     exec 9>/run/lock/helm-web-update.lock
     flock -n 9 || { echo 'A Helm Web update is already running' >&2; exit 1; }
+    /usr/local/libexec/helm-web-update-policy guard "$receipt"
+    # Probe before allocating backups/staging. Clone identity below remains authoritative.
+    local probe admission=0
+    probe=$(as_helm git ls-remote --exit-code "$repository" refs/heads/main)
+    probe=${probe:0:40}
+    [[ $probe =~ ^[0-9a-f]{40}$ ]] || return 2
+    if [[ -f "$root/app/.helm-source" ]] && [[ $(cat "$root/app/.helm-source") == "$probe" ]]; then
+        write_receipt current "$probe"
+        return
+    fi
+    /usr/local/libexec/helm-web-update-policy check "$root/deployments/helm-web-attempts.json" "$probe" || admission=$?
+    if (( admission == 1 )); then
+        write_receipt retry_exhausted "$probe"
+        return
+    elif (( admission != 0 )); then
+        return "$admission"
+    fi
     stage=$(mktemp -d "$root/update-stage.XXXXXXXX")
     chown helm:helm "$stage"
-    backup=$(mktemp -d "$root/backups/self-update.XXXXXXXX")
     write_receipt preparing
     finish() {
         local result=$?
@@ -71,6 +87,16 @@ run_update() {
         return
     fi
 
+    # Count before any build: even an interrupted build consumes an attempt.
+    local admission=0
+    /usr/local/libexec/helm-web-update-policy admit "$root/deployments/helm-web-attempts.json" "$source" || admission=$?
+    if (( admission == 1 )); then
+        write_receipt retry_exhausted "$source"
+        return
+    elif (( admission != 0 )); then
+        return "$admission"
+    fi
+
     install -d -o helm -g helm -m 755 "$stage/app"
     as_helm rsync -a --exclude=.git "$stage/repository/" "$stage/app/"
     ln -s "$root/runtime/.env" "$stage/app/.env"
@@ -91,6 +117,7 @@ run_update() {
     chown helm:www-data "$stage/app/.helm-source"
     chmod 644 "$stage/app/.helm-source"
 
+    backup=$(mktemp -d "$root/backups/self-update.XXXXXXXX")
     write_receipt activating "$source"
     # Stop PHP writes before the consistent SQLite snapshot and schema migration.
     systemctl stop php8.4-fpm.service
