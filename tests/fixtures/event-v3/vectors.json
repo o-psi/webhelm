@@ -1,0 +1,585 @@
+{
+  "core_commit": "ce31fce5f1027b06a416d444eda91e9eba023bd2",
+  "source": "crates/voyage-protocol/src/event_connection.rs",
+  "source_sha256": "c3fd8b6df3aaa465c6a8cd68cc3fb71c6ee9dee3fc049bcf1adb84cea28c0c88",
+  "status": "oracle vectors only; no production adapter or live conformance claim",
+  "cases": [
+    {
+      "id": "empty-selected-scope",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "publication": [
+          false,
+          true
+        ],
+        "cursor": 40
+      }
+    },
+    {
+      "id": "barrier-cursor-mismatch",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 41
+        }
+      ],
+      "expected": {
+        "reject_at": 1,
+        "reason": "initialization barrier mismatch"
+      }
+    },
+    {
+      "id": "barrier-sequence-mismatch",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 1,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "reject_at": 1,
+        "reason": "initialization barrier mismatch"
+      }
+    },
+    {
+      "id": "generation-mismatch",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000004",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "reject_at": 1,
+        "reason": "initialization barrier mismatch"
+      }
+    },
+    {
+      "id": "session_id-mismatch",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000004",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "reject_at": 1,
+        "reason": "initialization barrier mismatch"
+      }
+    },
+    {
+      "id": "incarnation-mismatch",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000004"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "reject_at": 1,
+        "reason": "initialization barrier mismatch"
+      }
+    },
+    {
+      "id": "reset-retention_gap",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "reset",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "reason": "retention_gap"
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "publication": [
+          false,
+          false
+        ],
+        "reject_at": 2,
+        "reason": "initialization not started"
+      }
+    },
+    {
+      "id": "reset-incarnation_changed",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "reset",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "reason": "incarnation_changed"
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "publication": [
+          false,
+          false
+        ],
+        "reject_at": 2,
+        "reason": "initialization not started"
+      }
+    },
+    {
+      "id": "reset-initialization_expired",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "reset",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "reason": "initialization_expired"
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "publication": [
+          false,
+          false
+        ],
+        "reject_at": 2,
+        "reason": "initialization not started"
+      }
+    },
+    {
+      "id": "reset-slow_consumer",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "reset",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "reason": "slow_consumer"
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "publication": [
+          false,
+          false
+        ],
+        "reject_at": 2,
+        "reason": "initialization not started"
+      }
+    },
+    {
+      "id": "duplicate-complete-not-silent",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "publication": [
+          false,
+          true
+        ],
+        "reject_at": 2,
+        "reason": "initialization not started",
+        "note": "Exact-frame deduplication belongs to transport, not this gate."
+      }
+    },
+    {
+      "id": "begin-replaces-staged-generation",
+      "definition": "InitializationFence::accept",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40
+        },
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000005",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 50
+        },
+        {
+          "kind": "complete",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "sequence": 0,
+          "cursor": 40
+        }
+      ],
+      "expected": {
+        "reject_at": 2,
+        "reason": "initialization barrier mismatch"
+      }
+    },
+    {
+      "id": "chunk-utf8-bytes",
+      "definition": "ContentChunk::validate",
+      "input": {
+        "expected_fence": {
+          "generation": "00000000-0000-4000-8000-000000000001",
+          "session_id": "00000000-0000-4000-8000-000000000002",
+          "incarnation": "00000000-0000-4000-8000-000000000003"
+        },
+        "next_offset": 0,
+        "chunk": {
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "entity_id": "message:0",
+          "offset": 0,
+          "total_bytes": 2,
+          "text": "\u00e9"
+        }
+      },
+      "expected": {
+        "next_offset": 2
+      }
+    },
+    {
+      "id": "chunk-end-empty",
+      "definition": "ContentChunk::validate",
+      "input": {
+        "expected_fence": {
+          "generation": "00000000-0000-4000-8000-000000000001",
+          "session_id": "00000000-0000-4000-8000-000000000002",
+          "incarnation": "00000000-0000-4000-8000-000000000003"
+        },
+        "next_offset": 2,
+        "chunk": {
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "entity_id": "message:0",
+          "offset": 2,
+          "total_bytes": 2,
+          "text": ""
+        }
+      },
+      "expected": {
+        "next_offset": 2
+      }
+    },
+    {
+      "id": "chunk-offset-gap",
+      "definition": "ContentChunk::validate",
+      "input": {
+        "expected_fence": {
+          "generation": "00000000-0000-4000-8000-000000000001",
+          "session_id": "00000000-0000-4000-8000-000000000002",
+          "incarnation": "00000000-0000-4000-8000-000000000003"
+        },
+        "next_offset": 0,
+        "chunk": {
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "entity_id": "message:0",
+          "offset": 2,
+          "total_bytes": 3,
+          "text": "x"
+        }
+      },
+      "expected": {
+        "reject": "content identity or offset mismatch"
+      }
+    },
+    {
+      "id": "chunk-extent-overrun",
+      "definition": "ContentChunk::validate",
+      "input": {
+        "expected_fence": {
+          "generation": "00000000-0000-4000-8000-000000000001",
+          "session_id": "00000000-0000-4000-8000-000000000002",
+          "incarnation": "00000000-0000-4000-8000-000000000003"
+        },
+        "next_offset": 0,
+        "chunk": {
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "entity_id": "message:0",
+          "offset": 0,
+          "total_bytes": 1,
+          "text": "\u00e9"
+        }
+      },
+      "expected": {
+        "reject": "invalid content extent"
+      }
+    },
+    {
+      "id": "chunk-empty-nonfinal",
+      "definition": "ContentChunk::validate",
+      "input": {
+        "expected_fence": {
+          "generation": "00000000-0000-4000-8000-000000000001",
+          "session_id": "00000000-0000-4000-8000-000000000002",
+          "incarnation": "00000000-0000-4000-8000-000000000003"
+        },
+        "next_offset": 0,
+        "chunk": {
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "entity_id": "message:0",
+          "offset": 0,
+          "total_bytes": 1,
+          "text": ""
+        }
+      },
+      "expected": {
+        "reject": "invalid content extent"
+      }
+    },
+    {
+      "id": "unknown-envelope-field",
+      "definition": "InitializationEvent serde deny_unknown_fields",
+      "input": [
+        {
+          "kind": "begin",
+          "fence": {
+            "generation": "00000000-0000-4000-8000-000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000002",
+            "incarnation": "00000000-0000-4000-8000-000000000003"
+          },
+          "cursor": 40,
+          "private_input": "synthetic-never-a-secret"
+        }
+      ],
+      "expected": {
+        "reject": "unknown field",
+        "note": "Schema exclusion only. Does not prove authorization or secret filtering in opaque entity values."
+      }
+    }
+  ]
+}
