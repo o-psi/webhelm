@@ -11,6 +11,11 @@ class Storage {
     setItem(key: string, value: string) { this.data.set(key, value); }
     removeItem(key: string) { this.data.delete(key); }
 }
+function entityReply(command:any, state:any, incarnation='incarnation') {
+ const fence={generation:command.generation,session_id:state.session_id,incarnation};
+ const entities=[['session','session',{...state,messages:undefined,run:undefined}],['run','run',state.run||null],...((state.messages||[]).map((message:any,index:number)=>['message',`message:${index}`,{...message,message_index:index}]))];
+ return {protocol:1,outcome_unknown:false,result:{session_id:state.session_id,incarnation,result:{version:3,revision:state.revision,cursor:state.observation_cursor||3,next_offset:entities.length,has_more:false,events:[{kind:'begin',fence,cursor:state.observation_cursor||3},...entities.map(([entity_kind,entity_id,value],sequence)=>({kind:'entity',fence,sequence,entity_kind,entity_id,value})),{kind:'complete',fence,sequence:entities.length,cursor:state.observation_cursor||3}]}}};
+}
 function fixture(drafts?:import('../resources/react/drafts').DraftRepository) {
     const storage = new Storage(), commands: any[] = [];
     let mode = 'accepted', subscriptions = 0, revision = 1, cursor = 3, eventListener: ((event: any) => void) | null = null;
@@ -20,7 +25,10 @@ function fixture(drafts?:import('../resources/react/drafts').DraftRepository) {
         async exchange({command}: any) {
             commands.push(command);
             if (command.op === 'capabilities') return {protocol:1,outcome_unknown:false,result:{scope:'owner'}};
-            if (command.op === 'snapshot') return response(command.session_id, {session_id: command.session_id, revision, observation_cursor: cursor, messages: [], run: {state: 'idle'}});
+            if (command.op === 'initialize_entities') {
+                const fence={generation:command.generation,session_id:command.session_id,incarnation:'incarnation'};
+                return response(command.session_id,{version:3,revision,cursor,next_offset:2,has_more:false,events:[{kind:'begin',fence,cursor},{kind:'entity',fence,sequence:0,entity_kind:'session',entity_id:'session',value:{session_id:command.session_id,revision,model:'fixture',total_messages:0}},{kind:'entity',fence,sequence:1,entity_kind:'run',entity_id:'run',value:{state:'idle'}},{kind:'complete',fence,sequence:2,cursor}]});
+            }
             if (command.op === 'decisions') return response(command.session_id, []);
             if (command.op === 'receipt') return response(command.session_id, {command_id: command.command_id, status: mode});
             if (mode === 'unknown') throw new Error('Disconnected after dispatch');
@@ -28,7 +36,7 @@ function fixture(drafts?:import('../resources/react/drafts').DraftRepository) {
         },
         subscribe(_session: string, _incarnation: string, _after: number, listener: (event: any) => void, projection?: string | null) { subscriptions++; projections.push(projection); eventListener = listener; return () => { subscriptions--; if (eventListener === listener) eventListener = null; }; },
     };
-    const connection = {id: 'vessel', name: 'Vessel', client, journal: new IntentJournal(storage, 'tenant:vessel'), voyages: [], status: 'Connected'};
+    const connection = {id: 'vessel', name: 'Vessel', client, journal: new IntentJournal(storage, 'tenant:vessel'), voyages: ['a','b'].map(session_id=>({session_id,incarnation:'incarnation'})), status: 'Connected'};
     const workspace = new Workspace(() => new Map([['vessel', connection]]),drafts);
     return {workspace, connection, commands, storage, mode: (value: string) => { mode = value; }, subscriptions: () => subscriptions, projections, emit: (event: any) => eventListener?.(event), advanceSnapshot: () => { revision++; cursor++; }};
 }
@@ -52,7 +60,7 @@ test('recovered status clears a transient read warning while retaining uncertain
     const exchange=f.connection.client.exchange.bind(f.connection.client);
     let failSnapshot=true;
     f.connection.client.exchange=async(payload:any)=>{
-        if(payload.command.op==='snapshot'&&failSnapshot)throw new Error('Connection lost; command outcome may be unknown.');
+        if(payload.command.op==='initialize_entities'&&failSnapshot)throw new Error('Connection lost; command outcome may be unknown.');
         return exchange(payload);
     };
     await f.workspace.refresh(key);
@@ -244,10 +252,10 @@ test('two pictures wake Voyage and submit once from one Send after fresh status'
  f.connection.client.exchange=async(payload:any)=>{
    const c=payload.command;
    if(c.op==='upload_image'){
-     uploads.push(c);incarnation='resumed';
+     uploads.push(c);incarnation='resumed';f.connection.voyages[0].incarnation=incarnation;
      return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation,result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7,media_type:'image/png'}}};
    }
-   if(c.op==='snapshot')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation,result:{session_id:'a',revision:1,observation_cursor:3,messages:[],run:{state:'idle'}}}};
+   if(c.op==='initialize_entities')return entityReply(c,{session_id:'a',revision:1,observation_cursor:3,messages:[],run:{state:'idle'}},incarnation);
    if(c.op==='decisions')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation,result:[]}};
    return original(payload);
  };
@@ -269,7 +277,7 @@ test('post-upload changed revision or active run never silently submits',async()
   let uploaded=false;const original=f.connection.client.exchange.bind(f.connection.client);
   f.connection.client.exchange=async(payload:any)=>{
    if(payload.command.op==='upload_image'){uploaded=true;return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'resumed',result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7}}};}
-   if(uploaded&&payload.command.op==='snapshot')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'resumed',result:{session_id:'a',revision:1,run:{state:'idle'},messages:[],...change}}};
+   if(uploaded&&payload.command.op==='initialize_entities')return entityReply(payload.command,{session_id:'a',revision:1,run:{state:'idle'},messages:[],...change},'resumed');
    return original(payload);
   };
   await f.workspace.attach(key,[new File(['picture'],'example.png',{type:'image/png'})]);await f.workspace.act(key,'submit');
@@ -285,7 +293,7 @@ test('pictures steer the active run rather than queueing a new turn',async()=>{
  const original=f.connection.client.exchange.bind(f.connection.client);
  f.connection.client.exchange=async(payload:any)=>{
   if(payload.command.op==='upload_image')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7}}};
-  if(payload.command.op==='snapshot')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{session_id:'a',revision:2,messages:[],run:{state:'running',run_id:'r'}}}};
+  if(payload.command.op==='initialize_entities')return entityReply(payload.command,{session_id:'a',revision:2,messages:[],run:{state:'running',run_id:'r'}});
   return original(payload);
  };
  await f.workspace.refresh(key);await new Promise(resolve=>setTimeout(resolve,0));
@@ -312,7 +320,7 @@ test('socket renewal keeps confirmed status visible but fences actions until the
  const pending=new Promise<void>(resolve=>{release=resolve;});
  const previous=f.connection.client;
  f.connection.client={...previous,exchange:async(value:any)=>{
-  if(value.command.op==='snapshot')await pending;
+  if(value.command.op==='initialize_entities')await pending;
   return previous.exchange(value);
  }};
  f.workspace.connectionChanged();
@@ -328,7 +336,7 @@ test('socket renewal keeps confirmed status visible but fences actions until the
  f.workspace.close();
 });
 
-test('failed events fall back to fresh snapshots without subscription churn', async () => {
+test('failed events reinitialize bounded entities without legacy downgrade or subscription churn', async () => {
  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
  const tab=f.workspace.tabs.get(key)!;
  assert.equal(f.subscriptions(),1);
@@ -338,12 +346,12 @@ test('failed events fall back to fresh snapshots without subscription churn', as
  await f.workspace.refresh(key);
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(tab.stale,false,'a confirmed snapshot restores status after the failed event');
- assert.equal(f.subscriptions(),1,'one legacy observation replaces the failed v2 subscription');
- assert.deepEqual(f.projections,['public-v2',null]);
+ assert.equal(f.subscriptions(),0,'failed incompatible observation is not retried as legacy');
+ assert.deepEqual(f.projections,['public-v2']);
  f.emit({protocol:1,session_id:'a',incarnation:'incarnation',result:null,error:'command outcome unknown',outcome_unknown:true});
  await f.workspace.refresh(key);
- assert.equal(f.subscriptions(),0,'a failed legacy observation is released');
- assert.equal(f.workspace.needsRefresh(key),true,'canonical polling continues while both event formats are unavailable');
+ assert.equal(f.subscriptions(),0,'a failed observation is released');
+ assert.equal(f.workspace.needsRefresh(key),true,'bounded entity reinitialization remains available during transport backoff');
  f.workspace.connectionChanged();await f.workspace.refresh(key);
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(tab.stale,false,'catalogue updates must not mark a confirmed read stale when the client is unchanged');
@@ -355,7 +363,7 @@ test('failed events fall back to fresh snapshots without subscription churn', as
  (f.workspace as any).eventRetryAt.set(key,Date.now()-1);
  await f.workspace.refresh(key);
  assert.equal(f.subscriptions(),1,'observation retry resumes after the bounded delay');
- assert.deepEqual(f.projections,['public-v2',null,null],'legacy retry does not oscillate to v2 for the same owner');
+ assert.ok(f.projections.every(projection=>projection==='public-v2'),'incompatible peers never trigger a legacy projection');
  f.workspace.close();
 });
 
@@ -368,7 +376,7 @@ test('subscription setup failure keeps a confirmed read and obsolete read notice
  const exchange=f.connection.client.exchange.bind(f.connection.client);
  let fail=true;
  f.connection.client.exchange=async(payload:any)=>{
-  if(fail&&payload.command.op==='snapshot')throw new Error('Connection lost; command outcome may be unknown.');
+  if(fail&&payload.command.op==='initialize_entities')throw new Error('Connection lost; command outcome may be unknown.');
   return exchange(payload);
  };
  await f.workspace.refresh(key);
@@ -395,7 +403,7 @@ test('sidebar metadata updates retain healthy transcript without snapshot reads'
  assert.equal(f.commands.length,before,'metadata notifications must not amplify into full transcript reads');
  assert.equal(f.subscriptions(),1);
  f.workspace.connectionChanged();await f.workspace.refresh(key);
- assert.ok(f.commands.slice(before).some(command=>command.op==='snapshot'),'explicit action callbacks still refresh canonical authority');
+ assert.ok(f.commands.slice(before).some(command=>command.op==='initialize_entities'),'explicit action callbacks still refresh canonical authority');
  f.workspace.close();
 });
 
@@ -403,11 +411,11 @@ test('catalogued owner replacement fences the previous incarnation immediately',
  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
  await new Promise(resolve=>setImmediate(resolve));
  const tab=f.workspace.tabs.get(key)!;
- (f.connection.voyages as any[]).push({session_id:'a',incarnation:'replacement'});
+ f.connection.voyages[0]={session_id:'a',incarnation:'replacement'};
  let release!:()=>void;
  const pending=new Promise<void>(resolve=>{release=resolve;});
  const exchange=f.connection.client.exchange.bind(f.connection.client);
- f.connection.client.exchange=async(payload:any)=>{if(payload.command.op==='snapshot')await pending;return exchange(payload);};
+ f.connection.client.exchange=async(payload:any)=>{if(payload.command.op==='initialize_entities')await pending;return exchange(payload);};
  f.workspace.connectionChanged(false);
  assert.equal(f.workspace.actionable(tab),false);
  assert.equal(f.subscriptions(),0);

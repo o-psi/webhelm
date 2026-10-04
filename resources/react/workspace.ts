@@ -212,9 +212,11 @@ export class Workspace {
                     }
                     content.push({type: 'image', attachment: picture.attachment});
                 }
-                // Snapshot is a read, not an upload/submit replay. Keep busy throughout
+                // Entity initialization is a read, not an upload/submit replay. Keep busy throughout
                 // so one click remains one admission even across a process wake-up.
-                const current = voyageResult(await client.exchange(request('snapshot', {session_id:tab.session})), tab.session).result;
+                const addressed = connection.voyages.find((voyage:any)=>voyage.session_id===tab.session);
+                if (!addressed?.incarnation) throw new Error('Canonical owner unavailable while preparing pictures.');
+                const current = entityPresentation(await initializeEntities(client,tab.session,addressed.incarnation));
                 if (this.closed || this.connections().get(tab.vessel)?.client !== client || this.tabs.get(key) !== tab) throw new Error('Voyage connection changed while preparing pictures.');
                 if (op === 'steer') {
                     if (current?.session_id !== tab.session || current.run?.run_id !== origin.run?.run_id || current.recovery_pending || !['accepted','running','awaiting_decision'].includes(current.run?.state)) throw new Error('The addressed run finished while preparing pictures. Draft retained.');
