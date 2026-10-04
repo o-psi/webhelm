@@ -49,7 +49,12 @@ test('sidebar context surface is read-only, reports fresh disabled reasons and r
         assert.equal(dom.window.document.querySelector<HTMLElement>('[data-slot="collapsible-content"]')!.hidden,true);
         assert.ok(commands.every(command=>['capabilities','inspect','snapshot'].includes(command.op)));
     }finally{
-        await act(async()=>root.unmount());dom.window.close();
+        await act(async()=>root.unmount());
+        // Radix FocusScope dispatches its unmount-autofocus event in a deferred
+        // callback. Keep the JSDOM Event constructor and document installed until
+        // those callbacks (and their React work) have settled in the same realm.
+        await settle();
+        dom.window.close();
         for(const [name,descriptor] of saved){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete (globalThis as any)[name];}
     }
 });
