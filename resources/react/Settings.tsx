@@ -1,3 +1,4 @@
+import {ModelLabel} from './ModelLabel';
 import {SelectCombobox} from './components/ui/select-combobox';
 import {Input} from './components/ui/input';
 import {Button} from './components/ui/button';
@@ -175,7 +176,7 @@ export function Settings({fleet,workspace,tab,location,profileOnly=false,tenant,
                 {screen==='models'&&<>
                     <label className="setup-search">Search models<Input type="search" value={search} onChange={event=>setSearch(event.target.value)}/></label>
                     <p>Models are listed by the selected account’s provider. Listing does not guarantee access or remaining quota. Choosing a different model resets reasoning and service to provider defaults.</p>
-                    <div className="setup-choices">{models.filter(item=>matches(`${item.display_name||''} ${item.id}`)).map(item=><Button variant={model===item.id?'secondary':'outline'} type="button" key={item.id} className={setupChoice} disabled={busy} aria-pressed={model===item.id} onClick={()=>{if(model!==item.id){setModel(item.id);setReasoning('');setService('');}back();}}><strong>{item.display_name||item.id}</strong><small>{item.id}{item.is_default?' · Default':''}</small></Button>)}</div>
+                    <div className="setup-choices">{models.filter(item=>matches(`${item.display_name||''} ${item.id}`)).map(item=><Button variant={model===item.id?'secondary':'outline'} type="button" key={item.id} className="h-auto min-w-0 w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left font-normal" disabled={busy} aria-pressed={model===item.id} onClick={()=>{if(model!==item.id){setModel(item.id);setReasoning('');setService('');}back();}}><ModelLabel model={item}/></Button>)}</div>
                     {!models.some(item=>matches(`${item.display_name||''} ${item.id}`))&&<p>No models found.</p>}
                 </>}
                 {screen==='reasoning'&&<>

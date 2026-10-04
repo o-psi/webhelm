@@ -48,11 +48,11 @@ export function VoyageActions({connection,voyage,onChanged,portalContainer,acces
                     <div id="sidebar-details-advanced" hidden><Collapsible open={technicalOpen} onOpenChange={setTechnicalOpen}><CollapsibleTrigger asChild><Button variant="ghost" type="button">Technical details</Button></CollapsibleTrigger><CollapsibleContent forceMount hidden={!technicalOpen}><pre id="sidebar-action-details"/></CollapsibleContent></Collapsible></div>
                     <label id="sidebar-name-field" hidden>Name<Input id="sidebar-name" maxLength={256}/></label>
                     <label id="sidebar-access-field" hidden>Access mode<SelectCombobox id="sidebar-access"><option value="read-only">Read only</option><option value="approval">Approval</option><option value="unrestricted">Full access</option></SelectCombobox></label>
-                    <Alert id="sidebar-access-review" hidden><AlertDescription id="sidebar-access-summary"/></Alert>
+                    <Alert id="sidebar-access-review" className="my-3 text-sm leading-relaxed [&_code]:break-all" hidden><AlertDescription id="sidebar-access-summary"/></Alert>
                     <label id="sidebar-branch-field" hidden>Branch through<SelectCombobox id="sidebar-branch"/><Button variant="ghost" id="sidebar-branch-more" type="button">Load more branch points</Button></label>
                     <label id="sidebar-retain-field" hidden>Recent messages to retain<Input id="sidebar-retain" type="number" min="0" max="4294967295" defaultValue="128"/></label>
                     <label id="sidebar-confirm-field" hidden><span id="sidebar-confirm-label"/><Input id="sidebar-confirm" autoComplete="off"/></label>
-                    <footer><Button variant="ghost" id="sidebar-reconcile" type="button">Check pending receipt</Button><Button variant="outline" id="sidebar-dismiss" type="button">Close</Button><Button id="sidebar-submit" type="submit" disabled>Confirm</Button></footer>
+                    <footer className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-4"><Button variant="ghost" id="sidebar-reconcile" type="button">Check pending receipt</Button><Button variant="outline" id="sidebar-dismiss" type="button">Close</Button><Button id="sidebar-submit" type="submit" disabled>Confirm</Button></footer>
                 </form>
             </DialogContent>
         </Dialog>}

@@ -1,3 +1,4 @@
+import {modelLabel} from './ModelLabel';
 import React,{useEffect,useState} from 'react';
 import {ChevronDownIcon} from 'lucide-react';
 import {Button} from './components/ui/button';
@@ -7,12 +8,13 @@ import {sameAccount} from '../js/execution-profiles.js';
 import {vesselRead} from './settings';
 import type {Workspace,Tab} from './workspace';
 
-type Choice='model'|'reasoning';
+type Choice='model'|'reasoning'|'service';
 export function proposedInference(current:any,models:any[],choice:Choice,value:string){
     const model=models.find(item=>item.id===(choice==='model'?value:current.model));
     if(!current?.account||!model)throw new Error('Model choices changed. Review them before applying.');
     if(choice==='reasoning'&&value&&!model.reasoning_efforts?.includes(value))throw new Error('Reasoning choices changed. Review them before applying.');
-    return {account:structuredClone(current.account),model:model.id,reasoning_effort:choice==='model'?null:value||null,service_tier:choice==='model'?null:current.service_tier||null};
+    if(choice==='service'&&value&&!model.service_tiers?.includes(value))throw new Error('Service choices changed. Review them before applying.');
+    return {account:structuredClone(current.account),model:model.id,reasoning_effort:choice==='model'?null:choice==='reasoning'?value||null:current.reasoning_effort||null,service_tier:choice==='model'?null:choice==='service'?value||null:current.service_tier||null};
 }
 
 export function InferenceControls({tab,workspace,connection}:{tab:Tab;workspace:Workspace;connection:any}){
@@ -58,7 +60,7 @@ export function InferenceControls({tab,workspace,connection}:{tab:Tab;workspace:
     const models=catalogue?.key===accountKey?catalogue.models:[];
     const provider=({chatgpt_oauth:'ChatGPT',openai_responses:'OpenAI Responses',openai_chat_completions:'OpenAI Chat Completions',anthropic:'Anthropic'} as Record<string,string>)[account?.transport]||'Account models';
     const menus:Choice[]=['reasoning'];
-    return <div className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Model and reasoning"><ModelPicker trigger={<Button variant="ghost" type="button" size="sm" disabled={!canChange} aria-label="Choose model" className="max-w-44 gap-1 px-2 text-xs font-normal"><span className="truncate">{inference?.model||'Model'}</span><ChevronDownIcon aria-hidden="true"/></Button>} open={open==='model'} onOpenChange={next=>setOpen(next?'model':null)} models={models} current={inference?.model||''} provider={provider} loading={!ready} error={ready?catalogue?.error||'':''} disabled={!canChange} onChoose={value=>void apply('model',value)} onRefresh={()=>setRefresh(value=>value+1)}/>{menus.map(choice=>{
+    return <div className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Model and reasoning"><ModelPicker trigger={<Button variant="ghost" type="button" size="sm" disabled={!canChange} aria-label="Choose model" className="max-w-44 gap-1 px-2 text-xs font-normal"><span className="truncate">{modelLabel(catalogue?.models.find(item=>item.id===inference?.model),inference?.model||'Model')}</span><ChevronDownIcon aria-hidden="true"/></Button>} open={open==='model'} onOpenChange={next=>setOpen(next?'model':null)} models={models} current={inference?.model||''} provider={provider} loading={!ready} error={ready?catalogue?.error||'':''} disabled={!canChange} onChoose={value=>void apply('model',value)} onRefresh={()=>setRefresh(value=>value+1)}/>{menus.map(choice=>{
         const model=catalogue?.models.find(item=>item.id===inference?.model);
         const values=choice==='model'?catalogue?.models||[]:[{id:'',display_name:'Provider default'},...(model?.reasoning_efforts||[]).map((id:string)=>({id,display_name:id}))];
         return <DropdownMenu key={choice} open={open===choice} onOpenChange={next=>{if(next&&catalogue?.error)setCatalogue(null);setOpen(next?choice:null);}}><DropdownMenuTrigger asChild><Button variant="ghost" type="button" size="sm" disabled={!canChange} aria-label={choice==='model'?'Choose model':'Choose reasoning'} className="max-w-44 gap-1 px-2 text-xs font-normal"><span className="truncate">{choice==='model'?inference?.model||'Model':inference?.reasoning_effort||'Default thinking'}</span><ChevronDownIcon aria-hidden="true"/></Button></DropdownMenuTrigger><DropdownMenuContent align="start" className="max-h-72 min-w-48 overflow-y-auto">{!ready?<DropdownMenuItem disabled>Loading choices…</DropdownMenuItem>:catalogue?.error?<><DropdownMenuItem disabled>{catalogue.error}</DropdownMenuItem><DropdownMenuItem onSelect={event=>{event.preventDefault();setRefresh(value=>value+1);}}>Retry choices</DropdownMenuItem></>:values.length?<DropdownMenuRadioGroup value={choice==='model'?inference?.model||'':inference?.reasoning_effort||''} onValueChange={value=>void apply(choice,value)}>{values.map((item:any)=><DropdownMenuRadioItem key={item.id} value={item.id} disabled={busy}>{item.display_name||item.id}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup>:<DropdownMenuItem disabled>No choices available</DropdownMenuItem>}</DropdownMenuContent></DropdownMenu>;
