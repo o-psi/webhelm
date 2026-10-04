@@ -96,7 +96,8 @@ test('React voyage details observe an exact pending receipt without replay',asyn
  await act(async()=>{[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Technical details')!.click();});
  assert.equal(dom.window.document.querySelector('[data-slot=dialog-content]')?.getAttribute('data-state'),'open');assert.equal(dom.window.document.querySelector('#sidebar-details-run')!.textContent,'idle');assert.match(dom.window.document.querySelector('#sidebar-action-details')!.textContent!,/"revision": 1/);assert.doesNotMatch(dom.window.document.querySelector('#sidebar-action-details')!.textContent!,/private conversation/);assert.equal((dom.window.document.querySelector('#sidebar-reconcile') as HTMLElement).hidden,false);
  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1600));});
- assert.deepEqual(commands,['capabilities','inspect','snapshot','receipt']);assert.equal(pending.length,0);assert.equal((dom.window.document.querySelector('#sidebar-reconcile') as HTMLElement).hidden,true);
+ // Menu availability and dialog confirmation independently refresh read-only state.
+ assert.deepEqual(commands,['capabilities','inspect','snapshot','capabilities','inspect','snapshot','receipt']);assert.equal(pending.length,0);assert.equal((dom.window.document.querySelector('#sidebar-reconcile') as HTMLElement).hidden,true);
  await act(async()=>{dom.window.document.querySelector<HTMLButtonElement>('#sidebar-dismiss')!.click();});
  await act(async()=>root.render(React.createElement(VoyageActions,{connection,voyage:{session_id:'s',name:'Voyage'},onChanged:()=>{},accessTrigger:true,triggerLabel:'Access: Approval'})));
  await act(async()=>{dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Review access mode"]')!.click();});
