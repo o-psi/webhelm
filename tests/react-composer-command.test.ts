@@ -13,15 +13,14 @@ test('only literal goal command boundaries intercept inference',()=>{
 function fixture(){
     const calls:string[]=[];
     const tab:any={snapshot:{session_id:'s',access:'approval',goal:{revision:0,goal:null}},incarnation:'i',stale:false};
-    const workspace:any={tabs:new Map([['k',tab]]),refresh:async()=>{calls.push('read');},restoreDraft:async()=>{},draft:()=>{},goalUpdate:async(_key:any,_review:any,action:any)=>{calls.push('goal');assert.equal(action.continue_automatically,false);},actionable:()=>true,permitted:()=>true,act:async()=>{calls.push('inference');}};
+    const workspace:any={tabs:new Map([['k',tab]]),refresh:async()=>{calls.push('read');},restoreDraft:async()=>{},draft:()=>{},goalUpdate:async(_key:any,_review:any,action:any)=>{calls.push('goal');assert.equal(action.continue_automatically,false);return true;},actionable:()=>true,permitted:()=>true,act:async()=>{calls.push('inference');}};
     return {workspace,calls};
 }
-test('status and objective only read and open explicit paused review',async()=>{
+test('status reads while ordinary objective directly defines paused metadata',async()=>{
     const {workspace,calls}=fixture();const reviews:any[]=[];
     await dispatchComposerCommand(workspace,'k','/goal',{onGoalReview:value=>reviews.push(value)});
     await dispatchComposerCommand(workspace,'k','/goal Build',{onGoalReview:value=>reviews.push(value)});
-    assert.deepEqual(calls,['read','read']);assert.equal(reviews[0].action,undefined);
-    assert.equal(reviews[1].action.continue_automatically,false);assert.equal(reviews[1].action.replace_goal_id,null);
+    assert.deepEqual(calls,['read','read','goal']);assert.equal(reviews.length,1);assert.equal(reviews[0].action,undefined);
 });
 test('new goal delivery uses fresh metadata only and recovery never replays',async()=>{
     const {workspace,calls}=fixture();const message:any={text:'/goal Build',pictures:[],access:'approval',send:true,applyAccess:true,goalIntent:{objective:'Build',limits:defaultGoalLimits,replace_goal_id:null,continue_automatically:false}};
@@ -69,4 +68,14 @@ test('actual creation receipt precedes fresh access-confirmed goal metadata and 
     calls.length=0;await completeNewVoyage(workspace,'k',{...message,send:false,applyAccess:false});
     assert.deepEqual(calls,['read']);assert.equal(commands.filter(c=>c.op==='start_account').length,2);
     assert.equal(message.goalIntent.objective,'Build');
+});
+
+test('ordinary existing objective edit preserves goal identity and observed limits',async()=>{
+    const {workspace}=fixture();const limits={...defaultGoalLimits,runs:7};
+    const usage={runs:2,input_tokens:4,output_tokens:5,elapsed_ms:6,no_progress_runs:0,unmeasured_runs:0};
+    workspace.tabs.get('k').snapshot.goal={revision:2,goal:{id:'g',session_id:'s',objective:'Old',status:'paused',continuation_authorized:false,limits,usage,stop_reason:null}};
+    let action:any;workspace.goalUpdate=async(_k:any,_r:any,value:any)=>{action=value;return true;};
+    await dispatchComposerCommand(workspace,'k','/goal New objective',{onGoalReview:()=>assert.fail('ordinary edit must not require a form')});
+    assert.deepEqual(action,{action:'edit',goal_id:'g',objective:'New objective',limits});
+    assert.equal(workspace.tabs.get('k').snapshot.goal.goal.usage,usage);
 });

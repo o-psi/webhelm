@@ -13,6 +13,16 @@ export async function dispatchComposerCommand(workspace:Workspace,key:string,tex
     await workspace.refresh(key);const tab=workspace.tabs.get(key);
     if(!tab||tab.stale)throw Error('Refresh the voyage before reviewing its goal.');
     const review=reviewGoal(tab.snapshot,tab.incarnation);
-    onGoalReview(parsed.kind==='goal-status'?{review}:{review,objective:parsed.objective,action:{action:'set',objective:parsed.objective,limits:{...(review.state.goal?.limits||defaultGoalLimits)},replace_goal_id:review.state.goal?.id||null,continue_automatically:false}});
+    if(parsed.kind==='goal-status')onGoalReview({review});
+    else {
+        const goal=review.state.goal;
+        // Ordinary assignment changes metadata only. Editing preserves the
+        // observed identity, limits and usage; fresh goals are explicitly paused.
+        const action:GoalAction=goal
+            ?{action:'edit',goal_id:goal.id,objective:parsed.objective,limits:{...goal.limits}}
+            :{action:'set',objective:parsed.objective,limits:{...defaultGoalLimits},replace_goal_id:null,continue_automatically:false};
+        const applied=await workspace.goalUpdate(key,review,action);
+        return {handled:true,review,applied:Boolean(applied)};
+    }
     return {handled:true,review};
 }
