@@ -21,7 +21,7 @@ test('paused goal review has explicit finite-limit consent and never applies dur
 
 
 test('current goal clear and resume require distinct consent rather than a shared checkbox',()=>{
- const html=renderToStaticMarkup(React.createElement(InlineGoalControls,{current:{id:'g',objective:'Existing',status:'paused',usage:{runs:1},limits:{runs:3,tokens:100,elapsed_ms:1000,no_progress_runs:2}},onAction:async()=>assert.fail('render cannot act'),onApply:async()=>assert.fail('status cannot apply'),onClose(){}}));
+ const html=renderToStaticMarkup(React.createElement(InlineGoalControls,{current:{id:'g',objective:'Existing',status:'paused',usage:{runs:1,input_tokens:0,output_tokens:0,elapsed_ms:0,no_progress_runs:0,unmeasured_runs:0},limits:{runs:3,tokens:100,elapsed_ms:1000,no_progress_runs:2}},onAction:async()=>assert.fail('render cannot act'),onApply:async()=>assert.fail('status cannot apply'),onClose(){}}));
  assert.match(html,/clearing this exact goal/);assert.match(html,/authorize automatic continuation/);
  assert.doesNotMatch(html,/>Save paused goal</);
  assert.equal((html.match(/type="checkbox"/g)||[]).length,4);
