@@ -1,4 +1,4 @@
-// Production bundle, real IndexedDB, synthetic scoped transport. No provider.
+// Production bundle, volatile composers, synthetic scoped transport. No provider.
 import {createServer} from 'node:http';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {resolve,dirname,extname} from 'node:path';
@@ -17,6 +17,7 @@ const server=createServer(async(req,res)=>{
             const bootstrap={tenantId:url.searchParams.get('tenant')||'draft-account-a',vessels:[{id:vessel,vessel_id:'v',name:'Draft Vessel'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
             res.setHeader('Content-Type','text/html');res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">${entry.css.map(css=>`<link rel="stylesheet" href="/build/${css}">`).join('')}</head><body><div id="helm-react" data-bootstrap='${JSON.stringify(bootstrap)}'></div><script type="module" src="/build/${entry.file}"></script></body></html>`);return;
         }
+        if(url.pathname==='/console/logout'){assert.equal(req.method,'POST');res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>Signed out</title><h1>Signed out</h1>');return;}
         if(url.pathname==='/console/ticket'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({url:'wss://fixture.invalid/v1/vessel/browser-socket',vessel_id:'v',token:'a'.repeat(64),expires_at_ms:Date.now()+120000}));return;}
         const path=resolve(build,`.${url.pathname.replace(/^\/build/,'')}`);
         if(!path.startsWith(build+'/')){res.writeHead(404).end();return;}
@@ -84,8 +85,20 @@ try{
     await page.goto(path+'?tenant=draft-account-b');await ready(page);assert.equal(await editor(page).inputValue(),'');
     await page.goto(origin);const composer=page.locator('.new-voyage');await composer.locator('textarea').waitFor();await composer.locator('textarea').fill('New unsent message');
     await page.reload();await composer.locator('textarea').waitFor();assert.equal(await composer.locator('textarea').inputValue(),'');
+    await composer.locator('textarea').fill('Discard on signout');
+    await page.evaluate(()=>localStorage.setItem('unrelated-history','preserved'));
+    if(width<1024)await page.getByRole('button',{name:'Open voyage navigation'}).click();
+    await page.getByRole('button',{name:'Account and appearance'}).click();await page.getByRole('menuitem',{name:'Sign out',exact:true}).click();
+    const review=page.getByRole('dialog');await review.getByText('Sign out with unsent work?',{exact:true}).waitFor();
+    await review.getByRole('button',{name:'Keep working'}).click();assert.equal(await composer.locator('textarea').inputValue(),'Discard on signout');
+    if(width<1024&&await page.getByRole('button',{name:'Open voyage navigation'}).count())await page.getByRole('button',{name:'Open voyage navigation'}).click();
+    await page.getByRole('button',{name:'Account and appearance'}).click();await page.getByRole('menuitem',{name:'Sign out',exact:true}).click();
+    await review.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByRole('heading',{name:'Signed out',exact:true}).waitFor();
+    await page.goto(origin);await composer.locator('textarea').waitFor();assert.equal(await composer.locator('textarea').inputValue(),'');
+    assert.equal(await page.evaluate(()=>localStorage.getItem('unrelated-history')),'preserved');
+    assert.ok(await page.evaluate(identity=>Object.keys(localStorage).filter(key=>key.startsWith('helm-web:intent:')).some(key=>JSON.parse(localStorage.getItem(key)).command_id===identity),identity));
     assert.deepEqual(errors,[]);
-    report.cases.push({width,volatilePictures:true,tabRetention:true,reloadClears:true,accountIsolation:true,windowIsolation:true,acceptedCleared:true,exactUnknownReceipt:identity,newComposerReloadClears:true,errors});await context.close();
+    report.cases.push({width,volatilePictures:true,tabRetention:true,reloadClears:true,accountIsolation:true,windowIsolation:true,acceptedCleared:true,exactUnknownReceipt:identity,newComposerReloadClears:true,signoutDiscards:true,signoutKeepsReceipts:true,errors});await context.close();
  }
  await writeFile(`${output}/report.json`,JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
