@@ -19,11 +19,16 @@ export function SelectCombobox({className,size='default',ref:forwardedRef,...pro
     const sync=React.useCallback(()=>{
         const node=select.current;if(!node)return;
         const labelText=(label:HTMLElement)=>{
-            const copy=label.cloneNode(true) as HTMLElement;
-            copy.querySelectorAll('[data-slot="select-combobox-wrapper"],select,button').forEach(child=>child.remove());
-            return copy.textContent?.trim()||'';
+            // Read live text without constructing detached custom elements.
+            const walker=node.ownerDocument.createTreeWalker(label,node.ownerDocument.defaultView!.NodeFilter.SHOW_TEXT);
+            let text='';
+            while(walker.nextNode()){
+                const child=walker.currentNode;
+                if(!child.parentElement?.closest('[data-slot="select-combobox-wrapper"],select,button,svg,[hidden],[aria-hidden="true"],.sr-only'))text+=child.textContent||'';
+            }
+            return text.trim();
         };
-        const label=node.getAttribute('aria-label')||node.getAttribute('aria-labelledby')?.split(/\s+/).map(key=>node.ownerDocument.getElementById(key)?.textContent||'').join(' ')||[...node.labels||[]].map(labelText).join(' ')||'Choose option';
+        const label=node.getAttribute('aria-label')||node.getAttribute('aria-labelledby')?.split(/\s+/).map(key=>(()=>{const label=node.ownerDocument.getElementById(key);return label?labelText(label):'';})()).join(' ')||[...node.labels||[]].map(labelText).join(' ')||'Choose option';
         const next:Snapshot={index:node.selectedIndex,disabled:node.matches(':disabled'),label,choices:[...node.options].filter(option=>!option.hidden&&!option.closest('optgroup')?.hidden).map(option=>({index:option.index,value:option.value,label:option.text,group:option.closest('optgroup')?.label||'',disabled:option.disabled||Boolean(option.closest('optgroup')?.disabled)}))};
         setState(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);
     },[]);

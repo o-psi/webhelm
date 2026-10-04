@@ -28,6 +28,37 @@ test('searchable select preserves controlled values, imperative adapters, disabl
     };
     const enter=async(input:HTMLInputElement)=>act(async()=>input.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true})));
     try{
+        let constructions=0;
+        dom.window.customElements.define('picker-label',class extends dom.window.HTMLElement{
+            constructor(){super();constructions++;}
+        });
+        const {installButtonTooltips}=await import('../resources/js/button-tooltips.js');
+        if(!document.getElementById('helm-button-tooltip'))installButtonTooltips(document);
+        await act(async()=>root.render(React.createElement('div',null,...['Model','Account'].map(name=>React.createElement('label',{key:name},
+            React.createElement('picker-label',null,name),React.createElement('span',{hidden:true},'Hidden'),React.createElement('span',{className:'sr-only'},'Assistive'),React.createElement('span',{'aria-hidden':'true'},'Decoration'),
+            React.createElement(SelectCombobox,null,React.createElement('option',{value:'ready'},`${name} ready`)))))));await settle();
+        assert.equal(constructions,2,'label extraction must not clone custom elements');
+        for(const name of ['Model','Account']){
+            const picker=button(name);
+            for(const type of ['pointerover','focusin']){
+                await act(async()=>picker.dispatchEvent(new dom.window.Event(type,{bubbles:true})));
+                assert.equal(constructions,2);
+                assert.equal(document.querySelector<HTMLElement>('#helm-button-tooltip')!.hidden,true);
+                assert.equal(picker.disabled,false);
+                assert.equal(picker.textContent,`${name} ready`);
+            }
+            await click(name);
+            assert.ok(document.querySelector(`[aria-label="Search ${name.toLowerCase()}"]`),'picker initializes after hover and focus');
+            await act(async()=>document.querySelector('input')!.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));await settle();
+        }
+        const icon=document.createElement('button');icon.setAttribute('aria-label','Icon action');icon.innerHTML='<svg></svg>';document.body.append(icon);
+        for(const type of ['pointerover','focusin']){
+            icon.dispatchEvent(new dom.window.Event(type,{bubbles:true}));
+            assert.equal(document.querySelector<HTMLElement>('#helm-button-tooltip')!.hidden,false);
+            assert.equal(document.querySelector('#helm-button-tooltip')!.textContent,'Icon action');
+            icon.dispatchEvent(new dom.window.Event('focusout',{bubbles:true}));
+        }
+        icon.remove();
         await act(async()=>root.render(React.createElement(Controlled)));await settle();
         assert.equal(document.querySelector('select')!.hidden,true);assert.equal(button('Release channel').textContent,'Stable');
         const trigger=button('Release channel');await click('Release channel');assert.equal(changed.length,0);
