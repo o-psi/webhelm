@@ -21,5 +21,10 @@ test('mounted inline goal preserves replacement consent, stale refusal, limits a
   await act(async()=>checks.at(-1)!.click());assert.equal(button('Save paused goal').disabled,false);assert.equal(button('resume goal').disabled,true);assert.equal(button('clear goal').disabled,true);
   await act(async()=>button('Save paused goal').click());assert.match(document.querySelector('[role=alert]')!.textContent!,/changed since review/);assert.match(document.body.textContent!,/Replacement/);assert.equal(effects,0);
   await act(async()=>checks[0].click());assert.equal(button('clear goal').disabled,false);assert.equal(button('resume goal').disabled,true);
+  await act(async()=>root.render(React.createElement(InlineGoalControls,{current:goal,onApply:async()=>{},onAction:async()=>{effects++;},onClose(){}})));
+  assert.equal(document.querySelectorAll('input[type=checkbox]').length,0);assert.equal(button('resume goal'),undefined);
+  await act(async()=>button('Manage goal').click());
+  assert.equal(document.querySelectorAll('input[type=checkbox]').length,3);assert.equal(button('resume goal').disabled,true);assert.equal(effects,0);
+
  }finally{await act(async()=>root.unmount());dom.window.close();for(const [name,d] of saved){if(d)Object.defineProperty(globalThis,name,d);else Reflect.deleteProperty(globalThis,name);}}
 });

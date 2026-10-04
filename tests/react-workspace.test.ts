@@ -79,7 +79,7 @@ test('uncertain command is journaled once and reconciled without replay', async 
     assert.equal(f.workspace.tabs.get(key)?.draft, 'Retain me');
     await f.workspace.refresh(key);
     assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!), false, 'other controls remain fenced');
-    assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!, 'submit'), true, 'a fresh voyage can accept a new message');
+    assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!, 'submit'), false, 'refresh cannot permit repeating the same uncertain payload');
     assert.equal([...f.storage.data.values()].some(value => value.includes('Retain me')), false);
     assert.equal(f.commands.filter(c => c.op === 'submit').length, 1, 'no automatic retry');
     f.workspace.draft(key, 'Next request');
@@ -107,7 +107,8 @@ test('unknown-after-restart receipt fences other controls but permits fresh mess
     f.workspace.draft(key, 'Hello'); f.mode('unknown'); await f.workspace.act(key, 'submit');
     f.mode('unknown_after_restart'); await f.workspace.reconcile(key);
     assert.equal(f.storage.length, 1); assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!), false);
-    await f.workspace.refresh(key);assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!,'submit'),true);
+    await f.workspace.refresh(key);assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!,'submit'),false);
+    f.workspace.draft(key,'Distinct request');assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!,'submit'),true,'captured exact earlier payload permits a distinct message');
     assert.match(f.workspace.tabs.get(key)?.notice||'', /cannot confirm whether your message was applied after a restart/);
     assert.equal(f.workspace.tabs.get(key)?.receiptStates[f.commands.find(c=>c.op==='submit').command_id],'unknown_after_restart');
     assert.doesNotMatch(f.workspace.tabs.get(key)?.notice||'', /Receipt [a-f0-9-]+/);
