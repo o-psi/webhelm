@@ -14,6 +14,7 @@ import {TurnLink,linkedTurn} from './TurnLink';
 import {MessageActions} from './MessageActions';
 import {HostBrowser} from './HostBrowser';
 import {GoalPanel} from './Goal';
+import {RequestContext} from './RequestContext';
 import {ComposerDiscovery} from './ComposerDiscovery';
 import React, {useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ToolGroup,threadRows,toolTrigger} from './ToolGroup';
@@ -251,6 +252,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
             <RunStatus tab={tab}/>
         </div>{(turnNavigation.previous||turnNavigation.next||showJump)&&<div className="jump-anchor"><div className="turn-navigation" role="group" aria-label="Conversation navigation"><Button variant="ghost" size="icon-sm" type="button" aria-label="Previous user message" title="Previous user message" disabled={!turnNavigation.previous} onClick={()=>jumpTurn('previous')}><ArrowUpIcon aria-hidden="true"/></Button><Button variant="ghost" size="icon-sm" type="button" aria-label="Next user message" title="Next user message" disabled={!turnNavigation.next} onClick={()=>jumpTurn('next')}><ArrowDownIcon aria-hidden="true"/></Button>{showJump&&<Button variant="ghost" size="sm" className="jump-latest" type="button" onClick={() => {following.current=true;tab.following=true;setShowJump(false);scroll.current?.scrollTo({top:scroll.current.scrollHeight});}}>Latest<ArrowDownIcon aria-hidden="true"/></Button>}</div></div>}</div>
         <GoalPanel tab={tab} workspace={workspace}/>
+        <RequestContext tab={tab} workspace={workspace}/>
         <Decisions tab={tab} workspace={workspace}/>
         <Composer tab={tab} workspace={workspace} onSettings={onSettings} onRecover={onRecover} connection={active?connection:null} voyage={active?voyage:null}/>
     </section>;
