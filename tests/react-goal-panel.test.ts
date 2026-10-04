@@ -39,7 +39,13 @@ test('Goal dialog requires replacement consent, retains a stale draft, escapes t
         assert.equal(input.value,'New private objective');assert.equal(actions.length,0);
         await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
         assert.equal(dom.window.document.querySelector('[role="dialog"]'),null);
-        assert.equal(dom.window.document.activeElement,button('Goal · Paused'));
+        // Radix restores focus after its deferred unmount lifecycle. Bound the
+        // observation rather than racing that timer, and never stringify React's
+        // cyclic DOM/Fiber tree in a strict-equality assertion failure.
+        for(let attempt=0;attempt<20&&dom.window.document.activeElement!==button('Goal · Paused');attempt++){
+            await act(async()=>{await new Promise(resolve=>setTimeout(resolve,10));});
+        }
+        assert.ok(dom.window.document.activeElement===button('Goal · Paused'),'closing the dialog must restore focus to the Goal toggle');
         await click('Goal · Paused');await click('Replace goal');
         const fresh=dom.window.document.querySelector('textarea')!;
         await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(fresh,'Fresh objective');fresh.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
