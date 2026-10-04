@@ -245,7 +245,7 @@
 
 .voyage-action-menu [role="menuitem"]{display:flex;width:100%;justify-content:flex-start}
 
-@media(max-width:639px){}
+
 /* Collapsible replaces data-slot on its trigger, so match the class alone. */
 .tool-trigger{color:inherit}.tool-trigger .tool-chevron{width:14px;height:14px;margin-top:2px;transition:rotate 120ms}.tool-entry[data-state="open"] .tool-trigger .tool-chevron{rotate:90deg}
 .tool-entry[data-state="closed"] .tool-trigger>.tool-summary-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;max-height:3em;overflow:hidden}
@@ -264,7 +264,7 @@
 .composer-hint{font-size:12px;color:var(--muted-foreground)}
 @container conversation (max-width:560px){.composer-toolbar{flex-wrap:wrap}.composer-options{order:0;flex:1 0 100%;width:100%}.composer-toolbar>button{order:1}.composer-toolbar>button:last-child{margin-left:auto}.composer-summary{flex-basis:100%;order:3}.composer-hint{display:none}.access-picker{width:116px;max-width:116px}.access-picker [data-slot="select-combobox-wrapper"],.access-picker select{width:100%;max-width:100%}}
 /* Touch: primary chrome controls reach a 40px target (D10). */
-@media(pointer:coarse){:is(.sidebar,.composer,:is(.sidebar,.composer,.voyage-action-host) [data-size^="icon"]{min-width:40px}.task-browser-action{min-height:40px}}
+@media(pointer:coarse){:is(.sidebar,.composer,.task-browser-heading,.voyage-action-host) button:not(.voyage-card){min-height:40px}:is(.sidebar,.composer,.voyage-action-host) [data-size^="icon"]{min-width:40px}.task-browser-action{min-height:40px}}
 
 /* Keep navigation scannable when a Vessel has many voyages. */
 .sidebar{gap:10px;padding:14px 12px}.voyage-list{margin:0 -4px;padding:0 4px;gap:1px}
@@ -317,7 +317,7 @@
 /* A static hollow live mark is enough in navigation, including reduced-motion mode. */
 .voyage-card[data-group=working][data-status-tone=active] .card-status i{animation:none;border:1px solid currentColor;background:transparent;width:6px;height:6px}
 
-/* Header status is a separate line inside the space reserved for dock actions. */
+
 
 
 /* Short viewports must scroll the body rather than lose the setup footer. */
@@ -326,7 +326,7 @@
 .profile-setup .setup-body{min-height:0}
 .profile-setup .setup-actions{flex-wrap:wrap;gap:8px}
 .profile-setup .setup-actions>button{white-space:normal;height:auto;min-height:36px}
-@media(max-width:600px){}
+
 
 /* Composer settings wrap at every nesting level; no horizontally hidden controls. */
 .composer-options{flex-wrap:wrap;overflow:visible;min-width:0;max-width:100%;width:auto}

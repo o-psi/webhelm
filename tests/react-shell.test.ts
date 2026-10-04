@@ -130,3 +130,11 @@ test('React voyage details observe an exact pending receipt without replay',asyn
  assert.doesNotMatch(css,/\.conversation-header/);
  assert.match(css,/\.conversation>\.transcript\{padding-top:60px\}/);
  });
+
+ test('coarse-pointer chrome selectors retain balanced grammar and forty pixel targets',async()=>{
+ const {readFileSync}=await import('node:fs');const css=readFileSync(new URL('../resources/react/style.css',import.meta.url),'utf8');
+ const rule=css.split('\n').find(line=>line.startsWith('@media(pointer:coarse)'))!;
+ assert.equal(rule,'@media(pointer:coarse){:is(.sidebar,.composer,.task-browser-heading,.voyage-action-host) button:not(.voyage-card){min-height:40px}:is(.sidebar,.composer,.voyage-action-host) [data-size^="icon"]{min-width:40px}.task-browser-action{min-height:40px}}');
+ assert.equal((rule.match(/\(/g)||[]).length,(rule.match(/\)/g)||[]).length);
+ assert.doesNotMatch(css,/@media\([^)]*\)\{\}/);
+ });
