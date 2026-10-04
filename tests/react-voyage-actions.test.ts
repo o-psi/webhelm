@@ -30,7 +30,7 @@ test('sidebar context surface is read-only, reports fresh disabled reasons and r
     const choose=async(label:string)=>{const item=Array.from(dom.window.document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(node=>node.textContent===label)!;assert.ok(item);await act(async()=>item.click());await settle();};
     const dismiss=async()=>{await act(async()=>dom.window.document.querySelector<HTMLButtonElement>('#sidebar-dismiss')!.click());await settle();};
     try{
-        await act(async()=>root.render(<div id="row"><button id="card">Original name</button><VoyageActions connection={connection} voyage={{session_id:session,name:'Original name'}} onChanged={()=>{throw Error('No mutation expected');}}/></div>));
+        await act(async()=>root.render(React.createElement('div',{id:'row'},React.createElement('button',{id:'card'},'Original name'),React.createElement(VoyageActions,{connection,voyage:{session_id:session,name:'Original name'},onChanged:()=>{throw Error('No mutation expected');}}))));
         await open();
         const stop=Array.from(dom.window.document.querySelectorAll('[role="menuitem"]')).find(node=>node.textContent?.startsWith('Stop run'))!;
         assert.equal(stop.getAttribute('aria-disabled'),'true');assert.match(stop.textContent!,/There is no active run/);
