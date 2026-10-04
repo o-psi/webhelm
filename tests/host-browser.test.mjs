@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gzipSync} from 'node:zlib';
-import {BrowserConnection, mountBrowserViewer} from '../shared/helm/browser-view/viewer.mjs';
+import {BrowserConnection, mountBrowserViewer, browserModeHint} from '../shared/helm/browser-view/viewer.mjs';
 import {mountHostBrowser,hostBrowserAdapter} from '../resources/js/host-browser.js';
 
 test('module-imported rrweb vendor exposes the replay API used by Helm Web',()=>{
@@ -175,4 +175,18 @@ test('mounted public fallback identity clears on private, unavailable and dispos
   view.session.accept(status({available:false,running:false,binding:null,mode:null,controller:null}));assert.equal(root.dataset.browserCaptureEpoch,undefined);
   view.dispose();assert.equal(root.dataset.browserId,undefined);assert.equal(root.children.length,0);
  }finally{view.dispose();dom.window.close();}
+});
+
+
+test('browser guidance follows settled phase and actual control capability',()=>{
+ const base={privateControl:false,controls:false,canClaim:false};
+ for(const phase of ['error','needs-review','connecting','recovering','waiting-page','switching','disconnected']){
+  assert.doesNotMatch(browserModeHint({...base,phase}),/Click the page|Choose Private/);
+ }
+ assert.match(browserModeHint({...base,phase:'needs-review'}),/do not repeat/);
+ assert.match(browserModeHint({...base,phase:'stopped'}),/stopped/);
+ assert.match(browserModeHint({...base,phase:'unavailable'}),/unavailable/);
+ assert.match(browserModeHint({...base,phase:'live',privateControl:true}),/Private:/);
+ assert.match(browserModeHint({...base,phase:'live',canClaim:true}),/Click the page/);
+ assert.doesNotMatch(browserModeHint({...base,phase:'live'}),/Click the page/);
 });
