@@ -565,7 +565,7 @@ Composer hook is installed, so production updates do not depend on a dev package
 
 ## Repository split and shared browser assets
 
-This public repository contains Helm Web independently of the Helm/Vessel/Voyage repository. `shared/` contains snapshots of the viewer, status vocabulary, and browser vendor file from the source repository at split time. Keep these files in sync with protocol changes there. The production updater clones this repository as the `helm` deployment identity without GitHub credentials. Do not place credentials in this repository or overwrite the CT runtime `.env`, database, or backups. A Git push alone does not deploy; request the scoped update job and verify its receipt and health checks.
+This public repository contains Helm Web independently of the Helm/Vessel/Voyage repository. `shared/` contains snapshots of the viewer, status vocabulary, and browser vendor file from the source repository at split time. Keep these files in sync with protocol changes there. The production updater clones this repository as the `helm` deployment identity without GitHub credentials. Do not place credentials in this repository or overwrite the CT runtime `.env`, database, or backups. The installed automatic main updater follows qualified publications on its timer. A Git push is not deployment evidence: verify the updater’s exact receipt, installed source, actual asset and health checks.
 
 ## Execution identity source integration
 

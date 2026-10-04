@@ -1,12 +1,12 @@
 # OAuth foundation verification and integration contract (#290)
 
-Run from `web/` after `composer install`:
+Run from this repository root after `composer install`:
 
 ```sh
 php tests/oauth.php
 ```
 
-On the development host PHP has iconv installed but disabled by default; use
+Check `php --ri iconv` before running. If iconv is installed but not loaded, use
 `php -d extension=iconv tests/oauth.php` and the same prefix for Composer.
 No system PHP configuration change is required. The check boots Laravel with
 an in-memory SQLite database, array sessions/cache, and synthetic credentials.
@@ -43,7 +43,9 @@ provider uses X endpoints, state, S256 PKCE and HTTP Basic token-client auth.
 All three drivers enable S256 PKCE. No offline/refresh-token scope is requested;
 no provider token/profile is persisted. Do not enable HTTP debug logging, request
 query logging on callbacks, or external exception capture of provider responses.
-No provider credentials were supplied and live sign-in is not verified.
+These isolated fixture checks do not use provider credentials and do not verify
+live sign-in. Track actual privately configured OAuth and multi-user deployment
+evidence separately in [Web #16](https://github.com/o-psi/webhelm/issues/16).
 
 ## Additive deployment migration
 
