@@ -6,6 +6,7 @@ import type {NewVoyageMessage} from './NewVoyage';
 // The draft crosses the creation boundary only after an exact start receipt.
 // Every later effect stops when its own observed state is unavailable.
 export async function completeNewVoyage(workspace:Workspace,key:string,message:NewVoyageMessage & {goalIntent?:ComposerGoalIntent}){
+    if(message.goalIntent&&message.pictures.length)throw Error('Goal commands do not accept pictures. Your draft and pictures are kept.');
     await workspace.restoreDraft(key);
     workspace.draft(key,message.text);
     await workspace.refresh(key);
@@ -33,7 +34,8 @@ export async function completeNewVoyage(workspace:Workspace,key:string,message:N
         if(!message.send||!message.applyAccess)return;
         const review=reviewGoal(tab.snapshot,tab.incarnation);
         if(review.state.goal)throw Error('Review the existing goal before applying this retained intent.');
-        await workspace.goalUpdate(key,review,{action:'set',...message.goalIntent});
+        const applied=await workspace.goalUpdate(key,review,{action:'set',...message.goalIntent});
+        if(applied&&tab.draft===message.text){workspace.draft(key,'');await workspace.saveDrafts();}
         return;
     }
     if(!message.send)return;

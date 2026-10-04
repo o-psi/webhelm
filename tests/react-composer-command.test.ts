@@ -12,8 +12,8 @@ test('only literal goal command boundaries intercept inference',()=>{
 });
 function fixture(){
     const calls:string[]=[];
-    const tab:any={snapshot:{session_id:'s',access:'approval',goal:{revision:0,goal:null}},incarnation:'i',stale:false};
-    const workspace:any={tabs:new Map([['k',tab]]),refresh:async()=>{calls.push('read');},restoreDraft:async()=>{},draft:()=>{},goalUpdate:async(_key:any,_review:any,action:any)=>{calls.push('goal');assert.equal(action.continue_automatically,false);return true;},actionable:()=>true,permitted:()=>true,act:async()=>{calls.push('inference');}};
+    const tab:any={snapshot:{session_id:'s',access:'approval',goal:{revision:0,goal:null}},incarnation:'i',stale:false,pictures:[],draft:''};
+    const workspace:any={tabs:new Map([['k',tab]]),refresh:async()=>{calls.push('read');},restoreDraft:async()=>{},draft:(_key:string,text:string)=>{tab.draft=text;},saveDrafts:async()=>{},goalUpdate:async(_key:any,_review:any,action:any)=>{calls.push('goal');assert.equal(action.continue_automatically,false);return true;},actionable:()=>true,permitted:()=>true,act:async()=>{calls.push('inference');}};
     return {workspace,calls};
 }
 test('status reads while ordinary objective directly defines paused metadata',async()=>{
@@ -78,4 +78,16 @@ test('ordinary existing objective edit preserves goal identity and observed limi
     await dispatchComposerCommand(workspace,'k','/goal New objective',{onGoalReview:()=>assert.fail('ordinary edit must not require a form')});
     assert.deepEqual(action,{action:'edit',goal_id:'g',objective:'New objective',limits});
     assert.equal(workspace.tabs.get('k').snapshot.goal.goal.usage,usage);
+});
+
+test('confirmed goal clears only its own draft while unknown retains intent',async()=>{
+    const {workspace}=fixture();const message:any={text:'/goal Build',pictures:[],access:'approval',send:true,applyAccess:true,goalIntent:{objective:'Build',limits:defaultGoalLimits,replace_goal_id:null,continue_automatically:false}};
+    await completeNewVoyage(workspace,'k',message);assert.equal(workspace.tabs.get('k').draft,'');
+    workspace.goalUpdate=async()=>false;
+    await completeNewVoyage(workspace,'k',message);assert.equal(workspace.tabs.get('k').draft,message.text);
+});
+test('goal pictures refuse without effects or dropping content',async()=>{
+    const {workspace,calls}=fixture();workspace.tabs.get('k').pictures=[{name:'kept.png'}];
+    await assert.rejects(()=>dispatchComposerCommand(workspace,'k','/goal Build',{onGoalReview:()=>assert.fail()}),/do not accept pictures/);
+    assert.deepEqual(calls,[]);assert.equal(workspace.tabs.get('k').pictures.length,1);
 });

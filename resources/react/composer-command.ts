@@ -9,6 +9,7 @@ export function parseComposerCommand(text:string):{kind:'message'}|{kind:'goal-s
 export type ComposerGoalReview={review:GoalReview;objective?:string;action?:GoalAction};
 export async function dispatchComposerCommand(workspace:Workspace,key:string,text:string,{onGoalReview}:{onGoalReview:(value:ComposerGoalReview)=>void}){
     const parsed=parseComposerCommand(text);if(parsed.kind==='message')return {handled:false};
+    if(workspace.tabs.get(key)?.pictures.length)throw Error('Goal commands do not accept pictures. Your draft and pictures are kept.');
     if(parsed.kind==='goal-set'&&!validGoalObjective(parsed.objective))throw Error('Objective must contain 1–8192 UTF-8 bytes and no control characters.');
     await workspace.refresh(key);const tab=workspace.tabs.get(key);
     if(!tab||tab.stale)throw Error('Refresh the voyage before reviewing its goal.');
