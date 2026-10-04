@@ -37,3 +37,15 @@ test('content chunks preserve UTF-8 byte offsets and owner fencing', async () =>
     assert.throws(() => acceptContentChunk({...chunk,text:''},fence,0));
     assert.throws(() => acceptContentChunk({...chunk,total_bytes:1},fence,0));
 });
+
+test('scope memory is bounded and an interrupted generation is replaced', () => {
+    const reducer = new EventInitialization(); reducer.accept(begin);
+    const value = 'x'.repeat(32760);
+    for (let sequence = 0; sequence < 256; sequence++) reducer.accept({...entity,sequence,entity_id:`message:${sequence}`,value});
+    assert.throws(() => reducer.accept({...entity,sequence:256,entity_id:'overflow',value}));
+    const nextFence = {...fence,generation:'new'};
+    reducer.accept({...begin,fence:nextFence,cursor:90});
+    assert.throws(() => reducer.accept(complete));
+    const state = reducer.accept({kind:'complete',fence:nextFence,sequence:0,cursor:90});
+    assert.equal(state.entities.size,0);
+});
