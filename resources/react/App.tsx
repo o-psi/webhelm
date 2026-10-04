@@ -1,4 +1,4 @@
-import {dispatchComposerCommand,type ComposerGoalReview} from './composer-command';
+import {parseComposerCommand,dispatchComposerCommand,type ComposerGoalReview} from './composer-command';
 import {InlineGoalControls} from './InlineGoalControls';
 import {ComposerSurface} from './ComposerSurface';
 import {ComposerOptions,ComposerOptionTrigger} from './ComposerOptions';
@@ -16,7 +16,6 @@ import {ExecutionPanel} from './ExecutionPanel';
 import {TurnLink,linkedTurn} from './TurnLink';
 import {MessageActions} from './MessageActions';
 import {HostBrowser} from './HostBrowser';
-import {GoalPanel} from './Goal';
 import {ComposerDiscovery} from './ComposerDiscovery';
 import React, {useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ToolGroup,threadRows,toolTrigger,toolRunActive} from './ToolGroup';
@@ -75,7 +74,8 @@ export function Composer({tab, workspace, onSettings, onRecover, connection, voy
     const stopping = ['cancel_requested','cancelling'].includes(tab?.snapshot?.run?.state);
     const running = activeRun || stopping;
     const sendOp = running ? 'steer' : 'submit';
-    const enabled = tab && !tab.draftLoading && !stopping && workspace.actionable(tab,sendOp) && workspace.permitted(tab,sendOp);
+    const isGoalCommand=tab&&parseComposerCommand(tab.draft).kind!=='message';
+    const enabled=tab&&!tab.draftLoading&&(isGoalCommand?Boolean(!tab.stale):!stopping&&workspace.actionable(tab,sendOp)&&workspace.permitted(tab,sendOp));
     const canStop = tab && activeRun && workspace.actionable(tab) && workspace.permitted(tab,'cancel');
     const [goalReview,setGoalReview]=useState<ComposerGoalReview|null>(null);
     useEffect(()=>setGoalReview(null),[tab?.key,tab?.incarnation]);

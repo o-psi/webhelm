@@ -50,7 +50,8 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
         dom.window.close();
         for(const [name,descriptor] of previous){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else Reflect.deleteProperty(globalThis,name);}
     };
-    const choose=async(name:string,value:string)=>{
+    const ensureConfig=async()=>{if(!document.querySelector('[aria-label="Composer configuration"]'))await act(async()=>button('Configure').click());};
+    const choose=async(name:string,value:string)=>{await ensureConfig();
         const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith(name+':'))!;
         assert.ok(trigger,name);
         await act(async()=>trigger.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})));
@@ -58,7 +59,7 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
         const option=[...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(item=>item.textContent?.trim()===value)!;
         assert.ok(option,value);await act(async()=>option.click());
     };
-    const chooseModel=async()=>{
+    const chooseModel=async()=>{await ensureConfig();
         const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith('Model:'))!;
         await act(async()=>trigger.click());
         const option=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.textContent?.includes('Other model')&&!item.getAttribute('aria-label')?.includes('favorites'))!;

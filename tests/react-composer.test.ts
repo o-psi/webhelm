@@ -27,6 +27,7 @@ test('actual composer preserves keyboard, run transitions and command safety gat
         return event;
     };
     try{
+        workspace.refresh=async()=>{};workspace.tabs.set(tab.key,tab);
         await render();
         assert.equal(button('Stop run'),null);
         assert.equal(button('Send')!.disabled,false);
@@ -81,6 +82,14 @@ test('actual composer preserves keyboard, run transitions and command safety gat
         pending=[];tab.snapshot.run.state='idle';await render();assert.equal(button('Stop run'),null);
         await React.act(async()=>root.render(React.createElement(Composer,{workspace,onSettings:()=>{}})));
         assert.equal(button('Stop run'),null);assert.equal(button('Send')!.disabled,true);
+        tab.scope='owner';tab.stale=false;tab.busy=false;tab.snapshot={revision:9,run:{state:'idle'},goal:{revision:1,goal:null}};tab.draft='/goal';
+        pending=[{command_id:'uncertain',op:'submit'}];
+        await render();const beforeGoal=effects.length;
+        assert.equal(dom.window.document.querySelectorAll('.composer-surface-footer').length,1);
+        assert.equal(dom.window.document.querySelector('[aria-label="Composer configuration"]'),null);
+        await keyboard();
+        assert.ok(dom.window.document.querySelector('[aria-label="Goal review"]'),'bare goal status is nonmodal while message receipt is pending');
+        assert.equal(dom.window.document.querySelector('[role="dialog"]'),null);assert.equal(effects.length,beforeGoal,'goal status never dispatches inference');
     }finally{
         await React.act(async()=>root.unmount());
         for(const key of keys){const descriptor=saved.get(key);if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete (globalThis as any)[key];}
