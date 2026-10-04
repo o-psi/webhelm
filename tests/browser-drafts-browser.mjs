@@ -82,6 +82,8 @@ try{
     await page.reload();await ready(page);assert.equal(await editor(page).inputValue(),'');
     assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),2);
     const receiptIds=await page.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('helm-web:intent:')).map(key=>JSON.parse(localStorage.getItem(key)).command_id));assert.ok(receiptIds.includes(identity));
+    await page.waitForFunction(identity=>window.fixtureCommands.some(command=>command.op==='receipt'&&command.command_id===identity),identity,{timeout:12000});
+    assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),2);
     await page.goto(path+'?tenant=draft-account-b');await ready(page);assert.equal(await editor(page).inputValue(),'');
     await page.goto(origin);const composer=page.locator('.new-voyage');await composer.locator('textarea').waitFor();await composer.locator('textarea').fill('New unsent message');
     await page.reload();await composer.locator('textarea').waitFor();assert.equal(await composer.locator('textarea').inputValue(),'');
@@ -91,7 +93,7 @@ try{
     await page.getByRole('button',{name:'Account and appearance'}).click();await page.getByRole('menuitem',{name:'Sign out',exact:true}).click();
     const review=page.getByRole('dialog');await review.getByText('Sign out with unsent work?',{exact:true}).waitFor();
     await review.getByRole('button',{name:'Keep working'}).click();assert.equal(await composer.locator('textarea').inputValue(),'Discard on signout');
-    if(width<1024&&await page.getByRole('button',{name:'Open voyage navigation'}).count())await page.getByRole('button',{name:'Open voyage navigation'}).click();
+    if(width<1024){const navigation=page.getByRole('button',{name:'Open voyage navigation'});if(await navigation.isVisible()&&await navigation.getAttribute('aria-expanded')!=='true')await navigation.click();}
     await page.getByRole('button',{name:'Account and appearance'}).click();await page.getByRole('menuitem',{name:'Sign out',exact:true}).click();
     await review.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByRole('heading',{name:'Signed out',exact:true}).waitFor();
     await page.goto(origin);await composer.locator('textarea').waitFor();assert.equal(await composer.locator('textarea').inputValue(),'');
