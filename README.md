@@ -388,13 +388,12 @@ HTTP/runtime checks; no browser visual QA or agent execution was performed.
 
 ### Composer drafts
 
-Message and new-voyage drafts save text and prepared pictures in IndexedDB on the
-current browser, separately for each signed-in tenant and Vessel/voyage. Reload
-restores content for review; it never sends a message or restores execution approval.
-Accepted messages clear their saved content. An uncertain send retains the draft
-with a review warning so it is not silently repeated. Sign-out leaves drafts on
-this browser for that account; use **Discard draft** or clear site data to remove them.
-These drafts do not synchronize to another device.
+Message and new-voyage composers retain text and prepared pictures only in the
+current window's memory. Switching voyages retains that window's composition;
+reload, closing the page, or signing out loses it. Legacy IndexedDB draft records
+are left untouched but are never opened, restored, updated or migrated. Drafts
+never synchronize between windows or devices. Exact execution receipt recovery
+remains separate; uncertain sends are never automatically repeated.
 
 Storage is bounded to 64 drafts and 32 MiB per account, with 64 KiB of UTF-8 text
 and the existing four-picture/4 MiB prepared-image limit per draft. Nothing is

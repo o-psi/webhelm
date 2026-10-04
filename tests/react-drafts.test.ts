@@ -1,60 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DraftSlot,BrowserDrafts,type Draft,type DraftRepository,type SavedDraft} from '../resources/react/drafts';
+import {BrowserDrafts,DraftSlot} from '../resources/react/drafts';
 import {Workspace} from '../resources/react/workspace';
-class Repository implements DraftRepository{
-    values=new Map<string,SavedDraft>();writes=0;fail=false;
-    async read(key:string){return this.values.get(key)??null;}
-    async write(key:string,revision:string|null,value:Draft|null){
-        if(this.fail)throw new Error('Storage full');
-        assert.equal(this.values.get(key)?.revision??null,revision,'conflicting draft');
-        this.writes++;const next=String(this.writes);
-        if(value)this.values.set(key,{revision:next,value});else this.values.delete(key);
-        return value?next:null;
-    }
-}
-const wait=()=>new Promise(resolve=>setTimeout(resolve,0));
-test('reload restores exact text and prepared pictures without persisting runtime authority',async()=>{
-    const repo=new Repository(),file=new File(['png-fixture'],'prepared.png',{type:'image/png'});
-    const first=new DraftSlot(repo,'voyage',()=>{});await first.loaded();
-    first.set({text:'Literal <draft>\n界',pictures:[file]});await first.flush();
-    const second=new DraftSlot(repo,'voyage',()=>{});await second.loaded();
-    assert.equal(second.value.text,'Literal <draft>\n界');assert.equal(await second.value.pictures[0].text(),'png-fixture');
-    assert.equal(second.value.pictures[0].name,'prepared.png');assert.equal(second.value.delivery,undefined);
-    assert.equal(repo.writes,1,'restoration has no write or send');
-    const other=new DraftSlot(repo,'other-voyage',()=>{});await other.loaded();assert.equal(other.value.text,'');
+
+test('composers never open legacy storage and retain pictures only in window memory',async()=>{
+ let opens=0;
+ const factory=()=>{opens++;throw new Error('Legacy storage must remain untouched');};
+ const repository=new BrowserDrafts('account',factory);
+ const picture=new File(['picture'],'p.png',{type:'image/png'});
+ const slot=new DraftSlot(repository,'voyage',()=>{});await slot.loaded();
+ slot.set({text:'Unsent text',pictures:[picture]});await slot.flush();
+ assert.equal(slot.message,'');assert.equal(opens,0);
+ const sameWindow=new DraftSlot(repository,'voyage',()=>{});await sameWindow.loaded();
+ assert.equal(sameWindow.value.text,'Unsent text');assert.equal(sameWindow.value.pictures[0],picture);
+ for(const account of ['account','other-account']){
+  const reloaded=new DraftSlot(new BrowserDrafts(account,factory),'voyage',()=>{});await reloaded.loaded();
+  assert.deepEqual(reloaded.value,{text:'',pictures:[]});
+ }
+ assert.equal(opens,0);
+ await slot.discard();assert.equal(await repository.read('voyage'),null);
 });
-test('concurrent tabs refuse stale writes and preserve both local and saved drafts',async()=>{
-    const repo=new Repository(),first=new DraftSlot(repo,'same',()=>{}),second=new DraftSlot(repo,'same',()=>{});
-    await Promise.all([first.loaded(),second.loaded()]);first.set({text:'First saved',pictures:[]});await first.flush();
-    second.set({text:'Second local',pictures:[]});await assert.rejects(second.flush(),/conflicting draft/);
-    assert.equal(second.value.text,'Second local');assert.equal(repo.values.get('same')?.value.text,'First saved');assert.equal(second.unsaved,true);
-});
-test('rapid edits serialize and retain edits made while a save is pending',async()=>{
-    const repo=new Repository();let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
-    const write=repo.write.bind(repo);repo.write=async(...args)=>{await gate;return write(...args);};
-    const slot=new DraftSlot(repo,'same',()=>{});await slot.loaded();slot.set({text:'First',pictures:[]});await wait();slot.set({text:'Latest',pictures:[]});release();await slot.flush();
-    assert.equal(repo.values.get('same')?.value.text,'Latest');assert.equal(slot.unsaved,false);
-});
-test('send marks retained content before effects and discard removes only its own revision',async()=>{
-    const repo=new Repository(),slot=new DraftSlot(repo,'same',()=>{});await slot.loaded();slot.set({text:'Possibly sent',pictures:[]});await slot.sending();
-    const reopened=new DraftSlot(repo,'same',()=>{});await reopened.loaded();assert.equal(reopened.value.delivery,'review');assert.equal(reopened.value.text,'Possibly sent');
-    await slot.discard();assert.equal(repo.values.has('same'),false);assert.equal(slot.unsaved,false);
-});
-test('storage failure preserves text and a later explicit retry saves it',async()=>{
-    const repo=new Repository(),slot=new DraftSlot(repo,'same',()=>{});await slot.loaded();repo.fail=true;
-    slot.set({text:'Keep locally',pictures:[]});await assert.rejects(slot.flush(),/Storage full/);assert.equal(slot.value.text,'Keep locally');assert.equal(slot.unsaved,true);
-    repo.fail=false;await slot.retry();assert.equal(repo.values.get('same')?.value.text,'Keep locally');
-});
-test('unavailable browser storage is visible and never silently claims to save',async()=>{
-    const repo=new BrowserDrafts('tenant',()=>{throw new Error('disabled');}),slot=new DraftSlot(repo,'draft',()=>{});await slot.loaded();
-    assert.match(slot.message,/unavailable/);slot.set({text:'Unsent',pictures:[]});await assert.rejects(slot.flush(),/unavailable/);assert.equal(slot.value.text,'Unsent');
-});
-test('workspace waits for hydration, restores voyage-scoped content, and sends nothing',async()=>{
-    const repo=new Repository(),key=JSON.stringify(['v','s']);repo.values.set(key,{revision:'a',value:{text:'Restored text',pictures:[new File(['p'],'p.png',{type:'image/png'})],delivery:'review'}});
-    const workspace=new Workspace(()=>new Map(),repo);workspace.open('v','s','Voyage');assert.equal(workspace.tabs.get(key)?.draftLoading,true);
-    workspace.draft(key,'premature overwrite');await workspace.restoreDraft(key);
-    const tab=workspace.tabs.get(key)!;assert.equal(tab.draft,'Restored text');assert.equal(tab.pictures.length,1);assert.equal(tab.pictures[0].name,'p.png');assert.equal(tab.draftLoading,false);assert.equal(repo.writes,0);
-    const other=workspace.open('other-vessel','s','Other');await workspace.restoreDraft(other);assert.equal(workspace.tabs.get(other)?.draft,'');
-    workspace.draft(key,'Edited after restore');await workspace.saveDrafts();workspace.close();assert.equal(repo.values.get(key)?.value.text,'Edited after restore');
+
+test('switching voyage tabs retains composition without touching receipt journals or storage',async()=>{
+ let reads=0,writes=0;
+ const journal={entries:()=>[],put:async()=>{writes++;}};
+ const repository=new BrowserDrafts('account',()=>{throw new Error('storage accessed');});
+ const connections=new Map();
+ const workspace=new Workspace(()=>connections,repository);
+ connections.set('v',{id:'v',name:'Vessel',client:{},journal,voyages:[],status:'ready'});
+ const first=workspace.open('v','first','First');await workspace.restoreDraft(first);
+ workspace.draft(first,'Unsent');await workspace.saveDrafts();
+ const second=workspace.open('v','second','Second');await workspace.restoreDraft(second);
+ workspace.draft(second,'Other');await workspace.saveDrafts();
+ assert.equal(workspace.tabs.get(first)?.draft,'Unsent');assert.equal(workspace.tabs.get(second)?.draft,'Other');
+ assert.equal(writes,0);
+ workspace.close();
+ const reloaded=new Workspace(()=>connections,new BrowserDrafts('account'));
+ const key=reloaded.open('v','first','First');await reloaded.restoreDraft(key);
+ assert.equal(reloaded.tabs.get(key)?.draft,'');reloaded.close();
 });

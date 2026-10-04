@@ -41,7 +41,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     useEffect(()=>{if(!hidden)input.current?.focus();},[hidden]);
     useEffect(()=>{onDraftChange?.(Boolean(text||pictures.length));},[text,pictures,onDraftChange]);
     useEffect(()=>{
-        const leaving=(event:BeforeUnloadEvent)=>{if(draftSlot?.unsaved){event.preventDefault();event.returnValue='';}};
+        const leaving=(event:BeforeUnloadEvent)=>{if(draftSlot&&(draftSlot.value.text||draftSlot.value.pictures.length)){event.preventDefault();event.returnValue='';}};
         window.addEventListener('beforeunload',leaving);return()=>window.removeEventListener('beforeunload',leaving);
     },[draftSlot]);
     useEffect(()=>{

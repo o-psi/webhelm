@@ -270,7 +270,7 @@ export function App({bootstrap,draftRepository}: {bootstrap: Bootstrap;draftRepo
     });
     const {fleet, workspace} = runtime;
     useEffect(()=>{
-        const leaving=(event:BeforeUnloadEvent)=>{if([...workspace.tabs.values()].some(tab=>tab.draftState?.unsaved)){event.preventDefault();event.returnValue='';}};
+        const leaving=(event:BeforeUnloadEvent)=>{if([...workspace.tabs.values()].some(tab=>tab.draft||tab.pictures.length)){event.preventDefault();event.returnValue='';}};
         window.addEventListener('beforeunload',leaving);return()=>window.removeEventListener('beforeunload',leaving);
     },[workspace]);
     useSyncExternalStore(workspace.subscribe, workspace.getVersion, workspace.getVersion);
@@ -387,6 +387,6 @@ export function App({bootstrap,draftRepository}: {bootstrap: Bootstrap;draftRepo
         {manage&&<Connections bootstrap={bootstrap} states={Object.fromEntries(connections.map(connection => [connection.id, {connected: Boolean(connection.client), status: connection.status}]))} connections={fleet.connections} tenant={bootstrap.tenantId} onReconnect={()=>fleet.reconnect()} onAccountSettings={()=>{setManage(false);setWebSettingsPage('account');}} onClose={()=>setManage(false)}/>}
         {settings&&<Settings fleet={fleet} workspace={workspace} tab={settings.tab} location={settings.location} profileOnly={!settings.tab} tenant={bootstrap.tenantId} onClose={()=>{setSettings(null);setProfileReload(value=>value+1);}} onCreated={(vessel,process)=>selectVoyage(vessel,process.session_id,process.name||'New voyage')}/>}
         {webSettingsPage&&<WebSettings account={bootstrap} page={webSettingsPage} onPageChange={setWebSettingsPage} appearance={appearance} onAppearanceChange={setAppearance} onManageVessels={()=>{setWebSettingsPage(null);setManage(true);}} onClose={()=>setWebSettingsPage(null)}/>}
-        <Dialog open={logoutReview} onOpenChange={setLogoutReview}><DialogContent><DialogHeader><DialogTitle>Sign out with unsent work?</DialogTitle><DialogDescription>Saved message drafts and prepared pictures stay on this browser for this account. If a draft shows a save error, keep working and copy it first. Your voyages continue on their Vessels.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" type="button" onClick={()=>setLogoutReview(false)}>Keep working</Button><Button variant="destructive" type="button" onClick={()=>logoutForm.current?.requestSubmit()}>Sign out</Button></DialogFooter></DialogContent></Dialog>
+        <Dialog open={logoutReview} onOpenChange={setLogoutReview}><DialogContent><DialogHeader><DialogTitle>Sign out with unsent work?</DialogTitle><DialogDescription>Unsent messages and prepared pictures are lost when you sign out or reload. Copy anything you want to keep first. Your voyages continue on their Vessels.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" type="button" onClick={()=>setLogoutReview(false)}>Keep working</Button><Button variant="destructive" type="button" onClick={()=>logoutForm.current?.requestSubmit()}>Sign out</Button></DialogFooter></DialogContent></Dialog>
     </div>;
 }

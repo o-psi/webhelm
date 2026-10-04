@@ -45,7 +45,7 @@ export class Workspace {
                     const pictures=await Promise.all(slot.value.pictures.map(file=>this.picture(file,file.name)));
                     if(this.closed||this.tabs.get(key)!==tab){pictures.forEach(picture=>URL.revokeObjectURL(picture.url));return;}
                     tab.pictures=pictures;this.changed();
-                }).catch(()=>{tab.notice='Saved pictures could not be restored. Keep this page open.';this.changed();}).finally(()=>{tab.draftLoading=false;this.changed();});
+                }).catch(()=>{tab.notice='Pictures could not be prepared. Keep this page open.';this.changed();}).finally(()=>{tab.draftLoading=false;this.changed();});
                 this.draftReads.set(key,restoring);
             }
         }
