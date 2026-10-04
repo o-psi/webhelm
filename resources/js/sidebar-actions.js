@@ -41,7 +41,7 @@ async function read(client, op, fields = {}) {
     if (response?.protocol !== 1 || response.outcome_unknown !== false || response.error) throw new Error(response?.error?.message || response?.error || 'Vessel could not confirm this read.');
     return response.result;
 }
-async function inspect(connection, id) {
+export async function inspect(connection, id) {
     const client = connection.client;
     if (!client) throw new Error('Vessel is offline.');
     const caps = await read(client,'capabilities');
@@ -137,7 +137,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             $('submit').textContent=action==='archive' ? (archived(view) ? 'Restore voyage' : 'Archive voyage') : ({rename:'Rename voyage',access:'Save access mode',branch:'Create branch',cancel:'Request cancellation',compact:'Compact context',clear:'Clear conversation',delete:'Delete voyage'})[action] || 'Confirm';
             if (action==='details') {
                 $('details-summary').hidden=false; $('details-advanced').hidden=false;
-                const values={name:view.snapshot?.name||item.name||item.session_id,process:view.process.state||'Unknown',run:view.snapshot?.run?.state||'No current run',access:view.snapshot?.access||'Unavailable',workspace:view.snapshot?.workspace||view.process.workspace||'Unavailable'};
+                const values={name:view.snapshot?.name||item.name||item.session_id,process:view.process.state||'Unknown',run:view.snapshot?.run?.state||'No current run',access:({'read-only':'Read only',approval:'Approval',unrestricted:'Full access'})[view.snapshot?.access]||'Unavailable',workspace:view.snapshot?.workspace||view.process.workspace||'Unavailable'};
                 for(const [key,value] of Object.entries(values)) $('details-'+key).textContent=key==='process'||key==='run'?String(value).replaceAll('_',' '):String(value);
                 const snapshot=view.snapshot;
                 $('action-details').textContent=JSON.stringify({
@@ -163,6 +163,7 @@ export function sidebarActions(root, {changed = () => {}, modal = name => window
             }
             if (['clear','delete','compact'].includes(action)) { $('confirm-field').hidden=false; $('confirm-label').textContent=`Type ${action==='compact' ? 'COMPACT' : action.toUpperCase()} to confirm`; }
             $('submit').disabled=Boolean(reason || action==='access' && $('access').value===view.snapshot?.access);
+            if(action==='rename'&&!reason){$('name').focus();$('name').select();}
             if(pendingFor(connection,item)) observeReceipts(mine);
         } catch(error) { if(mine===epoch) {current=null;status(error.message); $('submit').disabled=true;} }
     }
