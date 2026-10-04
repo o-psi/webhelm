@@ -45,7 +45,7 @@ test('actual composer preserves keyboard, run transitions and command safety gat
             assert.equal(button('Send'),null);
             assert.equal(button('Send to current run')!.disabled,false);
             assert.equal(button('Stop run')!.disabled,false);
-            const count=effects.length;await keyboard();assert.equal(effects.length,count+1);assert.deepEqual(effects.at(-1),['v:s','submit']);
+            const count=effects.length;await keyboard();assert.equal(effects.length,count+1);assert.deepEqual(effects.at(-1),['v:s','steer']);
         }
         await React.act(async()=>button('Stop run')!.click());
         assert.deepEqual(effects.at(-1),['v:s','cancel']);
