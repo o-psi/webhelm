@@ -365,7 +365,7 @@
 .connections-dialog .connections-method{flex-wrap:wrap;min-width:0}
 .connections-dialog .connections-method button{flex:1 1 0;min-width:0;white-space:normal;height:auto;min-height:40px}
 .connections-dialog .connections-method [data-slot="collapsible-content"]{flex:1 0 100%;overflow-wrap:anywhere}
-/* Stable model-step geometry plus a sticky search keeps filtering and wheel navigation anchored. */
+/* Stable model-step geometry keeps search fixed while results scroll independently. */
 .settings-dialog.profile-model-step{height:min(720px,90dvh)}
 .profile-model-step>form{height:100%;min-height:0}
 .profile-model-step .profile-model-search{display:block;flex-shrink:0;margin:0;padding:8px 20px;background:var(--background)}
