@@ -80,26 +80,26 @@
             <div class="max-w-2xl space-y-4">
                 <flux:text class="font-medium text-emerald-700! dark:text-emerald-400!">Ready to download</flux:text>
                 <flux:heading id="install-heading" level="2" size="xl">Set up the machine that does the work.</flux:heading>
-                <flux:text class="text-base">Install Vessel and Voyage together on a workstation or server you control. The v1.0.2 Linux download includes both, plus the optional Helm terminal app and installer. Download the archive and checksum into the same folder, then verify before extracting.</flux:text>
+                <flux:text class="text-base">Install Vessel and Voyage together on a workstation or server you control. The v1.0.3 Linux download includes both, plus the optional Helm terminal app and installer. Download the archive and checksum into the same folder, then verify before extracting.</flux:text>
             </div>
             <div class="grid gap-6 lg:grid-cols-2">
                 <flux:card class="min-w-0 space-y-5">
                     <flux:heading level="3" size="lg">1. Download and verify</flux:heading>
                     <div class="flex flex-wrap gap-3">
-                        <flux:button href="https://github.com/o-psi/helm.vessel.voyage/releases/download/v1.0.2/voyage-v1.0.2-x86_64-unknown-linux-gnu.tar.gz" variant="primary" icon:trailing="arrow-down-tray">Linux x86-64 archive</flux:button>
-                        <flux:button href="https://github.com/o-psi/helm.vessel.voyage/releases/download/v1.0.2/voyage-v1.0.2-x86_64-unknown-linux-gnu.tar.gz.sha256">SHA-256 checksum</flux:button>
+                        <flux:button href="https://github.com/o-psi/helm.vessel.voyage/releases/download/v1.0.3/voyage-v1.0.3-x86_64-unknown-linux-gnu.tar.gz" variant="primary" icon:trailing="arrow-down-tray">Linux x86-64 archive</flux:button>
+                        <flux:button href="https://github.com/o-psi/helm.vessel.voyage/releases/download/v1.0.3/voyage-v1.0.3-x86_64-unknown-linux-gnu.tar.gz.sha256">SHA-256 checksum</flux:button>
                     </div>
-                    <pre tabindex="0" aria-label="Verify and extract the Linux release" class="overflow-x-auto rounded-lg bg-zinc-100 p-4 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"><code>sha256sum -c voyage-v1.0.2-x86_64-unknown-linux-gnu.tar.gz.sha256
-tar -xzf voyage-v1.0.2-x86_64-unknown-linux-gnu.tar.gz</code></pre>
+                    <pre tabindex="0" aria-label="Verify and extract the Linux release" class="overflow-x-auto rounded-lg bg-zinc-100 p-4 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"><code>sha256sum -c voyage-v1.0.3-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -xzf voyage-v1.0.3-x86_64-unknown-linux-gnu.tar.gz</code></pre>
                     <flux:text>Continue only if the checksum reports OK. Checksums verify file integrity; this release does not include independent publisher signatures.</flux:text>
                 </flux:card>
                 <flux:card class="min-w-0 space-y-5">
                     <flux:heading level="3" size="lg">2. Review and install</flux:heading>
-                    <pre tabindex="0" aria-label="Open the release installer" class="overflow-x-auto rounded-lg bg-zinc-100 p-4 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"><code>cd voyage-v1.0.2-x86_64-unknown-linux-gnu
+                    <pre tabindex="0" aria-label="Open the release installer" class="overflow-x-auto rounded-lg bg-zinc-100 p-4 text-sm text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"><code>cd voyage-v1.0.3-x86_64-unknown-linux-gnu
 ./bin/voyage-installer --bin-dir "$PWD/bin"</code></pre>
                     <flux:text>Run as your ordinary user, not with sudo. The installer lets you review installation and service choices before applying them. Managed installation needs Python 3.11+ and a running systemd user manager.</flux:text>
                     <flux:text>Add <code>$HOME/.local/bin</code> to your PATH. For terminal use, open <code>helm</code>. For web use, continue with the connection setup below; you do not need to run the Helm terminal app.</flux:text>
-                    <flux:button href="https://github.com/o-psi/helm.vessel.voyage/blob/v1.0.2/docs/getting-started.md" variant="ghost" icon:trailing="arrow-right">Terminal first-task guide</flux:button>
+                    <flux:button href="https://github.com/o-psi/helm.vessel.voyage/blob/v1.0.3/docs/getting-started.md" variant="ghost" icon:trailing="arrow-right">Terminal first-task guide</flux:button>
                 </flux:card>
             </div>
             <flux:card variant="soft" class="space-y-5">
@@ -112,7 +112,7 @@ tar -xzf voyage-v1.0.2-x86_64-unknown-linux-gnu.tar.gz</code></pre>
                 </div>
             </flux:card>
             <div class="flex flex-wrap gap-3">
-                <flux:button href="https://github.com/o-psi/helm.vessel.voyage/releases/tag/v1.0.2" icon:trailing="arrow-right">Release notes and all downloads</flux:button>
+                <flux:button href="https://github.com/o-psi/helm.vessel.voyage/releases/tag/v1.0.3" icon:trailing="arrow-right">Release notes and all downloads</flux:button>
                 <flux:button href="#products" variant="ghost">Explore the suite</flux:button>
             </div>
             <flux:text>This binary release supports Linux x86-64 with glibc 2.39 or newer, not ARM64, Alpine/musl, macOS, or Windows. The web console is separate from the download. See the release notes for verification details and known limitations.</flux:text>

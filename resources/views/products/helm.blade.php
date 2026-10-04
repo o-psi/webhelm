@@ -59,7 +59,7 @@
             <div class="space-y-4">
                 <flux:text class="font-medium text-emerald-700! dark:text-emerald-400!">LINUX TERMINAL</flux:text>
                 <flux:heading level="2" size="xl">Fast by keyboard.</flux:heading>
-                <flux:text class="text-base leading-relaxed">Use the Linux CLI and TUI to connect to local and remote Vessels. The v1.0.2 download includes Helm, Vessel, Voyage, and the installer.</flux:text>
+                <flux:text class="text-base leading-relaxed">Use the Linux CLI and TUI to connect to local and remote Vessels. The v1.0.3 download includes Helm, Vessel, Voyage, and the installer.</flux:text>
             </div>
             <div class="space-y-4">
                 <flux:text class="font-medium text-emerald-700! dark:text-emerald-400!">HELM WEB</flux:text>
