@@ -418,6 +418,27 @@ validation/audit, origin HTTP/health, public HTTPS/assets, route-specific titles
 descriptions and links, environment-file denial and service health. These are
 HTTP/runtime checks; no browser visual QA or agent execution was performed.
 
+### Composer controls
+
+In the React console, **Enter** sends and **Shift+Enter** inserts a newline.
+Enter used to confirm an IME composition does not send. An idle voyage submits a
+new turn; an active run uses **Send to current run** to steer it. Sending is
+disabled while the run is stopping or the draft is loading.
+
+The composer shows the observed access mode: **Read only**, **Approval**, or
+**Full access** (`unrestricted`). Use **Review access mode** to review a fresh
+voyage snapshot before applying a revision-bound `set_access` change; the label
+is observed state, not a grant of additional authority.
+
+**Stop run** appears only for an active or stopping run, never for an idle voyage
+or before selection. It is disabled once stopping begins. Send and stop require
+fresh state and the corresponding permission, and are gated while busy or stale.
+Uncertain commands remain in the receipt journal: unresolved non-message actions
+block sending, and unresolved actions block stopping. A fresh snapshot may allow
+a distinct new message after an uncertain earlier send, but never automatically
+replays that earlier command. Check the conversation and receipt before repeating
+a request.
+
 ### Composer drafts
 
 Message and new-voyage drafts save text and prepared pictures in IndexedDB on the
