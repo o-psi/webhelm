@@ -109,3 +109,29 @@ export class VesselSocket {
     }
     close() { this.socket.close(); }
 }
+
+// Bounded canonical initialization uses one generation and exact owner fence.
+// A failed/interrupted sequence is discarded; no legacy snapshot fallback.
+export async function initializeEntities(client, session, incarnation, {signal, generation = uuid(), maxPages = 1024} = {}) {
+    const {EventInitialization} = await import('./event-initialization.js');
+    const reducer = new EventInitialization();
+    let offset = 0, revision = null, cursor = null;
+    for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+        if (signal?.aborted) throw new Error('Initialization cancelled');
+        const response = await client.exchange(request('initialize_entities', {session_id:session,incarnation,generation,offset,limit:64,expected_revision:revision,expected_cursor:cursor}));
+        const page = voyageResult(response,session,incarnation).result;
+        if (page?.version !== 3 || !Number.isSafeInteger(page.revision) || !Number.isSafeInteger(page.cursor) || !Array.isArray(page.events) || page.events.length > 66 || !Number.isSafeInteger(page.next_offset) || page.next_offset < offset || typeof page.has_more !== 'boolean') throw new Error('Invalid initialization page');
+        if (revision !== null && (page.revision !== revision || page.cursor !== cursor)) throw new Error('Initialization fence changed');
+        revision = page.revision; cursor = page.cursor;
+        let completed = null;
+        for (const event of page.events) {
+            if (event.fence?.session_id !== session || event.fence?.incarnation !== incarnation || event.fence?.generation !== generation) throw new Error('Initialization owner changed');
+            const result = reducer.accept(event);
+            if (result) { if (completed) throw new Error('Duplicate initialization barrier'); completed = result; }
+        }
+        if (!page.has_more) { if (!completed) throw new Error('Missing initialization barrier'); return {...completed,revision}; }
+        if (completed || page.next_offset <= offset) throw new Error('Invalid initialization continuation');
+        offset = page.next_offset;
+    }
+    throw new Error('Initialization page limit exceeded');
+}
