@@ -55,6 +55,7 @@ test('profile navigation preserves unsaved name/model and keeps the current step
         assert.match(view.text(),/Other model/);
         await view.click('Reasoning & service');
         assert.equal(document.querySelector('[data-slot=slider-thumb]')!.getAttribute('aria-valuemax'),'1','reasoning follows selected model support');
+        assert.equal(document.querySelector('.profile-setup form>footer'),null,'no-action reasoning step has no empty footer shell');
         assert.equal(document.querySelector('[role=slider]')!.getAttribute('aria-valuetext'),'Provider default','focused thumb announces the semantic reasoning choice');
         assert.equal(document.querySelector('[role=slider]')!.getAttribute('aria-label'),'Reasoning');
         assert.equal(document.querySelector('[data-slot=slider]')!.getAttribute('aria-valuetext'),null,'non-slider wrapper has no numeric value announcement');
@@ -158,7 +159,7 @@ test('read-only catalogues allow profile choice without exposing mutation contro
 test('failed profile loading offers status recovery without a permanent reload control',async()=>{
     const view=await mount({failProfilesOnce:true});try{
         assert.match(view.text(),/Profile list unavailable/);await view.click('Profile');
-        assert.match(view.text(),/Profiles unavailable/);assert.doesNotMatch(view.text(),/No saved profiles yet/);
+        assert.match(view.text(),/Profiles unavailable/);assert.ok(document.querySelector('.profile-setup form>footer'),'essential recovery notice and Check status retain footer');assert.doesNotMatch(view.text(),/No saved profiles yet/);
         await view.click('Check status');
         assert.match(view.text(),/Everyday/);assert.doesNotMatch(view.text(),/Reload profiles|Check status/);
         assert.equal(view.commands.filter(command=>command.op==='profiles').length,2);
