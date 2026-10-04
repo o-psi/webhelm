@@ -388,20 +388,21 @@ try {
     const before=await geometry();
     for(const theme of ['light','dark']){
         await page.evaluate(theme=>document.documentElement.classList.toggle('dark',theme==='dark'),theme);
-        const visibleGeometry=await page.evaluate(()=>[...document.querySelectorAll('.conversation:not([hidden]) .conversation-header,.conversation:not([hidden]) .tool-group-heading')].map(el=>{const r=el.getBoundingClientRect();return {width:r.width,left:r.left,right:r.right,text:el.textContent};}));
+        const visibleGeometry=await page.evaluate(()=>[...document.querySelectorAll('.conversation:not([hidden]) .tool-group-heading')].map(el=>{const r=el.getBoundingClientRect();return {width:r.width,left:r.left,right:r.right,text:el.textContent};}));
         check(visibleGeometry.every(r=>r.width>0&&r.left>=0&&r.right<=viewport.width),`${label}/${viewport.width}/${theme}: header or summary exceeds viewport`);
         check(await conversation.locator('.tool-group-heading').filter({hasText:'returned'}).count()>0,`${label}/${theme}: normal tool outcome missing`);
         check(await conversation.locator('.tool-group-heading').filter({hasText:'unsuccessful'}).count()>0,`${label}/${theme}: warning outcome missing`);
         await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${viewport.height}-${theme}-summary-header.png`});
     }
 
-    const headerGeometry=await conversation.locator('.conversation-header').evaluate(el=>{
-        const status=el.querySelector('.status-label')?.getBoundingClientRect();
-        const changes=document.querySelector('.dock-actions .review-action')?.getBoundingClientRect();
-        return {status:status?{left:status.left,right:status.right,top:status.top,bottom:status.bottom,width:status.width}:null,changes:changes?{left:changes.left,right:changes.right,top:changes.top,bottom:changes.bottom}:null};
+    check(await conversation.locator('.conversation-header').count()===0,`${label}/${viewport.width}: visible conversation header returned`);
+    check(await conversation.getByRole('region',{name:'Selected voyage context'}).count()===1,`${label}: selected context missing`);
+    const actionGeometry=await page.locator('.dock-actions').evaluate(el=>{
+        const r=el.getBoundingClientRect();const transcript=document.querySelector('.conversation:not([hidden]) .thread').getBoundingClientRect();
+        return {left:r.left,right:r.right,bottom:r.bottom,threadTop:transcript.top};
     });
-    check(headerGeometry.status?.width>0,`${label}/${viewport.width}: header status has zero width`);
-    if(headerGeometry.status&&headerGeometry.changes){const a=headerGeometry.status,b=headerGeometry.changes;check(a.right<=b.left||a.bottom<=b.top||a.top>=b.bottom,`${label}/${viewport.width}: status overlaps Changes`);}
+    check(actionGeometry.left>=0&&actionGeometry.right<=viewport.width,`${label}: action dock outside viewport`);
+    check(actionGeometry.bottom<=actionGeometry.threadTop,`${label}: action dock overlaps first transcript content`);
     check(before.documentWidth<=viewport.width,`${label}/${viewport.width}: document overflows horizontally`);
 
     await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-closed.png`});

@@ -244,7 +244,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
     const headerStatus=voyage?cardStatus(voyage,Boolean(connection?.client),tab.stale?null:tab.snapshot):null;
     const location=[connection?.name,tab.snapshot?.workspace].filter(Boolean).join(' · ');
     return <section className="conversation" hidden={!active} aria-label={tab.title}>
-        <header className="conversation-header"><div className="conversation-title"><h1 title={tab.title}>{tab.title}</h1>{location&&<p title={location}>{location}</p>}{headerStatus&&<span className="status-label" data-status-tone={headerStatus.tone} data-animated={headerStatus.animated||undefined}><i aria-hidden="true"/>{headerStatus.label}</span>}</div></header>
+        <div className="sr-only" role="region" aria-label="Selected voyage context"><h1>{tab.title}</h1>{location&&<p>{location}</p>}{headerStatus&&<p>{headerStatus.label}</p>}</div>
         <p role="status" className="px-3 text-sm text-muted-foreground" hidden={!linkNotice}>{linkNotice}</p>
         <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {if(!activeRef.current||loadingHistory.current)return;const el=scroll.current!;tab.scrollTop=el.scrollTop;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;tab.following=following.current;setShowJump(!following.current);updateTurnNavigation();loadNearTop();}}><div className="thread">
             {!tab.snapshot && <p className="empty">Waiting for a current Vessel snapshot…</p>}

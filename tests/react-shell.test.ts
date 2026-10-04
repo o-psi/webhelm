@@ -118,3 +118,15 @@ test('React voyage details observe an exact pending receipt without replay',asyn
  await act(async()=>root.unmount());assert.equal(dom.window.document.querySelector('[data-slot=dialog-content]'),null);
  }finally{Object.assign(globalThis,saved);dom.window.close();}
 });
+
+ test('conversation has no visible title/status header and retains accessible selected context',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(new URL('../resources/react/App.tsx',import.meta.url),'utf8');
+ assert.doesNotMatch(source,/<header className="conversation-header"/);
+ assert.match(source,/<div className="sr-only" role="region" aria-label="Selected voyage context">/);
+ assert.match(source,/<h1>\{tab.title\}<\/h1>/);
+ assert.match(source,/headerStatus&&<p>\{headerStatus.label\}<\/p>/);
+ const css=readFileSync(new URL('../resources/react/style.css',import.meta.url),'utf8');
+ assert.doesNotMatch(css,/\.conversation-header/);
+ assert.match(css,/\.conversation>\.transcript\{padding-top:60px\}/);
+ });
