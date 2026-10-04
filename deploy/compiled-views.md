@@ -27,12 +27,23 @@ then fail with `include(...storage/framework/views/...php): Permission denied`.
 A default directory ACL alone does not prevent recurrence.
 
 Rendering tests must set `VIEW_COMPILED_PATH` to an isolated temporary directory
-before bootstrapping Laravel and remove that directory afterwards. The Flux,
-console, owner-connection, profile-menu and sidebar-action rendering checks do
-this. The sidebar-action check previously omitted this override and recreated an
-unreadable live console view; its render now uses a temporary cache removed in a
-`finally` block. For other ad hoc CLI render checks, use an existing private
-scratch directory via that environment variable as well. Run deliberate live
+before bootstrapping Laravel and remove that directory afterwards. The retired
+Flux console, owner-connection, profile-menu and sidebar-action rendering checks
+are historical evidence, not the active production React console suite. The
+sidebar-action check previously omitted this override and recreated an unreadable
+live console view; its historical fix used a temporary cache, asserted the
+effective compiled-view path before rendering, and cleaned up in a `finally` block.
+
+Current PHP HTTP fixtures in `tests/php.test.mjs` and
+`tests/browser-qualification-http.test.mjs` set both `VIEW_COMPILED_PATH` and
+`LARAVEL_STORAGE_PATH` to temporary fixture directories, isolating compiled views
+and runtime storage from the deployment. The PHP render fixture in
+`tests/account-enrollment.test.mjs` sets a temporary `VIEW_COMPILED_PATH`, asserts
+that Laravel's effective `view.compiled` configuration resolves to it before
+rendering, and removes it in `finally`; it does not override `LARAVEL_STORAGE_PATH`.
+For other ad hoc CLI render checks, use an existing private scratch directory
+via `VIEW_COMPILED_PATH` as well, and isolate `LARAVEL_STORAGE_PATH` when the check
+uses runtime storage. Run deliberate live
 cache operations only during controlled CT deployment or recovery, with the
 configured `helm` and `www-data` shared access; verify the generated views are
 readable by `www-data`.
