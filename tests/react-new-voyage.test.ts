@@ -300,6 +300,9 @@ test('deferred Fleet bootstrap UI keeps pending and failed connections honest wi
 test('new adapter uses collapsed shared surface and literal goal status has no creation effect',async()=>{
  const view=await mount();try{
   assert.equal(document.querySelectorAll('.composer-surface-footer').length,1);
+  const sharedLabels=[...document.querySelectorAll('.composer-surface-footer button')].map(el=>el.getAttribute('aria-label')||el.textContent);
+  assert.deepEqual(sharedLabels.slice(0,2),['Attach pictures','Discover actions, tools, skills, and files']);
+  assert.ok(sharedLabels.includes('Configure'));assert.ok(sharedLabels.includes('Send'));
   assert.equal(document.querySelector('[aria-label="Composer configuration"]'),null);
   const input=document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!;
   await act(async()=>{Object.getOwnPropertyDescriptor(view.dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'/goal');input.dispatchEvent(new view.dom.window.Event('input',{bubbles:true}));});
@@ -320,9 +323,15 @@ test('goal draft with pictures refuses before creation and retains content',asyn
   const input=document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!;
   await act(async()=>{Object.getOwnPropertyDescriptor(view.dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'/goal retain pictures');input.dispatchEvent(new view.dom.window.Event('input',{bubbles:true}));});
   const fileInput=document.querySelector<HTMLInputElement>('input[type=file]')!;
-  Object.defineProperty(fileInput,'files',{configurable:true,value:[new view.dom.window.File(['invalid'],'picture.png',{type:'image/png'})]});
-  // Invalid preparation cannot authorize creation; the literal command remains.
-  await act(async()=>fileInput.dispatchEvent(new view.dom.window.Event('change',{bubbles:true})));
+  Object.defineProperty(fileInput,'files',{configurable:true,value:[new File([new Uint8Array([137,80,78,71,13,10,26,10])],'picture.png',{type:'image/png'})]});
+  const originalBitmap=globalThis.createImageBitmap;
+  globalThis.createImageBitmap=(async()=>({width:1,height:1,close(){}})) as any;
+  try{await act(async()=>fileInput.dispatchEvent(new view.dom.window.Event('change',{bubbles:true})));}
+  finally{globalThis.createImageBitmap=originalBitmap;}
+  assert.ok(view.button('Remove picture.png'),'successfully prepared picture is retained before Send');
+  await act(async()=>view.button('Send').click());
+  assert.match(document.body.textContent!,/Goal commands cannot include pictures/);
+  assert.ok(view.button('Remove picture.png'),'refusal retains prepared picture');
   assert.equal(view.commands.some(c=>c.op==='start_account'),false);
   assert.equal(input.value,'/goal retain pictures');
  }finally{await view.dispose();}

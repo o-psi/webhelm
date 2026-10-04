@@ -86,6 +86,9 @@ test('actual composer preserves keyboard, run transitions and command safety gat
         pending=[{command_id:'uncertain',op:'submit'}];
         await render();const beforeGoal=effects.length;
         assert.equal(dom.window.document.querySelectorAll('.composer-surface-footer').length,1);
+        const sharedLabels=[...dom.window.document.querySelectorAll('.composer-surface-footer button')].map(el=>el.getAttribute('aria-label')||el.textContent);
+        assert.deepEqual(sharedLabels.slice(0,2),['Attach pictures','Discover actions, tools, skills, and files']);
+        assert.ok(sharedLabels.includes('Configure'));assert.ok(sharedLabels.includes('Send'));
         assert.equal(dom.window.document.querySelector('[aria-label="Composer configuration"]'),null);
         await keyboard();
         assert.ok(dom.window.document.querySelector('[aria-label="Goal review"]'),'bare goal status is nonmodal while message receipt is pending');
