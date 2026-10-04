@@ -135,3 +135,17 @@ export async function initializeEntities(client, session, incarnation, {signal, 
     }
     throw new Error('Initialization page limit exceeded');
 }
+
+export async function initializeDecisions(client, session, incarnation) {
+    const {EventInitialization} = await import('./event-initialization.js');
+    const generation = uuid();
+    const page = voyageResult(await client.exchange(request('initialize_decisions',{session_id:session,incarnation,generation})),session,incarnation).result;
+    if (page?.version !== 3 || !Array.isArray(page.events) || page.events.length > 66) throw new Error('Invalid decision initialization');
+    const reducer = new EventInitialization(); let scope = null;
+    for (const event of page.events) {
+        if (event.fence?.generation !== generation || event.fence?.session_id !== session || event.fence?.incarnation !== incarnation || (event.kind==='entity' && event.entity_kind!=='decision')) throw new Error('Decision entity owner changed');
+        const result = reducer.accept(event); if (result) { if (scope) throw new Error('Duplicate decision barrier'); scope=result; }
+    }
+    if (!scope) throw new Error('Missing decision barrier');
+    return [...scope.entities.values()];
+}

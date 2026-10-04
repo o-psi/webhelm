@@ -1,6 +1,6 @@
 import {DraftSlot,type DraftRepository} from './drafts';
 import {assertGoalReview,validateGoalAction,goalReceipt,type GoalAction,type GoalReview} from './goals';
-import {uuid, request, voyageResult, mutation, resolved, receiptStatus, initializeEntities} from '../js/vessel-client.js';
+import {uuid, request, voyageResult, mutation, resolved, receiptStatus, initializeEntities, initializeDecisions} from '../js/vessel-client.js';
 import {ConversationStream} from '../js/conversation-stream.js';
 import {entityPresentation} from '../js/event-initialization.js';
 import {preparePicture, MAX_PICTURE_BYTES, MAX_PICTURES} from './prepare-picture';
@@ -125,7 +125,7 @@ export class Workspace {
                 const caps = capabilities?.protocol===1 && capabilities.outcome_unknown===false && !capabilities.error ? capabilities.result : {scope:'unknown',rights:[]};
                 if (snapshot.session_id !== tab.session || !Number.isSafeInteger(snapshot.revision)) throw new Error('Invalid snapshot identity.');
                 let decisions: any[] = [];
-                try { if(caps.scope==='owner'||caps.rights?.includes('decide')) decisions = voyageResult(await client.exchange(request('decisions', {session_id: tab.session})), tab.session, envelope.incarnation).result; } catch { /* History and decision authority are independent. */ }
+                try { if(caps.scope==='owner'||caps.rights?.includes('decide')) decisions = await initializeDecisions(client,tab.session,envelope.incarnation); } catch { /* History and decision authority are independent. */ }
                 if (this.closed || this.connections().get(tab.vessel)?.client !== client || tab.busy || (this.epochs.get(key) || 0) !== epoch) return;
                 if (tab.snapshot?.revision === snapshot.revision && tab.incarnation === envelope.incarnation) { snapshot.messages = tab.snapshot.messages; snapshot.message_offset = tab.snapshot.message_offset; }
                 const currentStream = this.streams.get(key);
