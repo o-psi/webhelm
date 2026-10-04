@@ -71,7 +71,7 @@ try {
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,channel:c.channel,release_id:'a'.repeat(64),version:c.channel==='nightly'?'1.0.3-nightly.20260928.1.1':'1.0.2',expires_at:Math.floor(Date.now()/1000)+3600,description:'Verified development build from fixture source',services:['vessel.service']};
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
                 else if(c.op==='update_status')result=updateRecord;
-                else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
+                else if(c.op==='profiles')result={revision:1,can_manage:true,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account with a long provider subscription identity and workspace-specific description',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
                 else if(c.op==='account_usage')result={account:c.account,refresh_status:'fresh',snapshot:{windows:[]}};
                 else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model with a long readable catalogue description and capability label',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
@@ -507,7 +507,7 @@ try {
     await page.getByRole('menuitem',{name:'Edit',exact:true}).click();
     await settings.getByRole('textbox',{name:'Profile name',exact:true}).fill('Unsaved fixture name');
     await settings.getByRole('button',{name:/^Model/}).click();
-    await settings.getByRole('textbox',{name:'Search models',exact:true}).fill('Other');
+    await settings.getByRole('searchbox',{name:'Search models',exact:true}).fill('Other');
     await settings.getByRole('button',{name:/Other model/}).click();
     await settings.getByRole('button',{name:/Reasoning & service/}).click();
     const reasoning=settings.getByRole('slider',{name:'Reasoning',exact:true});
