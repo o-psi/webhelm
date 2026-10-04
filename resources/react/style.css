@@ -223,6 +223,14 @@
   html {
     @apply font-sans;
     }
+  /* Native popup options need an opaque surface, including options added by adapters. */
+  select option, select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+    }
+  select option:disabled, select optgroup:disabled {
+    color: var(--muted-foreground);
+    }
 }
 
 /* The shared viewer ships its own palette; when docked in the console it takes the console tokens.
