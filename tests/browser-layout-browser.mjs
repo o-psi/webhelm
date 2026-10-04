@@ -539,6 +539,21 @@ try {
     await settings.getByRole('button',{name:'Close settings',exact:true}).click();
     await page.evaluate(()=>window.releaseFixtureUsage());
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length)===settingsWritesBefore,`${label}: unsaved navigation applied changes`);
+    // Creation and editing footer containment; never save a profile.
+    for(const editorMode of ['create','edit']){
+        await conversation.getByRole('button',{name:/^Account:/}).click();
+        await settings.getByRole('button',{name:/^Profile/}).click();
+        if(editorMode==='create')await settings.getByRole('button',{name:'Create profile',exact:true}).click();
+        else{await settings.getByRole('button',{name:'Actions for Fixture profile',exact:true}).click();await page.getByRole('menuitem',{name:'Edit',exact:true}).click();}
+        const footerGeometry=await settings.evaluate(dialog=>{
+            const r=dialog.getBoundingClientRect();
+            return {left:r.left,right:r.right,buttons:[...dialog.querySelectorAll('.setup-footer-actions button')].map(button=>{const b=button.getBoundingClientRect();return {left:b.left,right:b.right,width:b.width,text:button.textContent};})};
+        });
+        check(footerGeometry.buttons.length===2&&footerGeometry.buttons.every(b=>b.width>0&&b.left>=footerGeometry.left&&b.right<=footerGeometry.right),`${label}/${viewport.width}/${editorMode}: profile footer actions extend outside dialog ${JSON.stringify(footerGeometry)}`);
+        if(editorMode==='create')check(await settings.getByRole('button',{name:'Save profile',exact:true}).isDisabled(),`${label}: blank new profile permits Save`);
+        await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${editorMode}-profile-footer.png`});
+        await settings.getByRole('button',{name:'Close settings',exact:true}).click();
+    }
     // Explicit user close, not malformed initial stopped attach, exercises lifecycle.
     await page.getByRole('button',{name:'Browser',exact:true}).click();
     const viewer=page.locator('.host-browser-viewer');
