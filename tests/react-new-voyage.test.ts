@@ -21,7 +21,7 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
             case 'capabilities':result={vessel_id:'v',scope:scoped?'scoped':'owner',rights:['create','account_use','execute'],features:['execution_profiles'],workspaces:revokeWorkspace&&++capabilityReads>1?[]:[{path:'/work',name:'Work'}]};break;
             case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
             case 'accounts':accountReads++;result={accounts:[{id:'account',connection_id:'provider',identity_generation:accountChanged&&accountReads>1?2:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
-            case 'account_models':result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low']}]};break;
+            case 'account_models':result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
             case 'start_account':if(uncertain)return {protocol:1,outcome_unknown:true,result:null};result={session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'};break;
             case 'resolve_start_account':result={command_id:command.command_id,session_id:command.session_id,status:'created',process:{session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'}};break;
             default:throw new Error(command.op);
@@ -160,5 +160,20 @@ test('reviewed account generation change prevents creation',async()=>{
         await act(async()=>view.button('Create without message').click());
         assert.equal(view.commands.some(command=>command.op==='start_account'),false);
         assert.match(document.body.textContent||'',/selected account is unavailable/);
+    }finally{await view.dispose();}
+});
+
+ test('draft service tier is catalogue backed, edits send nothing and first creation carries it',async()=>{
+    const view=await mount();
+    try{
+        const select=(label:string)=>[...document.querySelectorAll<HTMLSelectElement>('select')].find(item=>item.closest('label')?.textContent?.startsWith(label))!;
+        await act(async()=>{const model=select('Model');model.value='other';model.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
+        const service=select('Service tier');
+        assert.deepEqual([...service.options].map(item=>item.value),['','flex']);
+        await act(async()=>{service.value='flex';service.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));});
+        assert.equal(view.commands.some(command=>['start_account','submit','set_account_inference'].includes(command.op)),false);
+        await act(async()=>view.button('Create without message').click());
+        assert.equal(view.commands.find(command=>command.op==='start_account')?.service_tier,'flex');
+        assert.equal(view.commands.some(command=>command.op==='save_profile'),false);
     }finally{await view.dispose();}
 });

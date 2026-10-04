@@ -3,10 +3,9 @@ import {DraftSlot,type DraftRepository} from './drafts';
 import React, {useEffect, useRef, useState} from 'react';
 import {ArrowUpIcon,PaperclipIcon,Settings2Icon,XIcon} from 'lucide-react';
 import {Button} from './components/ui/button';
-import {Card} from './components/ui/card';
 import {Input} from './components/ui/input';
 import {SelectCombobox} from './components/ui/select-combobox';
-import {Textarea} from './components/ui/textarea';
+import {ComposerBox,ComposerInput} from './ComposerPrimitives';
 import {WorkspacePicker} from './WorkspacePicker';
 import {sameAccount,profileSettings,profileSummary} from '../js/execution-profiles.js';
 import {Creation,accountChoices,vesselRead} from './settings';
@@ -28,6 +27,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(''),[catalogue,setCatalogue]=useState<any>(null),[accounts,setAccounts]=useState<any[]>([]),[profileId,setProfileId]=useState('');
     const [choicesFor,setChoicesFor]=useState<{vessel:string;path:string;client:any;reloadToken:number}|null>(null);
     const [modelOptions,setModelOptions]=useState<any[]>([]),[modelChoicesFor,setModelChoicesFor]=useState<string|null>(null);
+    const [serviceChoice,setServiceChoice]=useState<string|null>(null);
     const [modelChoice,setModelChoice]=useState<string|null>(null),[reasoningChoice,setReasoningChoice]=useState<string|null>(null);
     const [text,setText]=useState(''),[pictures,setPictures]=useState<File[]>([]),[access,setAccess]=useState<NewVoyageMessage['access']>('approval');
     const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[preparing,setPreparing]=useState(false);
@@ -97,7 +97,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
         },180);
         return()=>{window.clearTimeout(timer);profilesGeneration.current++;};
     },[caps,path,vessel,connection?.client,reloadToken]);
-    useEffect(()=>{setModelChoice(null);setReasoningChoice(null);setAccountOverride(null);setAccountReview(false);},[profileId,path,vessel]);
+    useEffect(()=>{setModelChoice(null);setReasoningChoice(null);setServiceChoice(null);setAccountOverride(null);setAccountReview(false);},[profileId,path,vessel]);
     useEffect(()=>{
         const epoch=++modelsGeneration.current;setModelOptions([]);setModelChoicesFor(null);
         if(!profile||!profileAccount?.ready||!connection?.client||!modelContext)return;
@@ -108,8 +108,10 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
         return()=>{modelsGeneration.current++;};
     },[modelContext,connection?.client]);
     const pending=(()=>{try{creation.current??=new Creation(localStorage,tenant);return {records:creation.current.pending(),error:false};}catch{return {records:[],error:true};}})();
+    const selectedService=serviceChoice===null?(modelChoice||accountOverride?'':profile?.service_tier||''):serviceChoice;
+    const validService=serviceChoice===null||modelsReady&&Boolean(currentModel)&&(!selectedService||currentModel.service_tiers?.includes(selectedService));
     const validOverride=!accountOverride&&!modelChoice&&!reasoningChoice||modelsReady&&Boolean(currentModel)&&(!selectedReasoning||currentModel.reasoning_efforts?.includes(selectedReasoning));
-    const canCreate=Boolean(draftReady&&!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&(caps.scope==='owner'||caps.workspaces?.some((choice:any)=>choice.path===path))&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready&&validOverride);
+    const canCreate=Boolean(draftReady&&!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&(caps.scope==='owner'||caps.workspaces?.some((choice:any)=>choice.path===path))&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready&&validOverride&&validService);
     const canSend=canCreate&&(caps.scope==='owner'||caps.rights?.includes('execute'));
     const hasMessage=Boolean(text.trim()||pictures.length);
     async function addPictures(files:File[]){
@@ -144,13 +146,15 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
             if(!accountChoices(latestAccounts).some((item:any)=>item.ready&&sameAccount(item.binding,(accountOverride?.account||currentProfile.account))))throw new Error('The selected account is unavailable. Choose another profile.');
             const settings=profileSettings(currentProfile);
             if(accountOverride)settings.account=accountOverride.account;
-            if(accountOverride||modelChoice!==null||reasoningChoice!==null){
+            if(accountOverride||modelChoice!==null||reasoningChoice!==null||serviceChoice!==null){
                 const latestModels=await vesselRead(connection,'account_models',{workspace:path,account:settings.account});
                 if(!sameAccount(latestModels.account,settings.account))throw new Error('Account identity changed. Review model choices.');
                 const chosen=latestModels.models?.find((item:any)=>item.id===selectedModel);
                 if(!chosen||selectedReasoning&&!chosen.reasoning_efforts?.includes(selectedReasoning))throw new Error('Model or reasoning choices changed. Review them before sending.');
+                if(serviceChoice!==null&&selectedService&&!chosen.service_tiers?.includes(selectedService))throw new Error('Service tier choices changed. Review them before sending.');
                 settings.model=selectedModel;settings.reasoning_effort=selectedReasoning||null;
-                if(accountOverride||modelChoice!==null)settings.service_tier=null;
+                if(serviceChoice!==null)settings.service_tier=selectedService||null;
+                else if(accountOverride||modelChoice!==null)settings.service_tier=null;
             }
             creation.current??=new Creation(localStorage,tenant);
             await draftSlot?.sending();
@@ -173,27 +177,28 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
         <div className="new-voyage-content m-auto w-full max-w-3xl">
             <h1 className="mb-6 text-center text-3xl font-medium tracking-tight">What should we work on?</h1>
             {recovery&&<div className="new-voyage-recovery mx-auto mb-4 max-w-2xl rounded-lg border p-3 text-sm" role="status"><strong>Continue from {recovery.source}</strong><p className="mb-0 mt-1">The earlier action may have happened. Review this draft before sending; repeating the same request could duplicate work. The original receipt remains in its voyage.{recovery.hasPictures?' Reattach any pictures you still need.':''}</p></div>}
-            {accountReview&&profile&&<ComposerAccountReview connection={connection} workspace={path} accounts={accounts} selection={{account:accountOverride?.account||profile.account,model:selectedModel}} onClose={()=>setAccountReview(false)} onApply={(value:any)=>{setAccountOverride(value);setModelChoice(null);setReasoningChoice('');setAccountReview(false);}}/>}
+            {accountReview&&profile&&<ComposerAccountReview connection={connection} workspace={path} accounts={accounts} selection={{account:accountOverride?.account||profile.account,model:selectedModel}} onClose={()=>setAccountReview(false)} onApply={(value:any)=>{setAccountOverride(value);setModelChoice(null);setReasoningChoice('');setServiceChoice(null);setAccountReview(false);}}/>}
             <form className="composer" aria-label="New voyage composer" onSubmit={event=>{event.preventDefault();void create(true);}} onPaste={event=>{if(event.clipboardData.files.length){event.preventDefault();void addPictures([...event.clipboardData.files]);}}} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{if(event.dataTransfer.files.length){event.preventDefault();void addPictures([...event.dataTransfer.files]);}}}>
-                <Card className="composer-box gap-2 p-3 shadow-sm" size="sm">
+                <ComposerBox>
                     {notice&&<p className="composer-feedback" role="status">{notice}</p>}
                     {draftSlot&&<div className="composer-feedback" role="status"><p>{draftSlot.message}</p>{draftSlot.value.delivery==='review'&&<p>This draft may already belong to a created voyage. Check creation and the conversation before sending again.</p>}{(text||pictures.length>0)&&<Button variant="ghost" size="sm" type="button" disabled={busy||!draftReady} onClick={()=>{setText('');setPictures([]);void draftSlot.discard().catch(()=>{});}}>Discard draft</Button>}</div>}
                     {pending.error&&<p className="composer-feedback" role="alert">Recovery storage is unavailable. Creating a voyage is disabled.</p>}
                     {pictures.length>0&&<div className="new-voyage-pictures flex flex-wrap gap-2">{pictures.map((picture,index)=><div className="flex max-w-40 items-center gap-1 rounded-md border px-2 text-xs" key={`${picture.name}:${index}`}><span className="truncate" title={picture.name}>{picture.name}</span><Button variant="ghost" size="icon-xs" type="button" aria-label={`Remove ${picture.name}`} disabled={busy} onClick={()=>setPictures(current=>current.filter((_,i)=>i!==index))}><XIcon aria-hidden="true"/></Button></div>)}</div>}
-                    <Textarea ref={input} className="border-0 bg-transparent px-0 py-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent" aria-label="Message" rows={3} value={text} disabled={busy||!draftReady} onChange={event=>setText(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void create(true);}}} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
+                    <ComposerInput ref={input} rows={3} value={text} disabled={busy||!draftReady} onChange={event=>setText(event.target.value)} onSend={()=>void create(true)} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
                     <Input ref={pictureInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void addPictures(files);}}/>
                     <div className="new-voyage-primary"><div className="new-voyage-inference">
-                        <label className="new-voyage-choice"><span className="sr-only">Model</span><SelectCombobox value={selectedModel} disabled={busy||!modelsReady} onChange={event=>{setModelChoice(event.target.value);setReasoningChoice('');}}>{!modelsReady&&<option value={selectedModel}>{selectedModel||'Loading models…'}</option>}{modelsReady&&modelOptions.map((item:any)=><option key={item.id} value={item.id}>{item.display_name||item.id}</option>)}</SelectCombobox></label>
+                        <label className="new-voyage-choice"><span className="sr-only">Model</span><SelectCombobox value={selectedModel} disabled={busy||!modelsReady} onChange={event=>{setModelChoice(event.target.value);setReasoningChoice('');setServiceChoice(null);}}>{!modelsReady&&<option value={selectedModel}>{selectedModel||'Loading models…'}</option>}{modelsReady&&modelOptions.map((item:any)=><option key={item.id} value={item.id}>{item.display_name||item.id}</option>)}</SelectCombobox></label>
                         <label className="new-voyage-choice"><span className="sr-only">Reasoning</span><SelectCombobox value={selectedReasoning} disabled={busy||!modelsReady||!currentModel} onChange={event=>setReasoningChoice(event.target.value)}><option value="">Default</option>{[...new Set<string>([...(currentModel?.reasoning_efforts||[]),...(selectedReasoning?[selectedReasoning]:[])])].map(value=><option key={value} value={value}>{value}</option>)}</SelectCombobox></label>
+                        <label className="new-voyage-choice"><span className="sr-only">Service tier</span><SelectCombobox value={selectedService} disabled={busy||!modelsReady||!currentModel} onChange={event=>setServiceChoice(event.target.value)}><option value="">Provider default</option>{[...new Set<string>([...(currentModel?.service_tiers||[]),...(selectedService?[selectedService]:[])])].map(value=><option key={value} value={value}>{value}</option>)}</SelectCombobox></label>
                         <label className="new-voyage-choice"><span className="sr-only">Access</span><SelectCombobox value={access} disabled={busy} onChange={event=>setAccess(event.target.value as NewVoyageMessage['access'])}><option value="read-only">Read only</option><option value="approval">Approval</option><option value="unrestricted">Full access</option></SelectCombobox></label>
                     </div><div className="new-voyage-send-actions"><Button variant="ghost" size="icon" type="button" aria-label="Attach pictures" title="Attach pictures" disabled={busy||preparing} onClick={()=>pictureInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button><Button type="submit" size="icon" aria-label="Send" title="Send message" disabled={!canSend||!hasMessage}><ArrowUpIcon aria-hidden="true"/><span className="sr-only">{busy?'Working…':'Send'}</span></Button></div></div>
-                </Card>
+                </ComposerBox>
                 <div className="new-voyage-context">
                     <label>Vessel<SelectCombobox value={vessel} disabled={busy} onChange={event=>{setVessel(event.target.value);setPath('');setProfileId('');}}>{connections.map(item=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</SelectCombobox></label>
                     <div className="grid min-w-0 gap-[3px]"><span className="text-[11px] text-muted-foreground">Workspace</span><WorkspacePicker key={`${tenant}:${vessel}:${connection?.vessel_id}`} tenant={tenant} vessel={JSON.stringify([vessel,connection?.vessel_id])} vesselName={connection?.name||'Vessel'} value={path} choices={caps?.workspaces||[]} allowCustom={caps?.scope==='owner'} disabled={busy||!caps} onChoose={setPath}/></div>
                     <label>Profile<SelectCombobox value={profileId} disabled={busy||!catalogue} onChange={event=>setProfileId(event.target.value)}>{!catalogue&&<option value="">Loading profiles…</option>}{(catalogue?.profiles||[]).map((item:any)=><option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}</SelectCombobox></label>
                 </div>
-                <div className="new-voyage-secondary"><Button variant="ghost" type="button" disabled={busy||!profile||!connection?.client} onClick={()=>setAccountReview(true)}>Review account</Button><small className="new-voyage-account" title={profile?profileSummary(profile,accounts):''}>{profile?(profileAccount?.label||'Account unavailable')+' · '+(accountOverride?'Account override for this voyage':modelChoice?'Model override for this voyage':'Saved profile')+(modelChoice?' · service tier resets to provider default':''):''}</small><Button variant="ghost" type="button" disabled={busy||!connection?.client||!path.startsWith('/')||!caps?.features?.includes('execution_profiles')} onClick={()=>onAdvanced({vessel,workspace:path})}><Settings2Icon aria-hidden="true"/>Manage profiles</Button><Button variant="ghost" type="button" disabled={!canCreate} onClick={()=>void create(false)}>Create without message</Button></div>
+                <div className="new-voyage-secondary"><Button variant="ghost" type="button" disabled={busy||!profile||!connection?.client} onClick={()=>setAccountReview(true)}>Review account</Button><small className="new-voyage-account" title={profile?profileSummary(profile,accounts):''}>{profile?(profileAccount?.label||'Account unavailable')+' · '+(accountOverride?'Account override for this voyage':modelChoice?'Model override for this voyage':'Saved profile')+(serviceChoice!==null?' · service tier override':modelChoice?' · service tier resets to provider default':''):''}</small><Button variant="ghost" type="button" disabled={busy||!connection?.client||!path.startsWith('/')||!caps?.features?.includes('execution_profiles')} onClick={()=>onAdvanced({vessel,workspace:path})}><Settings2Icon aria-hidden="true"/>Manage profiles</Button><Button variant="ghost" type="button" disabled={!canCreate} onClick={()=>void create(false)}>Create without message</Button></div>
                 <small className="new-voyage-hint">Send creates a voyage and confirms access before starting your message.</small>
             </form>
             {pending.records.length>0&&<div className="new-voyage-recovery mx-auto mt-4 flex max-w-2xl flex-wrap items-center gap-2 rounded-lg border p-3 text-sm"><p className="mb-0 w-full">Creation outcome needs review. Your draft is kept; no message will be sent during recovery.</p>{pending.records.map((record:any)=><Button variant="outline" key={record.key} disabled={busy} onClick={()=>void reconcile(record)}>Check creation · {fleet.connections.get(record.vessel)?.name||'Vessel'}</Button>)}</div>}
