@@ -356,3 +356,7 @@
 
 /* Subscription stock fields and focus rings retain inset inside nested cards. */
 .profile-setup #enrollment-panel{padding-inline:16px}
+
+.composer-surface-footer>.composer-toolbar,.composer-surface-footer .composer-options,.composer-surface-footer>.new-voyage-send-actions{display:contents}
+.composer-surface textarea{min-height:48px;max-height:30dvh}
+.composer-surface [aria-label="Composer configuration"]{display:flex;flex-wrap:wrap;gap:8px}

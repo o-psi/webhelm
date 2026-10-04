@@ -6,7 +6,7 @@ export function ComposerSurface({children,configuration,recovery,toolbar}:{child
  const [configOpen,setConfigOpen]=useState(false),[recoveryOpen,setRecoveryOpen]=useState(false);
  return <div className="composer-surface rounded-xl border bg-background p-3">
   {children}
-  <div className="flex min-w-0 items-center gap-2 border-t pt-2">
+  <div className="composer-surface-footer flex min-w-0 flex-wrap items-center gap-2 border-t pt-2">
    {toolbar}
    <Button type="button" variant="ghost" size="sm" aria-expanded={configOpen} onClick={()=>setConfigOpen(!configOpen)}>Configure</Button>
    {recovery&&<Button type="button" variant="ghost" size="sm" aria-expanded={recoveryOpen} onClick={()=>setRecoveryOpen(!recoveryOpen)}>Review pending work</Button>}
