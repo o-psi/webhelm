@@ -6,6 +6,7 @@ import {Card} from './components/ui/card';
 import {Input} from './components/ui/input';
 import {NativeSelect} from './components/ui/native-select';
 import {Textarea} from './components/ui/textarea';
+import {WorkspacePicker} from './WorkspacePicker';
 import {sameAccount,profileSettings,profileSummary} from '../js/execution-profiles.js';
 import {Creation,accountChoices,vesselRead} from './settings';
 import {preparePicture,MAX_PICTURE_BYTES,MAX_PICTURES} from './prepare-picture';
@@ -76,7 +77,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
             if(value.vessel_id!==connection.vessel_id)throw new Error('Vessel identity changed.');
             if(!value.features?.includes('execution_profiles'))throw new Error('This Vessel needs an update. Open Manage Vessels to review maintenance.');
             if(value.scope!=='owner'&&(!value.rights?.includes('create')||!value.rights?.includes('account_use')))throw new Error('This connection cannot create a voyage with this account.');
-            setCaps(value);setPath(current=>current||value.workspaces?.[0]?.path||'');setNotice('');
+            setCaps(value);setPath(current=>value.scope==='owner'?current||value.workspaces?.[0]?.path||'':value.workspaces?.some((choice:any)=>choice.path===current)?current:value.workspaces?.[0]?.path||'');setNotice('');
         }).catch(error=>{if(epoch===capsGeneration.current)setNotice(error instanceof Error?error.message:'Vessel unavailable.');});
         return()=>{capsGeneration.current++;};
     },[vessel,connection?.client]);
@@ -106,7 +107,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     },[modelContext,connection?.client]);
     const pending=(()=>{try{creation.current??=new Creation(localStorage,tenant);return {records:creation.current.pending(),error:false};}catch{return {records:[],error:true};}})();
     const validOverride=!modelChoice&&!reasoningChoice||modelsReady&&Boolean(currentModel)&&(!selectedReasoning||currentModel.reasoning_efforts?.includes(selectedReasoning));
-    const canCreate=Boolean(draftReady&&!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready&&validOverride);
+    const canCreate=Boolean(draftReady&&!busy&&!preparing&&!pending.error&&!pending.records.some((record:any)=>record.vessel===vessel)&&connection?.client&&caps&&path.startsWith('/')&&(caps.scope==='owner'||caps.workspaces?.some((choice:any)=>choice.path===path))&&choicesFor?.vessel===vessel&&choicesFor.path===path&&choicesFor.client===connection.client&&choicesFor.reloadToken===reloadToken&&profile&&profileAccount?.ready&&validOverride);
     const canSend=canCreate&&(caps.scope==='owner'||caps.rights?.includes('execute'));
     const hasMessage=Boolean(text.trim()||pictures.length);
     async function addPictures(files:File[]){
@@ -135,6 +136,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
                 vesselRead(connection,'capabilities'),vesselRead(connection,'profiles',{workspace:path}),vesselRead(connection,'accounts',{workspace:path,transport:null}),
             ]);
             if(connection.client!==client||latestCaps.vessel_id!==connection.vessel_id||!latestCaps.features?.includes('execution_profiles')||latestCaps.scope!=='owner'&&(!latestCaps.rights?.includes('create')||!latestCaps.rights?.includes('account_use')))throw new Error('Vessel authority changed. Review the draft before sending.');
+            if(latestCaps.scope!=='owner'&&!latestCaps.workspaces?.some((choice:any)=>choice.path===path))throw new Error('This workspace is no longer permitted. Choose a current workspace before sending.');
             const currentProfile=latestCatalogue.profiles?.find((item:any)=>item.id===selected.id);
             if(latestCatalogue.revision!==selectedRevision||!currentProfile||JSON.stringify(profileSettings(currentProfile))!==JSON.stringify(profileSettings(selected)))throw new Error('Saved profiles changed. Review the selected profile before sending.');
             if(!accountChoices(latestAccounts).some((item:any)=>item.ready&&sameAccount(item.binding,currentProfile.account)))throw new Error('The selected account is unavailable. Choose another profile.');
@@ -184,7 +186,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
                 </Card>
                 <div className="new-voyage-context">
                     <label>Vessel<NativeSelect value={vessel} disabled={busy} onChange={event=>{setVessel(event.target.value);setPath('');setProfileId('');}}>{connections.map(item=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</NativeSelect></label>
-                    <label>Workspace{caps?.scope==='owner'?<Input value={path} disabled={busy} onChange={event=>setPath(event.target.value)} placeholder="Absolute folder"/>:<NativeSelect value={path} disabled={busy||!caps} onChange={event=>setPath(event.target.value)}>{(caps?.workspaces||[]).map((item:any)=><option key={item.path} value={item.path}>{item.name} · {item.path}</option>)}</NativeSelect>}</label>
+                    <div className="grid min-w-0 gap-[3px]"><span className="text-[11px] text-muted-foreground">Workspace</span><WorkspacePicker key={`${tenant}:${vessel}:${connection?.vessel_id}`} tenant={tenant} vessel={JSON.stringify([vessel,connection?.vessel_id])} vesselName={connection?.name||'Vessel'} value={path} choices={caps?.workspaces||[]} allowCustom={caps?.scope==='owner'} disabled={busy||!caps} onChoose={setPath}/></div>
                     <label>Profile<NativeSelect value={profileId} disabled={busy||!catalogue} onChange={event=>setProfileId(event.target.value)}>{!catalogue&&<option value="">Loading profiles…</option>}{(catalogue?.profiles||[]).map((item:any)=><option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}</NativeSelect></label>
                 </div>
                 <div className="new-voyage-secondary"><small className="new-voyage-account" title={profile?profileSummary(profile,accounts):''}>{profile?(profileAccount?.label||'Account unavailable')+' · '+(modelChoice?'Model override for this voyage':'Saved profile')+(modelChoice?' · service tier resets to provider default':''):''}</small><Button variant="ghost" type="button" disabled={busy||!connection?.client||!path.startsWith('/')||!caps?.features?.includes('execution_profiles')} onClick={()=>onAdvanced({vessel,workspace:path})}><Settings2Icon aria-hidden="true"/>Manage profiles</Button><Button variant="ghost" type="button" disabled={!canCreate} onClick={()=>void create(false)}>Create without message</Button></div>

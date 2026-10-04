@@ -7,17 +7,18 @@ import {completeNewVoyage} from '../resources/react/new-voyage-delivery';
 
 const binding={account_id:'account',connection_id:'provider',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 
-async function mount({uncertain=false,recovery=null}:{uncertain?:boolean;recovery?:any}={}){
+async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace=false}:{uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
     const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test'});
     const previous={window:globalThis.window,document:globalThis.document,localStorage:globalThis.localStorage};
     Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,HTMLElement:dom.window.HTMLElement,HTMLInputElement:dom.window.HTMLInputElement,HTMLTextAreaElement:dom.window.HTMLTextAreaElement,HTMLSelectElement:dom.window.HTMLSelectElement,Event:dom.window.Event});
     const {createRoot}=await import('react-dom/client');
     const commands:any[]=[],created:any[]=[],advanced:any[]=[];
+    let capabilityReads=0;
     const connection:any={id:'c',name:'Fixture Vessel',vessel_id:'v',voyages:[],client:{async exchange({command}:any){
         commands.push(command);
         let result:any;
         switch(command.op){
-            case 'capabilities':result={vessel_id:'v',scope:'owner',features:['execution_profiles'],workspaces:[{path:'/work',name:'Work'}]};break;
+            case 'capabilities':result={vessel_id:'v',scope:scoped?'scoped':'owner',rights:['create','account_use','execute'],features:['execution_profiles'],workspaces:revokeWorkspace&&++capabilityReads>1?[]:[{path:'/work',name:'Work'}]};break;
             case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
             case 'accounts':result={accounts:[{id:'account',connection_id:'provider',identity_generation:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
             case 'account_models':result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low']}]};break;
@@ -117,5 +118,18 @@ test('profile management receives the selected Vessel and workspace, not the fir
   await act(async()=>view.button('Manage profiles').click());
   assert.deepEqual(view.advanced,[{vessel:'second',workspace:'/chosen'}]);
   assert.equal(view.commands.some(c=>c.op==='start_account'||c.op==='submit'),false);
+ }finally{await view.dispose();}
+});
+
+test('scoped workspace recovery uses an authorized choice and rechecks revocation before creation',async()=>{
+ const view=await mount({scoped:true,revokeWorkspace:true,recovery:{vessel:'c',workspace:'/forbidden',text:'Keep my draft',hasPictures:false,source:'draft'}});
+ try{
+  assert.equal(view.button('Workspace').textContent,'/work');
+  await act(async()=>view.button('Manage profiles').click());assert.equal(view.advanced[0].workspace,'/work');
+  assert.equal(view.button('Create without message').disabled,false);
+  await act(async()=>view.button('Create without message').click());
+  assert.match(document.body.textContent!,/workspace is no longer permitted/);
+  assert.equal(view.commands.some(command=>command.op==='start_account'),false);
+  assert.equal(document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!.value,'Keep my draft');
  }finally{await view.dispose();}
 });
