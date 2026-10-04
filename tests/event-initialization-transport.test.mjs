@@ -20,3 +20,13 @@ test('transport rejects changed owner and missing barriers without fallback',asy
     const client={exchange:async()=>reply({version:3,revision:9,cursor:40,next_offset:0,has_more:false,events:[]})};
     await assert.rejects(initializeEntities(client,'s','i',{generation:'g'}),/barrier/);
 });
+
+test('canonical replay keeps sparse cursors and never requests legacy recovery',async()=>{
+    const {replayEntities}=await import('../resources/js/vessel-client.js');
+    const commands=[],applied=[];
+    const client={exchange:async({command})=>{commands.push(command);return reply({version:3,cursor:12,latest_cursor:12,has_more:false,events:[{session_id:'s',cursor:12,kind:'text_delta',payload:{offset:0,text:'é'}}]});}};
+    assert.deepEqual(await replayEntities(client,'s','i',3,event=>applied.push(event)),{cursor:12});
+    assert.equal(applied.length,1);assert.equal(commands[0].op,'replay_entities');
+    client.exchange=async()=>reply({version:3,cursor:12,reset:'retention_gap',events:[]});
+    assert.deepEqual(await replayEntities(client,'s','i',12,()=>assert.fail('no synthetic delta')),{reset:'retention_gap',cursor:12});
+});

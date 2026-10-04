@@ -149,3 +149,20 @@ export async function initializeDecisions(client, session, incarnation) {
     if (!scope) throw new Error('Missing decision barrier');
     return [...scope.entities.values()];
 }
+
+export async function replayEntities(client,session,incarnation,after,apply,{maxPages=1024}={}) {
+    let cursor=after;
+    for(let count=0;count<maxPages;count++) {
+        const page=voyageResult(await client.exchange(request('replay_entities',{session_id:session,incarnation,after:cursor,limit:128})),session,incarnation).result;
+        if(page?.version!==3 || !Number.isSafeInteger(page.cursor) || page.cursor<cursor || !Array.isArray(page.events) || page.events.length>128) throw new Error('Invalid canonical replay');
+        if(page.reset) return {reset:page.reset,cursor};
+        for(const event of page.events) {
+            if(event.session_id!==session || !Number.isSafeInteger(event.cursor) || event.cursor<=cursor || event.cursor>page.cursor) throw new Error('Replay entity order or identity mismatch');
+            await apply(event); cursor=event.cursor;
+        }
+        if(page.has_more!==true) return {cursor:page.cursor};
+        if(page.cursor<=after) throw new Error('Replay made no progress');
+        cursor=page.cursor; after=cursor;
+    }
+    throw new Error('Replay page limit exceeded');
+}
