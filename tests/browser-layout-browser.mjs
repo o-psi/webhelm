@@ -65,7 +65,7 @@ try {
                 if(['subscribe','unsubscribe'].includes(f.type))return;
                 const c=f.request.command;window.fixtureCommands.push(c);let result;
                 if(c.op==='account_models'&&window.fixtureCatalogueMode==='error'){emit({type:'reply',request_id:f.request_id,response:{protocol:1,outcome_unknown:false,error:'Synthetic catalogue unavailable'}});return;}
-                if(c.op==='account_models'&&window.fixtureCatalogueMode==='loading'){window.releaseFixtureCatalogue=()=>{window.fixtureCatalogueMode='normal';this.send(text);};return;}
+                if(c.op==='account_models'&&window.fixtureCatalogueMode==='loading'){window.releaseFixtureCatalogue=()=>{this.send(text);};return;}
                 if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',version:'1.0.2',features:['execution_profiles','verified_user_updates','workspace_changes','workspace_file','skills_catalog','workspace_file_catalog'],remote_updates:true,workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='update_prepare')result=updateRecord={phase:'ready',operation_id:c.operation_id,channel:c.channel,release_id:'a'.repeat(64),version:c.channel==='nightly'?'1.0.3-nightly.20260928.1.1':'1.0.2',expires_at:Math.floor(Date.now()/1000)+3600,description:'Verified development build from fixture source',services:['vessel.service']};
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
@@ -239,6 +239,31 @@ try {
     await page.getByRole('button',{name:/^Model:/}).click();
     const modelDialog=page.getByRole('dialog',{name:'Choose model',exact:true});
     await modelDialog.locator('[data-model-choice]').filter({hasText:'Fixture model'}).waitFor();
+    for(const theme of ['light','dark']){
+        await page.evaluate(theme=>document.documentElement.classList.toggle('dark',theme==='dark'),theme);
+        const inspectDialog=async(state)=>{
+            await modelDialog.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
+            const bounds=await modelDialog.boundingBox();
+            check(bounds.width>0&&bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=viewport.width&&bounds.y+bounds.height<=viewport.height,`${label}/${theme}/${state}: model dialog clips viewport`);
+            const search=modelDialog.getByRole('textbox',{name:'Search models'});
+            await search.focus();check(await search.evaluate(el=>el===document.activeElement),`${label}/${theme}/${state}: search unreachable`);
+            await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${viewport.height}-${theme}-${state}.png`});
+        };
+        await page.evaluate(()=>{window.fixtureCatalogueMode='loading';});
+        await modelDialog.getByRole('button',{name:'Refresh',exact:true}).click();
+        await modelDialog.getByText('Refreshing model choices…',{exact:true}).waitFor();
+        await inspectDialog('loading-models');
+        await page.evaluate(()=>{window.fixtureCatalogueMode='error';window.releaseFixtureCatalogue();});
+        await modelDialog.getByRole('alert').waitFor();
+        await inspectDialog('error-models');
+        check(await modelDialog.getByRole('button',{name:'Retry',exact:true}).isEnabled(),`${label}/${theme}: retry unavailable after catalogue error`);
+        await page.evaluate(()=>{window.fixtureCatalogueMode='normal';});
+        await modelDialog.getByRole('button',{name:'Retry',exact:true}).click();
+        await modelDialog.locator('[data-model-choice]').filter({hasText:'Fixture model'}).waitFor();
+        await inspectDialog('populated-models');
+    }
+    await page.evaluate(()=>document.documentElement.classList.remove('dark'));
+
     check(await modelDialog.locator('[data-model-choice][aria-pressed="true"]').count()===1,`${label}: current model is not marked`);
     await modelDialog.getByRole('textbox',{name:'Search models'}).fill('other');
     check(await modelDialog.locator('[data-model-choice]').count()===1,`${label}: model search did not filter`);
