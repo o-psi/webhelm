@@ -78,6 +78,7 @@ export function Composer({tab, workspace, onSettings, onRecover, connection, voy
     const enabled = tab && !tab.draftLoading && !stopping && workspace.actionable(tab,sendOp) && workspace.permitted(tab,sendOp);
     const canStop = tab && activeRun && workspace.actionable(tab) && workspace.permitted(tab,'cancel');
     const [goalReview,setGoalReview]=useState<ComposerGoalReview|null>(null);
+    useEffect(()=>setGoalReview(null),[tab?.key,tab?.incarnation]);
     const send = () => { if(tab&&enabled)void dispatchComposerCommand(workspace,tab.key,tab.draft,{onGoalReview:setGoalReview}).then(result=>{if(!result.handled)void workspace.act(tab.key,sendOp);}).catch(reason=>{tab.notice=reason.message;workspace.changed();}); };
     const pendingState=(()=>{try{return {entries:tab?workspace.pending(tab):[],error:false};}catch{return {entries:[],error:true};}})();
     const pendingEntries=pendingState.entries;
