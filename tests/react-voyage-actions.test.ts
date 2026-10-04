@@ -37,7 +37,7 @@ test('sidebar context surface is read-only, reports fresh disabled reasons and r
         assert.ok(commands.length>=3);assert.ok(commands.every(command=>['capabilities','inspect','snapshot'].includes(command.op)));
         await choose('Rename');
         const input=dom.window.document.querySelector<HTMLInputElement>('#sidebar-name')!;
-        assert.equal(dom.window.document.activeElement,input);assert.equal(input.value,'Original name');assert.equal(input.selectionEnd,input.value.length);
+        assert.ok(dom.window.document.activeElement===input,'Rename focuses the exact name input');assert.equal(input.value,'Original name');assert.equal(input.selectionEnd,input.value.length);
         await dismiss();assert.equal(dom.window.document.activeElement?.id,'card');
         await open();await choose('Details');
         assert.equal(dom.window.document.querySelector('#sidebar-details-access')!.textContent,'Full access');

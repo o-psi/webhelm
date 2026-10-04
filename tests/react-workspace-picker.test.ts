@@ -21,23 +21,36 @@ test('workspace search, explicit paths and preferences respect host scope and re
         const input=document.querySelector<HTMLInputElement>('[aria-label="Search workspaces"]')!;assert.ok(input);
         await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});return input;
     };
+    // Radix restores Popover trigger focus after the close commit. Do not
+    // reopen another FocusScope until that observable boundary has completed.
+    const closeAndRestore=async(action:()=>void,trigger:HTMLElement)=>{
+        let cleanup=()=>{};
+        const restored=new Promise<void>((resolve,reject)=>{
+            const focused=()=>{cleanup();resolve();};
+            const timeout=setTimeout(()=>{cleanup();reject(new Error('Workspace close did not restore focus within 250 ms'));},250);
+            cleanup=()=>{clearTimeout(timeout);trigger.removeEventListener('focus',focused);};
+            trigger.addEventListener('focus',focused);
+        });
+        try{await act(async()=>action());await act(async()=>restored);}finally{cleanup();}
+        assert.ok(document.activeElement===trigger,'settled Workspace focus returns to exact trigger');
+    };
     try{
         await render();const trigger=button('Workspace');await click('Workspace');
-        assert.equal(document.activeElement,document.querySelector('[role="combobox"]'));
+        assert.ok(document.activeElement===document.querySelector('[role="combobox"]'),'workspace search owns initial focus');
         assert.equal(document.querySelector('[role="option"][aria-selected="true"]')?.textContent,'Work/work');
         await click('Pin workspace');assert.equal(button('Unpin').getAttribute('aria-pressed'),'true');
         const search=await type('website');assert.equal(document.querySelectorAll('[role="option"]').length,1);
-        await act(async()=>search.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true})));
+        await closeAndRestore(()=>{search.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));},trigger);
         assert.deepEqual(chosen,['/projects/website']);assert.equal(document.querySelector('[role="listbox"]'),null);
-        assert.equal(document.activeElement,trigger);
+        assert.ok(document.activeElement===trigger,'workspace trigger focus restored');
         await render();await click('Workspace');assert.ok(document.querySelector('[role="group"][aria-label="Recent"]'));
         const path=await type('/other folder');
-        await act(async()=>path.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true})));
+        await closeAndRestore(()=>{path.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));},trigger);
         assert.equal(chosen.at(-1),'/other folder');
         await render();await click('Workspace');const input=await type('no matching folder');
         assert.equal(document.querySelectorAll('[role="option"]').length,0);
         const count=chosen.length;await act(async()=>input.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true})));assert.equal(chosen.length,count);
-        await act(async()=>input.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));assert.equal(document.querySelector('[role="listbox"]'),null);assert.equal(document.activeElement,trigger);
+        await closeAndRestore(()=>{input.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));},trigger);assert.equal(document.querySelector('[role="listbox"]'),null);assert.ok(document.activeElement===trigger,'workspace trigger focus restored');
         props={...props,allowCustom:false,value:'/allowed',choices:[{path:'/allowed',name:'Allowed'}]};await render();await click('Workspace');
         assert.equal(document.querySelectorAll('[role="option"]').length,1);assert.doesNotMatch(document.querySelector('[role="listbox"]')!.textContent!,/other folder|Website|\/work/);
         await type('/forbidden');assert.equal(document.querySelectorAll('[role="option"]').length,0);

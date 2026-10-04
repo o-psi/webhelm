@@ -63,7 +63,7 @@ test('model search, favorites and keyboard selection retain current state and fe
         }finally{cancelFocusObservation();}
         assert.equal(dom.window.document.querySelector('[role="dialog"]'),null,'Escape dismisses the model dialog');
         assert.equal(button('Choose model'),modelTrigger,'Escape retains the original trigger identity');
-        assert.equal(dom.window.document.activeElement,modelTrigger,'Escape restores focus to the exact model trigger');assert.equal(actions.length,0);
+        assert.ok(dom.window.document.activeElement===modelTrigger,'Escape restores focus to the exact model trigger');assert.equal(actions.length,0);
         await click('Choose model');assert.equal(dom.window.document.querySelector<HTMLInputElement>('input')!.value,'');
         const before=requests;await act(async()=>choose('Alpha').click());assert.equal(requests,before);assert.equal(actions.length,0);
         await click('Choose model');
