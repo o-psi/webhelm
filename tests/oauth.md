@@ -73,3 +73,20 @@ unique emails would be destructive. Roll back application code only, keeping the
 additive schema, or develop a separately reviewed data-preserving migration.
 SQLite fresh install and legacy upgrade were executed locally; native MySQL and
 PostgreSQL migrations/concurrent login races still require deployment validation.
+
+## Disposable SQLite identity concurrency
+
+Run `php tests/oauth-sqlite-race.php` from this repository root. The fixture uses
+the real OAuthAccounts service and two concurrent OS processes per round against
+a temporary file-backed SQLite database. It isolates configuration, storage and
+compiled views; uses synthetic provider identities; and never invokes Socialite
+network callbacks or writes to the production database.
+
+It verifies same-subject uniqueness without orphan users/tenants, different
+subjects sharing an email without auto-linking, and empty new tenants. Child
+execution/barriers have finite timeouts. Cleanup checks observe stopped children
+and removal of the disposable database/storage, including failure paths. Run
+under the local resource limits, with PHP extensions available to child processes.
+This is Linux/SQLite service-level concurrency evidence; it is not live two-user
+OAuth, HTTP/session isolation, a production load benchmark, or native MySQL and
+PostgreSQL verification. Keep those acceptance records separate.
