@@ -47,7 +47,7 @@ export function Settings({fleet,workspace,tab,location,profileOnly=false,tenant,
     const lastVessel=useRef(vessel),editorRevision=useRef<number|null>(null);
     const editorSeed=useRef<any>(null),restoreFocus=useRef<HTMLElement|null>(null);
     function navigate(next:Screen){if(next==='enrollment')setEnrollmentTitle('Connect a subscription');history.current.push({screen,focus:document.activeElement as HTMLElement});setSearch('');setScreen(next);}
-    function back(){if(busy&&screen!=='usage')return;const previous=history.current.pop();restoreFocus.current=previous?.focus||null;setSearch('');setScreen(previous?.screen||'overview');if(screen==='editor')setEditor(null);}
+    function back(){if(busy&&screen!=='usage')return;if(screen==='usage'){usageGeneration.current++;setBusy(false);}const previous=history.current.pop();restoreFocus.current=previous?.focus||null;setSearch('');setScreen(previous?.screen||'overview');if(screen==='editor')setEditor(null);}
     function show(next:Screen){history.current=[];setSearch('');setScreen(next);}
     useEffect(()=>{body.current?.scrollTo?.(0,0);const focus=restoreFocus.current;restoreFocus.current=null;if(focus?.isConnected)focus.focus();else heading.current?.focus();},[screen]);
     useEffect(()=>{usageGeneration.current++;setUsage(null);setUsageNotice('');return()=>{usageGeneration.current++;};},[vessel,path,account,screen,connection?.client]);
@@ -126,7 +126,7 @@ export function Settings({fleet,workspace,tab,location,profileOnly=false,tenant,
     async function refreshUsage(){
         if(busy||!selected?.ready)return;const epoch=++usageGeneration.current;setBusy(true);setUsageNotice('Loading usage…');
         try{const value=await vesselRead(connection,'account_usage',{workspace:path,account:selected.binding,refresh:true});if(epoch!==usageGeneration.current)return;if(!sameAccount(value.account,selected.binding))throw new Error('Account usage identity changed.');setUsage(value);setUsageNotice('');}
-        catch(error){if(epoch===usageGeneration.current)setUsageNotice(error instanceof Error?error.message:'Usage unavailable.');}finally{setBusy(false);}
+        catch(error){if(epoch===usageGeneration.current)setUsageNotice(error instanceof Error?error.message:'Usage unavailable.');}finally{if(epoch===usageGeneration.current)setBusy(false);}
     }
     const matches=(text:string)=>text.toLocaleLowerCase().includes(search.toLocaleLowerCase());
     const reasoningStops=['',...new Set<string>([...(selectedModel?.reasoning_efforts||[]),...(reasoning?[reasoning]:[])])];

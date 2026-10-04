@@ -161,3 +161,20 @@ test('failed profile loading offers status recovery without a permanent reload c
         assert.equal(view.commands.some(command=>['save_profile','start_account','account_usage'].includes(command.op)),false);
     }finally{await view.dispose();}
 });
+
+
+test('Back abandons a pending usage read without locking the unsaved editor',async()=>{
+ let release!:(value:any)=>void;
+ const view=await mount({usageReply:()=>new Promise(resolve=>{release=resolve;})});
+ try{
+  await view.click('Profile');await view.click('Actions for Everyday');await view.click('Edit');
+  await view.fill('Profile name','Pending draft');await view.click('Account usage');
+  await view.click('Refresh usage');await view.click('Back');
+  assert.equal(view.button('Close settings').disabled,false);
+  assert.equal(view.button('Cancel profile edit').disabled,false);
+  assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'Pending draft');
+  await view.click('Close settings');assert.equal(view.closed(),1);
+  await act(async()=>release({account:binding,refresh_status:'fresh'}));
+  assert.equal(view.commands.some(command=>['save_profile','set_account_inference'].includes(command.op)),false);
+ }finally{await view.dispose();}
+});

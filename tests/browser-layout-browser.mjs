@@ -521,7 +521,7 @@ try {
     await settings.getByText('Loading usage…',{exact:true}).waitFor();
     await settings.getByRole('button',{name:'Back',exact:true}).click();
     check(await settings.getByRole('textbox',{name:'Profile name',exact:true}).inputValue()==='Unsaved fixture name',`${label}: pending usage Back lost draft`);
-    await page.evaluate(()=>window.releaseFixtureUsage());
+    check(await settings.getByRole('button',{name:'Close settings',exact:true}).isEnabled(),`${label}: abandoned usage read blocks editor Close`);
     for(const theme of ['light','dark']){
         await page.evaluate(theme=>document.documentElement.classList.toggle('dark',theme==='dark'),theme);
         const bounds=await settings.boundingBox();
@@ -531,6 +531,7 @@ try {
         await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${theme}-unsaved-profile.png`});
     }
     await settings.getByRole('button',{name:'Close settings',exact:true}).click();
+    await page.evaluate(()=>window.releaseFixtureUsage());
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length)===settingsWritesBefore,`${label}: unsaved navigation applied changes`);
     // Explicit user close, not malformed initial stopped attach, exercises lifecycle.
     await page.getByRole('button',{name:'Browser',exact:true}).click();
