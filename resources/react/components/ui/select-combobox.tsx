@@ -19,12 +19,13 @@ export function SelectCombobox({className,size='default',ref:forwardedRef,...pro
     const sync=React.useCallback(()=>{
         const node=select.current;if(!node)return;
         const labelText=(label:HTMLElement)=>{
+            // Accessible names include sr-only text; unlike tooltip detection, it is meaningful.
             // Read live text without constructing detached custom elements.
             const walker=node.ownerDocument.createTreeWalker(label,node.ownerDocument.defaultView!.NodeFilter.SHOW_TEXT);
             let text='';
             while(walker.nextNode()){
                 const child=walker.currentNode;
-                if(!child.parentElement?.closest('[data-slot="select-combobox-wrapper"],select,button,svg,[hidden],[aria-hidden="true"],.sr-only'))text+=child.textContent||'';
+                if(!child.parentElement?.closest('[data-slot="select-combobox-wrapper"],select,button,svg,[hidden],[inert],[aria-hidden="true"]'))text+=child.textContent||'';
             }
             return text.trim();
         };
