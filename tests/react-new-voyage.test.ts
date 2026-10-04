@@ -267,3 +267,12 @@ test('account presentation never matches stale generations, revisions or transpo
         assert.equal(option.selected,undefined);assert.equal(option.value,'');
     }
 });
+
+
+test('pending Fleet bootstrap is connecting, confirmed failures keep their observed reason',async()=>{
+ const {vesselAvailability}=await import('../resources/react/NewVoyage');
+ assert.equal(vesselAvailability({client:null,status:'Connecting…'}),'Connecting to Vessel…');
+ assert.equal(vesselAvailability({client:null,connecting:true,status:'Disconnected'}),'Connecting to Vessel…');
+ assert.equal(vesselAvailability({client:null,connecting:false,status:'Connection refused'}),'Connection refused');
+ assert.equal(vesselAvailability({client:{},status:'Connected'}),'Connected');
+});

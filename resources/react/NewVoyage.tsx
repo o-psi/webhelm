@@ -78,7 +78,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     useEffect(()=>{
         const epoch=++capsGeneration.current;
         setCaps(null);setCatalogue(null);setAccounts([]);setChoicesFor(null);
-        if(!connection?.client){setNotice(connection?'Vessel is offline.':'Connect a Vessel to begin.');return;}
+        if(!connection?.client){setNotice(vesselAvailability(connection));return;}
         setNotice('Loading Vessel choices…');
         void vesselRead(connection,'capabilities').then(value=>{
             if(epoch!==capsGeneration.current||connection.client!==fleet.connections.get(vessel)?.client)return;
@@ -88,7 +88,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
             setCaps(value);setPath(current=>value.scope==='owner'?current||value.workspaces?.[0]?.path||'':value.workspaces?.some((choice:any)=>choice.path===current)?current:value.workspaces?.[0]?.path||'');setNotice('');
         }).catch(error=>{if(epoch===capsGeneration.current)setNotice(error instanceof Error?error.message:'Vessel unavailable.');});
         return()=>{capsGeneration.current++;};
-    },[vessel,connection?.client]);
+    },[vessel,connection?.client,connection?.status,connection?.connecting]);
     useEffect(()=>{
         const epoch=++profilesGeneration.current;
         setCatalogue(null);setAccounts([]);setChoicesFor(null);
@@ -202,7 +202,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
                     </ComposerOptions><div className="new-voyage-send-actions"><Button variant="ghost" size="icon" type="button" aria-label="Attach pictures" title="Attach pictures" disabled={busy||preparing} onClick={()=>pictureInput.current?.click()}><PaperclipIcon aria-hidden="true"/></Button><Button type="submit" size="icon" aria-label="Send" title="Send message" disabled={!canSend||!hasMessage}><ArrowUpIcon aria-hidden="true"/><span className="sr-only">{busy?'Working…':'Send'}</span></Button></div></div>
                 </ComposerBox>
                 <div className="new-voyage-context">
-                    <label>Vessel<SelectCombobox value={vessel} disabled={busy} onChange={event=>{setVessel(event.target.value);setPath('');setProfileId('');}}>{connections.map(item=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</SelectCombobox></label>
+                    <label>Vessel<SelectCombobox value={vessel} disabled={busy} onChange={event=>{setVessel(event.target.value);setPath('');setProfileId('');}}>{connections.map(item=><option key={item.id} value={item.id}>{item.name}{!item.client?` · ${vesselAvailability(item)}`:''}</option>)}</SelectCombobox></label>
                     <div className="grid min-w-0 gap-[3px]"><span className="text-[11px] text-muted-foreground">Workspace</span><WorkspacePicker key={`${tenant}:${vessel}:${connection?.vessel_id}`} tenant={tenant} vessel={JSON.stringify([vessel,connection?.vessel_id])} vesselName={connection?.name||'Vessel'} value={path} choices={caps?.workspaces||[]} allowCustom={caps?.scope==='owner'} disabled={busy||!caps} onChoose={setPath}/></div>
                     <label>Profile<SelectCombobox value={profileId} disabled={busy||!catalogue} onChange={event=>setProfileId(event.target.value)}>{!catalogue&&<option value="">Loading profiles…</option>}{(catalogue?.profiles||[]).map((item:any)=><option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}</SelectCombobox></label>
                 </div>
@@ -212,4 +212,12 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
             {pending.records.length>0&&<div className="new-voyage-recovery mx-auto mt-4 flex max-w-2xl flex-wrap items-center gap-2 rounded-lg border p-3 text-sm"><p className="mb-0 w-full">Creation outcome needs review. Your draft is kept; no message will be sent during recovery.</p>{pending.records.map((record:any)=><Button variant="outline" key={record.key} disabled={busy} onClick={()=>void reconcile(record)}>Check creation · {fleet.connections.get(record.vessel)?.name||'Vessel'}</Button>)}</div>}
         </div>
     </section>;
+}
+
+/** Fleet observations are presentation, never permission to create/send. */
+export function vesselAvailability(connection:any){
+    if(!connection)return 'Connect a Vessel to begin.';
+    if(connection.client)return 'Connected';
+    if(connection.connecting||connection.status==='Connecting…')return 'Connecting to Vessel…';
+    return connection.status||'Vessel connection is unavailable.';
 }
