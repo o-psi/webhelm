@@ -140,7 +140,9 @@ test('create remains available above an empty or filtered profile list',async()=
         assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'');
         assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Create profile');
         assert.ok(view.button('Cancel profile creation'));
-        assert.equal(view.button('Save profile').disabled,true,'blank creation remains unsaveable');
+        await view.click('Save profile');
+        assert.match(view.text(),/Enter a profile name/);
+        assert.equal(view.commands.some(command=>command.op==='save_profile'),false,'blank name is refused before mutation');
         assert.equal(view.button('Cancel profile creation').closest('.setup-footer-actions'),view.button('Save profile').closest('.setup-footer-actions'),'both stock actions share the contained footer');
     }finally{await view.dispose();}
 });
