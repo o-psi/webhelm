@@ -45,7 +45,7 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
     });
     try {
         await React.act(async () => root.render(React.createElement(Connections, {
-            bootstrap: {vessels: [{id: 'c', name: 'Workstation', vessel_id: 'v', endpoint: 'https://vessel.example'}],
+            bootstrap: {vessels: [{id: 'c', name: 'Workstation', vessel_id: 'v', endpoint: 'https://vessel.example'}, {id:'secondary',name:'Long secondary Vessel identity for retention presentation',vessel_id:'secondary-vessel',endpoint:'https://secondary.example'}],
                 pairings: [{id: 'p', name: 'Laptop'}], plan: 'free', vesselLimit: 8,
                 billingEnabled: true, billingCheckoutUrl: '/billing/checkout'},
             states: {c: {connected: true, status: 'Connected'}}, connections: new Map([['c', connection]]), tenant: 'test', onClose: () => {},
@@ -56,7 +56,7 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.match(query('.connections-card')!.textContent!, /Version 1\.0\.2/);
         assert.match(query('.connections-dialog')!.textContent!, /Stable: v1\.0\.2/);
         assert.match(query('.connections-dialog')!.textContent!, /Development: 1\.0\.3-nightly/);
-        assert.match(query('.connections-dialog')!.textContent!, /1 of 8 Vessel connections used/);
+        assert.match(query('.connections-dialog')!.textContent!, /2 of 8 Vessel connections used/);
         assert.equal(query('.connections-dialog form[action="/billing/checkout"]'), null);
         await click('HelmWeb Account');
         assert.equal(accountOpens, 1);
@@ -64,6 +64,11 @@ test('Vessel manager separates overview, setup and destructive confirmation', as
         assert.equal(query('.connections-pending'), null);
         assert.doesNotMatch(query('.connections-dialog')!.textContent!, /Laptop|Needs confirmation/);
         assert.deepEqual(commands, ['capabilities']);
+        const retention=[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(el=>el.textContent?.startsWith('Choose which Vessels stay'))!;
+        assert.ok(retention,'multiple Vessels expose retention disclosure without changing order');
+        assert.equal(dom.window.document.querySelector('button[aria-label="Move Workstation up"]'),null,'ordering actions remain collapsed');
+        assert.match(dom.window.document.body.textContent!,/Long secondary Vessel identity/);
+        assert.equal(requests,0,'list inspection performs no ordering or connection mutation');
         await click('View details for Workstation');
         assert.ok(query('.connections-details .connections-status.is-connected'));
         assert.match(query('.connections-maintenance')!.textContent!, /Software updates/);

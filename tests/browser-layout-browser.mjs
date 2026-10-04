@@ -14,7 +14,7 @@ const {chromium} = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE || `
 const build = `${root}/public/build`;
 const manifest = JSON.parse(await readFile(`${build}/manifest.json`, 'utf8'));
 const entry = manifest['resources/react/main.tsx'];
-const bootstrap = {tenantId:'layout-fixture',vessels:[{id:'11111111-1111-4111-8111-111111111111',vessel_id:'v',name:'Fixture Vessel'}],pairings:[{id:'pending-fixture',name:'Hidden pending pairing'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
+const bootstrap = {tenantId:'layout-fixture',vessels:[{id:'11111111-1111-4111-8111-111111111111',vessel_id:'v',name:'Fixture Vessel'},...(process.env.LAYOUT_MULTIVESSEL==='1'?[{id:'secondary-offline',vessel_id:'secondary',name:'Long secondary Vessel identity BPProx Cluster',endpoint:'https://long-secondary-hostname.example.invalid'}]:[])],pairings:[{id:'pending-fixture',name:'Hidden pending pairing'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
 const releaseAssets=version=>[{name:`voyage-${version}-x86_64-unknown-linux-gnu.tar.gz`,size:100},{name:`voyage-${version}-x86_64-unknown-linux-gnu.tar.gz.sha256`,size:100}];
 const stableRelease={tag_name:'v1.0.2',draft:false,prerelease:false,assets:releaseAssets('v1.0.2')};
 const nightlyReleases=[{tag_name:'nightly-1.0.3-nightly.20260928.1.1',draft:false,prerelease:true,target_commitish:'a'.repeat(40),assets:releaseAssets('1.0.3-nightly.20260928.1.1')}];
@@ -41,6 +41,7 @@ try {
     const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('PAGE',e.message);});page.on('response',r=>{if(r.status()>=400)console.error('HTTP',r.status(),r.url());});
     await page.route('**/*',route=>{
         const url=route.request().url();
+        if(url===origin+'/console/ticket'&&process.env.LAYOUT_MULTIVESSEL==='1'&&route.request().postData()?.includes('secondary-offline'))return route.fulfill({status:503,json:{message:'Synthetic secondary offline'}});
         if(url===origin+'/console/ticket')return route.fulfill({json:{url:'wss://fixture.invalid/v1/vessel/browser-socket',vessel_id:'v',token:'a'.repeat(64),expires_at_ms:Date.now()+120000}});
         if(url==='https://api.github.com/repos/o-psi/helm.vessel.voyage/releases/latest')return route.fulfill({json:stableRelease});
         if(url==='https://api.github.com/repos/o-psi/helm.vessel.voyage/releases?per_page=100')return route.fulfill({json:nightlyReleases});
@@ -152,7 +153,13 @@ try {
     }
     await page.getByRole('button',{name:'Vessel connections',exact:true}).click();
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
-    const vesselCard=page.locator('.connections-card');
+    const vesselCard=page.locator('.connections-card').filter({has:page.getByRole('button',{name:'View details for Fixture Vessel',exact:true})});
+    if(process.env.LAYOUT_MULTIVESSEL==='1'){
+        const listGeometry=await page.locator('.connections-dialog').evaluate(dialog=>{const owner=dialog.getBoundingClientRect();return [...dialog.querySelectorAll('.connections-body,.connections-card h3')].map(el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width,client:el.clientWidth,scroll:el.scrollWidth,ownerLeft:owner.left,ownerRight:owner.right};});});
+        check(listGeometry.every(r=>r.width>0&&r.left>=r.ownerLeft&&r.right<=r.ownerRight&&r.scroll<=r.client+1),`${label}: multiple Vessel list identity overflows ${JSON.stringify(listGeometry)}`);
+        const retention=page.getByRole('button',{name:'Choose which Vessels stay if your plan limit falls',exact:true});const bounds=await retention.boundingBox();
+        check(bounds.x>=0&&bounds.x+bounds.width<=viewport.width,`${label}: retention trigger exceeds viewport`);
+    }
     await vesselCard.getByText('Version 1.0.2').waitFor();
     await page.getByText('Stable: v1.0.2').waitFor();
     await page.getByText('Development: 1.0.3-nightly.20260928.1.1').waitFor();
