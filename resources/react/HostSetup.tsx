@@ -27,6 +27,7 @@ export function HostSetup({connection,tenant,onFirstTask}:{connection:any;tenant
             // Both are read-only probes. Do not start a voyage or incur inference here.
             const catalogue=await vesselRead(connection,'accounts',{workspace:workspace.trim(),transport:null});
             if(version!==epoch.current||connection.client!==client)return;
+            if(!Array.isArray(catalogue?.accounts)||!Array.isArray(catalogue?.connections))throw Error('Incomplete account catalogue');
             const ready=accountChoices(catalogue).some((account:any)=>account.ready);
             next['AI account']={phase:ready?'verified':'blocked',detail:ready?'An available account is registered on this computer. No model request was made.':'Connect an available account privately on this computer.'};
         } catch {
