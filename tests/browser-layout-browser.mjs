@@ -53,8 +53,8 @@ try {
         Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>window.fixtureClipboard.push(text)}});
         // Transport is synthetic. The App, DOM, CSS, browser layout,
         // controls and event handling are the unmodified production bundle.
-        const binding={incarnation:'i',browser_id:'fixture-browser',attachment_id:'fixture-attachment',capture_epoch:1,controller_epoch:1};
-        let mode='agent';
+        const binding={incarnation:'i',browser_id:'fixture-browser',attachment_id:'fixture-attachment',capture_epoch:1,controller_epoch:1,tab_id:'tab',document_epoch:1,viewport_epoch:1};
+        let mode='agent';let browserRunning=true;
         let goal={revision:0,goal:null};
         let updateRecord={phase:'idle'};
         class Socket extends EventTarget {
@@ -87,8 +87,11 @@ try {
                 }
                 else if(c.op==='decisions')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:[]};
                 else if(c.op==='host_browser'){
+                    if(c.operation.action==='start')browserRunning=true;
+                    if(c.operation.action==='attach')binding.attachment_id=c.operation.binding.attachment_id;
                     if(c.operation.action==='control'){mode=c.operation.mode;binding.controller_epoch++;}
-                    result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{status:{available:!window.fixtureUnavailable,running:!window.fixtureUnavailable,mode:window.fixtureUnavailable?null:mode,binding:window.fixtureUnavailable?null:{...binding},controller:mode==='private'?binding.attachment_id:null,input_sequence:0,page:{url:'https://fixture.invalid/',title:'Synthetic fixture'},tabs:[]},value:null}};
+                    if(c.operation.action==='close'){browserRunning=false;mode='agent';}
+                    result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{status:{available:!window.fixtureUnavailable,running:browserRunning&&!window.fixtureUnavailable,mode:window.fixtureUnavailable?null:mode,binding:window.fixtureUnavailable||!browserRunning?null:{...binding},controller:['private','human'].includes(mode)?binding.attachment_id:null,input_sequence:0,page:{url:'https://fixture.invalid/',title:'Synthetic fixture'},tabs:[]},value:null}};
                 } else throw Error(`Unexpected fixture operation ${c.op}`);
                 emit({type:'reply',request_id:f.request_id,response:{protocol:1,outcome_unknown:false,result}});
             }
@@ -480,6 +483,19 @@ try {
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     check(await page.getByRole('button',{name:'Files',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Escape after dock switch restored the wrong trigger`);
+    // Explicit user close, not malformed initial stopped attach, exercises lifecycle.
+    await page.getByRole('button',{name:'Browser',exact:true}).click();
+    const viewer=page.locator('.host-browser-viewer');
+    await viewer.getByLabel('More browser options').click();
+    await viewer.getByRole('button',{name:'Use browser',exact:true}).click();
+    await viewer.getByRole('button',{name:'Continue agent',exact:true}).waitFor({state:'visible'});
+    await viewer.getByLabel('More browser options').click();
+    await viewer.getByRole('button',{name:'Close browser',exact:true}).click();
+    await viewer.getByText('Browser stopped',{exact:true}).waitFor();
+    check(await viewer.getByText('This browser is stopped. Start a browser before browsing or entering text.',{exact:true}).isVisible(),`${label}: stopped guidance missing`);
+    check(await viewer.getByRole('button',{name:'Browse privately',exact:true}).isDisabled(),`${label}: stopped privacy remained enabled`);
+    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='host_browser'&&c.operation.action==='close').length===1),`${label}: user close was not exactly once`);
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-valid-stopped.png`});
     report.viewports.push({runOutcome,label,viewport,before,opened,privateState,closed,commands,errors,draftControlGeometry,existingControlGeometry});
     await context.close();
  }
