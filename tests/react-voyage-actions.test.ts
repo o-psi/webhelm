@@ -12,14 +12,14 @@ test('sidebar context surface is read-only, reports fresh disabled reasons and r
     const {VoyageActions}=await import('../resources/react/VoyageActions.tsx');
     const root=createRoot(dom.window.document.getElementById('app')!);
     const session='11111111-1111-4111-8111-111111111111',incarnation='22222222-2222-4222-8222-222222222222';
-    const commands:any[]=[];let runState='idle';
+    const commands:any[]=[];let runState='idle',isArchived=false;
     const connection:any={id:'fixture',name:'Fixture Vessel',journal:{entries:()=>[]},client:{async exchange(request:any){
         const command=request.command;commands.push(command);
         let result:any;
         if(command.op==='capabilities')result={scope:'owner'};
-        else if(command.op==='inspect'){assert.equal(command.session_id,session);result={session_id:session,incarnation,state:'live'};}
-        else if(command.op==='snapshot')result={session_id:session,incarnation,result:{session_id:session,revision:7,name:'Original name',access:'unrestricted',run:{state:runState,run_id:'33333333-3333-4333-8333-333333333333'}}};
-        else if(command.op==='history')result={session_id:session,incarnation,result:{revision:7,message_offset:0,messages:[{role:'user',message_index:0,content:'Fixture branch point'}],has_more:false,next_offset:1}};
+        else if(command.op==='inspect'){assert.equal(command.session_id,session);result={session_id:session,incarnation,state:'live',archive:isArchived};}
+        else if(command.op==='snapshot')result={session_id:session,incarnation,result:{session_id:session,revision:7,lifecycle:{archived:isArchived},name:'Original name',access:'unrestricted',run:{state:runState,run_id:'33333333-3333-4333-8333-333333333333'}}};
+        else if(command.op==='history'){assert.equal(command.session_id,session);assert.equal(command.incarnation,incarnation);assert.equal(command.expected_revision,7);assert.equal(command.offset,0);assert.equal(command.limit,128);result={session_id:session,incarnation,result:{revision:7,message_offset:0,messages:[{role:'user',message_index:0,content:'Fixture branch point'}],has_more:false,next_offset:1}};}
         else throw Error(`Opening must not mutate: ${command.op}`);
         return {protocol:1,outcome_unknown:false,result};
     }}};
@@ -51,8 +51,9 @@ test('sidebar context surface is read-only, reports fresh disabled reasons and r
         assert.ok(commands.every(command=>['capabilities','inspect','snapshot'].includes(command.op)));
         await dismiss();
         // Every original action can be reviewed without submitting any effect.
-        for(const [label,title,word] of [['Archive / restore','Archive or restore',''],['Branch','Branch',''],['Clear conversation','Clear','CLEAR'],['Compact context','Compact','COMPACT'],['Delete','Delete','DELETE'],['Stop run','Cancel run','']]){
-            runState=label==='Stop run'?'running':'idle';
+        for(const [label,title,word] of [['Archive','Archive or restore',''],['Restore','Archive or restore',''],['Branch','Branch',''],['Clear conversation','Clear','CLEAR'],['Compact context','Compact','COMPACT'],['Delete','Delete','DELETE'],['Stop run','Cancel run','']]){
+            runState=label==='Stop run'?'running':'idle';isArchived=label==='Restore';
+            await act(async()=>root.render(React.createElement('div',{id:'row'},React.createElement('button',{id:'card'},'Original name'),React.createElement(VoyageActions,{connection,voyage:{session_id:session,name:'Original name',archive:isArchived},onChanged:()=>{throw Error('No mutation expected');}}))));
             await open();await choose(label);
             assert.equal(dom.window.document.querySelector('#sidebar-action-title')!.textContent,title);
             assert.match(dom.window.document.querySelector('#sidebar-action-target')!.textContent!,new RegExp(session));
@@ -63,6 +64,7 @@ test('sidebar context surface is read-only, reports fresh disabled reasons and r
                 assert.match(dom.window.document.querySelector('#sidebar-confirm-label')!.textContent!,new RegExp(word));
             }
             if(label==='Compact context')assert.match(dom.window.document.querySelector('#sidebar-action-status')!.textContent!,/preserving canonical/);
+            if(label==='Archive'||label==='Restore')assert.equal(dom.window.document.querySelector('#sidebar-submit')!.textContent,isArchived?'Restore voyage':'Archive voyage');
             if(label==='Branch')assert.equal(dom.window.document.querySelector<HTMLSelectElement>('#sidebar-branch')!.options[1].value,'0');
             await dismiss();
         }
