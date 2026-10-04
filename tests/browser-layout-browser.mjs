@@ -579,6 +579,10 @@ try {
     await page.evaluate(()=>{window.fixtureDiscoveryErrors=false;});
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','operator_tool','submit','steer'].includes(c.op)).length)===readOnlyBefore,`${label}: read-only loading/error audit executed effects`);
     await conversation.getByRole('button',{name:/^Account:/}).click();
+    await settings.getByRole('button',{name:/^Profile/}).click();
+    await settings.getByRole('button',{name:'Actions for Fixture profile',exact:true}).waitFor();
+    await settings.getByRole('button',{name:'Actions for Fixture profile',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Edit',exact:true}).click();
     await settings.getByRole('button',{name:/Provider account/}).click();
     await settings.getByRole('button',{name:'Add subscription account',exact:true}).click();
     await settings.locator('#enrollment-panel:not([hidden])').waitFor();
