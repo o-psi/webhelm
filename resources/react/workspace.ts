@@ -24,6 +24,7 @@ export class Workspace {
     private legacyEvents = new Set<string>();
     private listeners = new Set<() => void>();
     private closed = false;
+    private messagePayloads=new Map<string,string>();
     private queued = new Set<string>();
     private epochs = new Map<string, number>();
     private autoReceiptReads = new Map<string, number>();
@@ -66,6 +67,14 @@ export class Workspace {
         for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
         return {id:uuid(),name,size:blob.size,url:URL.createObjectURL(blob),base64:btoa(binary),uploadId:uuid(),file:new File([blob],name,{type:blob.type})};
     }
+    private messageFingerprint(tab:Tab){return JSON.stringify([tab.draft,tab.pictures.map(p=>[p.name,p.base64])]);}
+    private duplicateMessage(tab:Tab){
+        const payload=this.messageFingerprint(tab);
+        return this.pending(tab).filter((entry:any)=>['submit','submit_content','steer'].includes(entry.op)).some((entry:any)=>{
+            const known=this.messagePayloads.get(JSON.stringify([tab.key,tab.incarnation,entry.command_id]));
+            return known===undefined||known===payload;
+        });
+    }
     pending(tab: Tab) { return this.connections().get(tab.vessel)?.journal?.entries().filter((entry: any) => entry.session_id === tab.session) || []; }
     actionable(tab: Tab, op = '') {
         try {
@@ -75,7 +84,7 @@ export class Workspace {
             // command ID stays in the journal and is never dispatched again.
             const message=['submit','submit_content','steer'].includes(op);
             const blocked=pending.some((entry:any)=>!message||!['submit','submit_content','steer'].includes(entry.op));
-            return Boolean(this.connections().get(tab.vessel)?.client && tab.snapshot && !tab.stale && !tab.busy && Date.now() - tab.freshAt < 35000 && !blocked);
+            return Boolean(this.connections().get(tab.vessel)?.client && tab.snapshot && !tab.stale && !tab.busy && Date.now() - tab.freshAt < 35000 && !blocked && (!message||!this.duplicateMessage(tab)));
         }
         catch { return false; }
     }
@@ -187,6 +196,7 @@ export class Workspace {
         const connection = this.connections().get(tab.vessel)!;
         const client = connection.client;
         const draft = tab.draft;
+        const messageFingerprint=this.messageFingerprint(tab);
         if (['submit', 'steer'].includes(op)) {
             if ((!draft.trim() && !tab.pictures.length) || new TextEncoder().encode(draft).length > 65536) { tab.notice = 'Message must contain 1–65536 UTF-8 bytes.'; this.changed(); return; }
             fields = {prompt: draft};

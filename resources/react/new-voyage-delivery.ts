@@ -1,9 +1,11 @@
+import {reviewGoal} from './goals';
+import type {ComposerGoalIntent} from './composer-command';
 import type {Workspace} from './workspace';
 import type {NewVoyageMessage} from './NewVoyage';
 
 // The draft crosses the creation boundary only after an exact start receipt.
 // Every later effect stops when its own observed state is unavailable.
-export async function completeNewVoyage(workspace:Workspace,key:string,message:NewVoyageMessage){
+export async function completeNewVoyage(workspace:Workspace,key:string,message:NewVoyageMessage & {goalIntent?:ComposerGoalIntent}){
     await workspace.restoreDraft(key);
     workspace.draft(key,message.text);
     await workspace.refresh(key);
@@ -12,6 +14,14 @@ export async function completeNewVoyage(workspace:Workspace,key:string,message:N
     if(message.pictures.length&&!await workspace.attach(key,message.pictures)){
         tab.notice='Some pictures could not be prepared. Review the retained draft before sending.';
         workspace.changed();return;
+    }
+    if(message.goalIntent){
+        // Recovery transfers intent only. Never replay either creation or metadata.
+        if(!message.send||!message.applyAccess)return;
+        const review=reviewGoal(tab.snapshot,tab.incarnation);
+        if(review.state.goal)throw Error('Review the existing goal before applying this retained intent.');
+        await workspace.goalUpdate(key,review,{action:'set',...message.goalIntent});
+        return;
     }
     if(!message.applyAccess)return;
     if(!workspace.actionable(tab)||!workspace.permitted(tab,'set_access')){
