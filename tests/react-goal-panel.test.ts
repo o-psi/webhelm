@@ -30,11 +30,11 @@ test('Goal dialog requires replacement consent, retains a stale draft, escapes t
         const input=dom.window.document.querySelector('textarea')!;
         await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'New private objective');input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
         const checkboxes=[...dom.window.document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
-        assert.equal(checkboxes.length,2);assert.ok(checkboxes.every(node=>!node.checked));
-        assert.equal(button('Save paused goal').disabled,true);
-        await act(async()=>checkboxes[0].click());assert.equal(button('Save paused goal').disabled,false);
+        assert.equal(checkboxes.length,1);assert.ok(checkboxes.every(node=>!node.checked));
+        assert.equal(button('Start goal').disabled,true);
+        await act(async()=>checkboxes[0].click());assert.equal(button('Start goal').disabled,false);
         tab.snapshot.goal.revision++;
-        await click('Save paused goal');
+        await click('Start goal');
         assert.match(dom.window.document.querySelector('[role="alert"]')!.textContent!,/changed since review/);
         assert.equal(input.value,'New private objective');assert.equal(actions.length,0);
         await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
@@ -44,8 +44,8 @@ test('Goal dialog requires replacement consent, retains a stale draft, escapes t
         const fresh=dom.window.document.querySelector('textarea')!;
         await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(fresh,'Fresh objective');fresh.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
         await act(async()=>dom.window.document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
-        await click('Save paused goal');
-        assert.deepEqual(actions,[{action:'set',objective:'Fresh objective',limits:defaultGoalLimits,replace_goal_id:'goal-a',continue_automatically:false}]);
+        await click('Start goal');
+        assert.deepEqual(actions,[{action:'set',objective:'Fresh objective',limits:defaultGoalLimits,replace_goal_id:'goal-a',continue_automatically:true}]);
         tab.scope='scoped';await render();await click('Goal · Paused');
         for(const text of ['Resume within these limits','Replace goal','Clear goal','Edit objective or limits'])assert.equal(button(text).disabled,true);
         assert.match(dom.window.document.querySelector('[role="dialog"]')!.textContent!,/owner access/);

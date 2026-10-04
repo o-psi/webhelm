@@ -552,3 +552,15 @@ The bounded browser qualification coordinator's additional idle/media operations
 and exact proof fields are documented in
 [fixed qualification proofs](docs/browser-qualification-fixed-proofs.md).
 Their source contracts are separate from actual native qualification.
+
+## Persistent Goal controls
+
+The Goal panel starts an active objective without a separate continuation checkbox
+or Resume action. Optional quotas default to zero (unset), not hidden finite
+allowances. Editing retains accumulated usage and active intent; explicit pauses
+stay paused. Replacement/clear still require confirmation and exact receipts.
+Incomplete token telemetry is a lower bound: a configured token quota may require
+reconciliation or an explicit quota change, but an unbudgeted Goal does not require
+replacement. Voyage owns scheduling and execution authority; the panel cannot
+expand policy, roots or credentials. Release qualification of the full v1.1.0
+runtime/client journeys remains tracked in issue #378.

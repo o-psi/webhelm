@@ -45,9 +45,9 @@ test('Goal validation bounds UTF-8, finite limits and exhausted or unknown usage
     assert.equal(validGoalObjective('é'.repeat(4096)),true);assert.equal(validGoalObjective('é'.repeat(4097)),false);
     for(const text of ['', '   ', 'secret\u001b[31m', 'hidden\u0085'])assert.equal(validGoalObjective(text),false);
     assert.equal(goalText('<img>\u202e\u001b'),'<img>');
-    for(const [field,value] of [['runs',Infinity],['tokens',0],['elapsed_ms',999],['no_progress_runs',11],['runs',1.5]])assert.equal(validGoalLimits({...defaultGoalLimits,[field]:value}),false);
+    for(const [field,value] of [['runs',Infinity],['tokens',10000001],['elapsed_ms',999],['no_progress_runs',11],['runs',1.5]])assert.equal(validGoalLimits({...defaultGoalLimits,[field]:value}),false);
     for(const change of [{unmeasured_runs:1},{runs:20},{input_tokens:200000},{elapsed_ms:3600000},{no_progress_runs:3}]){
-        const current=goal();Object.assign(current.usage,change);
+        const current=goal();current.limits={runs:20,tokens:200000,elapsed_ms:3600000,no_progress_runs:3};Object.assign(current.usage,change);
         assert.throws(()=>validateGoalAction({revision:2,goal:current},{action:'resume',goal_id:current.id}),/cannot resume/);
     }
     const state=snapshot().goal;
@@ -117,4 +117,9 @@ test('Goal metadata only invalidates the view; canonical reads provide objective
         assert.equal(f.commands.filter(c=>c.op==='snapshot').length,reads);
         assert.equal(f.commands.some(c=>c.op==='goal_update'),false);
     }finally{f.workspace.close();}
+});
+
+test('new Goals use optional quotas without hidden defaults',()=>{
+    assert.deepEqual(defaultGoalLimits,{runs:0,tokens:0,elapsed_ms:0,no_progress_runs:0});
+    assert.equal(validGoalLimits(defaultGoalLimits),true);
 });
