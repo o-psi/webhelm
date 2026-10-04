@@ -118,3 +118,16 @@ test('Goal metadata only invalidates the view; canonical reads provide objective
         assert.equal(f.commands.some(c=>c.op==='goal_update'),false);
     }finally{f.workspace.close();}
 });
+
+test('paused composer goal uncertainty preserves draft and refuses a second metadata dispatch',async()=>{
+    const f=await fixture();try{
+        f.workspace.draft(f.key,'/goal Private retained objective');f.mode('lost');
+        const review=reviewGoal(f.tab.snapshot,f.tab.incarnation);
+        const action:GoalAction={action:'set',objective:'Private retained objective',limits:{...defaultGoalLimits},replace_goal_id:'goal-a',continue_automatically:false};
+        await f.workspace.goalUpdate(f.key,review,action);
+        assert.equal(f.tab.draft,'/goal Private retained objective');
+        await assert.rejects(()=>f.workspace.goalUpdate(f.key,review,action),/resolved receipts/);
+        assert.equal(f.commands.filter(c=>c.op==='goal_update').length,1);
+        assert.doesNotMatch([...f.storage.data.values()].join(''),/Private retained objective/);
+    }finally{f.workspace.close();}
+});

@@ -42,3 +42,31 @@ test('uncertain payload guards compare exact prepared content and refuse cold jo
     assert.equal(workspace.actionable(tab,'submit'),true,'fresh distinct prepared picture permitted');
     tab.incarnation='different';assert.equal(workspace.actionable(tab,'submit'),false,'fingerprint never crosses incarnation');
 });
+
+test('actual creation receipt precedes fresh access-confirmed goal metadata and uncertain resolution never applies',async()=>{
+    const {Creation}=await import('../resources/react/settings');
+    const data=new Map<string,string>();
+    const storage:any={get length(){return data.size;},key:(i:number)=>[...data.keys()][i]||null,getItem:(k:string)=>data.get(k)||null,setItem:(k:string,v:string)=>data.set(k,v),removeItem:(k:string)=>data.delete(k)};
+    const commands:any[]=[];let uncertain=false;
+    const connection:any={id:'v',vessel_id:'vessel',voyages:[],client:{exchange:async({command}:any)=>{
+        commands.push(command);
+        if(command.op==='start_account'&&uncertain)return {protocol:1,outcome_unknown:true};
+        const process={session_id:command.session_id,workspace:'/work',incarnation:'i'};
+        return {protocol:1,outcome_unknown:false,result:command.op==='resolve_start_account'?{command_id:command.command_id,session_id:command.session_id,status:'created',process}:process};
+    }}};
+    const creation=new Creation(storage,'tenant');
+    const process=await creation.start(connection,'/work',{account:{account_id:'a'}});
+    const {workspace,calls}=fixture();workspace.tabs.get('k').snapshot.session_id=process.session_id;
+    workspace.tabs.get('k').snapshot.access='read-only';
+    workspace.act=async(_key:string,op:string)=>{calls.push(op);workspace.tabs.get('k').snapshot.access='approval';return true;};
+    const message:any={text:'/goal Build',pictures:[],access:'approval',send:true,applyAccess:true,goalIntent:{objective:'Build',limits:defaultGoalLimits,replace_goal_id:null,continue_automatically:false}};
+    await completeNewVoyage(workspace,'k',message);
+    assert.deepEqual(calls,['read','set_access','read','goal']);assert.equal(creation.pending().length,0);
+    uncertain=true;await assert.rejects(()=>creation.start(connection,'/work',{}),/confirm/);
+    const retained=creation.pending()[0];
+    await assert.rejects(()=>creation.start(connection,'/work',{}),/unconfirmed/);
+    await creation.reconcile(connection,retained);
+    calls.length=0;await completeNewVoyage(workspace,'k',{...message,send:false,applyAccess:false});
+    assert.deepEqual(calls,['read']);assert.equal(commands.filter(c=>c.op==='start_account').length,2);
+    assert.equal(message.goalIntent.objective,'Build');
+});
