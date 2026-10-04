@@ -29,3 +29,14 @@ test('quiet working rule extraction is independent of intervening CSS comments',
  assert.doesNotMatch(extracted,/unrelated explanation/);
  assert.doesNotMatch(quietWorkingRules('.unrelated{opacity:0}\n'+rules.join('\n')),/opacity/);
 });
+
+test('original row interaction and reduced-motion contracts remain explicit',()=>{
+ assert.match(css,/\.voyage-card:hover\{background:var\(--muted\)/);
+ assert.match(css,/\.voyage-card\[aria-current=true\]::before\{content:""/);
+ assert.match(css,/@media\(prefers-reduced-motion:reduce\)\{\.voyage-card,\.voyage-card::before,\.voyage-card \.card-status i\{animation:none!important;transition:none/);
+ assert.match(app,/className="card-vessel" title=\{voyage\.connection\.name\}/);
+ assert.match(app,/className="card-title" title=\{voyage\.name\|\|voyage\.session_id\}/);
+ assert.match(app,/className="card-status status-label" title=\{\[status\.label,status\.detail\]/);
+ assert.match(app,/onContextMenu=/);
+ assert.match(app,/event\.key==='ContextMenu'\|\|event\.shiftKey&&event\.key==='F10'/);
+});

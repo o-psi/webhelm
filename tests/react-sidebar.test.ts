@@ -52,3 +52,18 @@ test('quiet working presentation preserves attention and unavailable status boun
  assert.equal(cardStatus({...item,state:'cleanup_unconfirmed'},true).tone,'warning');
  assert.equal(voyageGroup({...item,state:'cleanup_unconfirmed'}),'attention');
 });
+
+test('row status preserves original selected/status/offline motion boundaries',()=>{
+ const running=voyage('running','running');
+ assert.equal(cardStatus(running,true).animated,true);
+ assert.deepEqual(cardStatus(running,false),{label:'Offline',tone:'muted',animated:false});
+ assert.deepEqual(cardStatus({...running,catalogue:{...running.catalogue,stale:true}},true),{label:'Cached',tone:'muted',animated:false});
+ for(const state of ['awaiting_decision','waiting','blocked','cancel_requested']){
+  const status=cardStatus(voyage(state,state),true);
+  assert.equal(status.tone,'warning');
+  assert.equal(status.animated,false);
+ }
+ assert.deepEqual(cardStatus(voyage('failed','failed'),true),{label:'Failed',tone:'error',animated:false});
+ assert.deepEqual(cardStatus(voyage('done','completed'),true),{label:'Completed',tone:'success',animated:false});
+ assert.deepEqual(cardStatus({...running,state:'cleanup_unconfirmed'},true),{label:'Cleanup pending',tone:'warning',animated:false});
+});
