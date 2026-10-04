@@ -43,5 +43,5 @@ export function entityPresentation(scope) {
     const session = scope.entities.get('session:session');
     if (!session || session.session_id !== scope.fence.session_id || !Number.isSafeInteger(session.revision)) throw new Error('Missing canonical session entity');
     const messages = [...scope.entities.entries()].filter(([key])=>key.startsWith('message:')).map(([,value])=>value).sort((a,b)=>a.message_index-b.message_index);
-    return {...session,messages,goal:scope.entities.get('goal:goal'),lifecycle:scope.entities.get('lifecycle:lifecycle'),run:scope.entities.get('run:run')??null,retained_cleanup:scope.entities.get('resource:retained_cleanup'),cleanup:scope.entities.get('resource:cleanup'),session_resources:scope.entities.get('resource:session_resources'),execution_usage:scope.entities.get('usage:usage'),observation_cursor:scope.cursor};
+    return {...session,...(scope.entities.get('settings:settings')||{}),messages,goal:scope.entities.get('goal:goal'),lifecycle:scope.entities.get('lifecycle:lifecycle'),run:scope.entities.get('run:run')??null,retained_cleanup:scope.entities.get('resource:retained_cleanup'),cleanup:scope.entities.get('resource:cleanup'),session_resources:scope.entities.get('resource:session_resources'),execution_usage:scope.entities.get('usage:usage'),observation_cursor:scope.cursor};
 }

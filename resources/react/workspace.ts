@@ -1,7 +1,8 @@
 import {DraftSlot,type DraftRepository} from './drafts';
 import {assertGoalReview,validateGoalAction,goalReceipt,type GoalAction,type GoalReview} from './goals';
-import {uuid, request, voyageResult, mutation, resolved, receiptStatus} from '../js/vessel-client.js';
+import {uuid, request, voyageResult, mutation, resolved, receiptStatus, initializeEntities} from '../js/vessel-client.js';
 import {ConversationStream} from '../js/conversation-stream.js';
+import {entityPresentation} from '../js/event-initialization.js';
 import {preparePicture, MAX_PICTURE_BYTES, MAX_PICTURES} from './prepare-picture';
 import {inspectionRequest,inventorySupports,type InspectionScope} from './inspection-command';
 
@@ -116,8 +117,11 @@ export class Workspace {
         const epoch = this.epochs.get(key) || 0;
         const task = (async () => {
             try {
-                const envelope = voyageResult(await client.exchange(request('snapshot', {session_id: tab.session})), tab.session);
-                const snapshot = envelope.result;
+                const owner = connection.voyages.find((voyage:any)=>voyage.session_id===tab.session);
+                if (!owner?.incarnation) throw new Error('Canonical owner unavailable; refresh the Vessel connection.');
+                const scope = await initializeEntities(client,tab.session,owner.incarnation);
+                const envelope = {incarnation:scope.fence.incarnation};
+                const snapshot = entityPresentation(scope);
                 const capabilities = await client.exchange(request('capabilities'));
                 const caps = capabilities?.protocol===1 && capabilities.outcome_unknown===false && !capabilities.error ? capabilities.result : {scope:'unknown',rights:[]};
                 if (snapshot.session_id !== tab.session || !Number.isSafeInteger(snapshot.revision)) throw new Error('Invalid snapshot identity.');
