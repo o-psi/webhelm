@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import {JSDOM} from 'jsdom';
 import {disclosureOpen,saveDisclosure,maxDisclosures} from '../resources/react/activity-disclosures.ts';
-import {threadRows,ToolGroup,activitySummary} from '../resources/react/ToolGroup.tsx';
+import {threadRows,ToolGroup,activitySummary,toolRunActive} from '../resources/react/ToolGroup.tsx';
 const messages=Array.from({length:5},(_,i)=>[{role:'assistant',message_index:i*2,content:'',tool_calls:[{id:`call-${i}`,function:{name:'shell',arguments:`command-${i}`}}]},{role:'tool',message_index:i*2+1,tool_call_id:`call-${i}`,content:`result-${i}`}]).flat();
 test('tool calls and results become one group with no duplicate result messages',()=>{
  const rows=threadRows(messages);assert.equal(rows.length,1);assert.equal(rows[0].entries?.length,5);assert.equal(rows[0].entries?.[0].result.content,'result-0');
@@ -69,4 +69,27 @@ test('activity distinguishes action failures and unconfirmed results from the ru
  const html=renderToStaticMarkup(React.createElement(ToolGroup,{entries:[{key:'a',call:{name:'process'},result:{tool_outcome:{execution:'completed'},tool_success:true}},{key:'b',call:{name:'process'},result:{tool_outcome:{execution:'policy_refused'},tool_success:false}}],running:false,messageStart:0,decisions:false,renderMessage:()=>null}));
  assert.match(html,/<span>1 returned<\/span>/);assert.match(html,/<span class="text-destructive">1 unsuccessful action<\/span>/);
  assert.match(html,/flex-wrap/);assert.match(html,/max-w-\[45%\]/);assert.doesNotMatch(html,/flex-1 truncate/);
+ });
+
+ test('tool activity follows saved active lifecycle without claiming completed or idle work is pending',()=>{
+ const entry={key:'call',call:{name:'read_file'},request:{message_index:5}};
+ for(const state of ['accepted','running','awaiting_decision','cancel_requested','starting','cancelling']){
+  assert.equal(toolRunActive(state),true,state);
+  assert.equal(activitySummary([entry],toolRunActive(state),5,state==='awaiting_decision').outcomes,'1 pending',state);
+ }
+ for(const state of ['idle','failed','completed','cancelled','interrupted',undefined]){
+  assert.equal(toolRunActive(state),false,String(state));
+  assert.equal(activitySummary([entry],toolRunActive(state),5,true).outcomes,'1 unconfirmed',String(state));
+ }
+ });
+ test('approval pending reason survives disclosure while controls remain outside collapsed groups',async()=>{
+ const {renderToStaticMarkup}=await import('react-dom/server');
+ const {actionStatus}=await import('../resources/js/tool-presentation.js');
+ const entry={key:'approval',call:{name:'read_file'},request:{message_index:5}};
+ assert.equal(actionStatus(entry.call,undefined,toolRunActive('awaiting_decision'),true),'Awaiting approval');
+ const html=renderToStaticMarkup(React.createElement(ToolGroup,{entries:[entry],running:toolRunActive('awaiting_decision'),messageStart:5,decisions:true,renderMessage:()=>null}));
+ assert.match(html,/1 pending/);assert.match(html,/aria-expanded="false"/);assert.doesNotMatch(html,/data-tool-id/);
+ const {readFileSync}=await import('node:fs');const app=readFileSync(new URL('../resources/react/App.tsx',import.meta.url),'utf8');
+ assert.match(app,/running=\{toolRunActive\(run\?\.state\)\}/);
+ assert.ok(app.indexOf('<Decision')>app.indexOf('<ToolGroup'),'decision controls remain outside tool renderer');
  });

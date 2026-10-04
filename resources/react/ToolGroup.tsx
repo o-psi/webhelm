@@ -6,6 +6,10 @@ import {ChevronRightIcon} from 'lucide-react';
 import {actionDescription,actionDuration,actionStatus} from '../js/tool-presentation.js';
 // Disclosure rows read as transcript text, not centered buttons; utilities override Button geometry.
 export const toolTrigger='tool-trigger h-auto min-h-6 w-full items-start justify-start gap-1.5 whitespace-normal rounded-md px-1 py-0.5 text-left text-xs font-normal text-inherit';
+// Saved run lifecycle states, plus legacy presentation aliases; not actionability authority.
+export function toolRunActive(state:unknown):boolean {
+    return typeof state==='string'&&['accepted','running','awaiting_decision','cancel_requested','starting','cancelling'].includes(state);
+}
 export type ToolEntry={key:string;call?:any;request?:any;result?:any};
 export type ThreadRow={key:string;message?:any;entries?:ToolEntry[]};
 export function threadRows(messages:any[]):ThreadRow[]{
