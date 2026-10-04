@@ -496,7 +496,6 @@ try {
     await settings.getByText('Loading usage…',{exact:true}).waitFor();
     check(await settings.getByRole('button',{name:'Back',exact:true}).isEnabled(),`${label}: usage read blocks Back`);
     check(await settings.getByRole('button',{name:'Close settings',exact:true}).isEnabled(),`${label}: usage read blocks Close`);
-    await settings.getByRole('button',{name:'Back',exact:true}).click();
     await settings.getByRole('button',{name:'Close settings',exact:true}).click();
     await page.evaluate(()=>window.releaseFixtureUsage());
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','submit','steer'].includes(c.op)).length)===settingsWritesBefore,`${label}: dismissing usage read applied settings`);
