@@ -348,3 +348,8 @@
 .connections-maintenance button{max-width:100%;white-space:normal;overflow-wrap:anywhere;height:auto;min-height:36px}
 .connections-maintenance [data-slot="select-combobox-wrapper"]{min-width:0;max-width:100%}
 .connections-details dt,.connections-details dd{min-width:0;overflow-wrap:anywhere}
+
+/* Long profile creation labels wrap inside the footer, never push its start edge. */
+.profile-setup .setup-footer-actions{min-width:0;flex-wrap:wrap}
+.profile-setup .setup-footer-actions>button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;height:auto;min-height:36px}
+@media(max-width:390px){.profile-setup .setup-footer-actions>button{flex:1 1 100%}}
