@@ -144,6 +144,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     const [goalObjective,setGoalObjective]=useState<string|null>(null),[goalStatus,setGoalStatus]=useState(false);
     async function create(send:boolean,goalIntent?:ComposerGoalIntent){
         const command=parseComposerCommand(text);
+        if(send&&command.kind!=='message'&&pictures.length){setNotice('Goal commands cannot include pictures. Remove the pictures or send them as a separate message.');return;}
         if(send&&!goalIntent&&command.kind!=='message'){if(command.kind==='goal-status'){setGoalStatus(true);return;}goalIntent={objective:command.objective,limits:{...defaultGoalLimits},continue_automatically:false,replace_goal_id:null};}
         if(!canCreate||send&&(!canSend||!hasMessage))return;
         if(send&&new TextEncoder().encode(text).length>65536){setNotice('Message must be 65536 UTF-8 bytes or fewer.');return;}

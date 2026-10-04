@@ -313,3 +313,17 @@ test('new adapter uses collapsed shared surface and literal goal status has no c
   assert.equal(view.commands.some(c=>c.op==='start_account'),false);
  }finally{await view.dispose();}
 });
+
+
+test('goal draft with pictures refuses before creation and retains content',async()=>{
+ const view=await mount();try{
+  const input=document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!;
+  await act(async()=>{Object.getOwnPropertyDescriptor(view.dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'/goal retain pictures');input.dispatchEvent(new view.dom.window.Event('input',{bubbles:true}));});
+  const fileInput=document.querySelector<HTMLInputElement>('input[type=file]')!;
+  Object.defineProperty(fileInput,'files',{configurable:true,value:[new view.dom.window.File(['invalid'],'picture.png',{type:'image/png'})]});
+  // Invalid preparation cannot authorize creation; the literal command remains.
+  await act(async()=>fileInput.dispatchEvent(new view.dom.window.Event('change',{bubbles:true})));
+  assert.equal(view.commands.some(c=>c.op==='start_account'),false);
+  assert.equal(input.value,'/goal retain pictures');
+ }finally{await view.dispose();}
+});
