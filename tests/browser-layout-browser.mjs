@@ -34,7 +34,7 @@ const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH 
 const report = {capturedAt:new Date().toISOString(),chromium:browser.version(),entry:entry.file,sha256:createHash('sha256').update(await readFile(`${build}/${entry.file}`)).digest('hex'),synthetic:true,viewports:[],failures:[]};
 const check = (value, message) => {if(!value)report.failures.push(message);};
 try {
- for(const viewport of (process.env.LAYOUT_VIEWPORT==='mobile'?[{width:390,height:844}]:[{width:1280,height:900},{width:858,height:882},{width:390,height:844},{width:390,height:568},{width:320,height:568}])) {
+ for(const runOutcome of ['failed','completed']) for(const viewport of (process.env.LAYOUT_VIEWPORT==='mobile'?[{width:390,height:844}]:[{width:1280,height:900},{width:858,height:882},{width:390,height:844},{width:390,height:568},{width:320,height:568}])) {
     const label = viewport.width>600?'desktop':'mobile';
     const context = await browser.newContext({viewport,reducedMotion:'reduce'});
     const page = await context.newPage();
@@ -46,7 +46,8 @@ try {
         if(url==='https://api.github.com/repos/o-psi/helm.vessel.voyage/releases?per_page=100')return route.fulfill({json:nightlyReleases});
         return url.startsWith(origin+'/')?route.continue():route.abort();
     });
-    await page.addInitScript(()=>{
+    await page.addInitScript(({runOutcome})=>{
+        window.fixtureRunOutcome=runOutcome;
         window.fixtureCommands=[];
         window.fixtureClipboard=[];
         Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>window.fixtureClipboard.push(text)}});
@@ -73,7 +74,7 @@ try {
                 else if(c.op==='inspect')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',state:'live',workspace:'/work'};
                 else if(c.op==='history')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{revision:1+goal.revision,message_offset:c.offset,next_offset:40,has_more:false,messages:Array.from({length:40-c.offset},(_,n)=>{const i=n+c.offset;return {role:i%5===0?'user':'assistant',message_index:i,content:i%5===0?`Fixture request ${i/5+1}`:`Fixture observation ${i+1}`};})}};
                 else if(c.op==='catalogue')result=[{session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',name:'Browser layout fixture',state:'live',catalogue:{summary:{run_state:'idle'}}},...Array.from({length:18},(_,i)=>({session_id:`33333333-3333-4333-8333-${String(i).padStart(12,'0')}`,incarnation:'i',name:`${i<12?'Background working':i<16?'Completed':'Awaiting decision'} fixture ${i}`,state:'live',catalogue:{summary:{run_state:i<12?'running':i<16?'completed':'awaiting_decision'}}}))];
-                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1+goal.revision,observation_cursor:5+goal.revision,goal,context_status:'Last prepared input: unknown tokens · window: unknown · reserve: unknown · projection 2',context_observation:{projection_generation:2,count:{input_tokens:null}},messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:'idle',tool_previews:[{name:'host_browser'}]}}};
+                else if(c.op==='snapshot')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{session_id:'22222222-2222-4222-8222-222222222222',name:'Browser layout fixture',workspace:'/work',revision:1+goal.revision,observation_cursor:5+goal.revision,goal,context_status:'Last prepared input: unknown tokens · window: unknown · reserve: unknown · projection 2',context_observation:{projection_generation:2,count:{input_tokens:null}},messages:[...Array.from({length:40},(_,i)=>({role:i%5===0?'user':'assistant',content:i%5===0?`Fixture request ${i/5+1}`:`### Fixture observation ${i+1}\nSynthetic conversation content for scroll and composer layout verification. No personal browsing data.`,message_index:i})),{role:'assistant',message_index:40,content:'',tool_calls:[{id:'fixture-pending',function:{name:'process',arguments:JSON.stringify({command:'A long synthetic process description for bounded summary readability '.repeat(8)})}},{id:'fixture-failed',function:{name:'read_file',arguments:JSON.stringify({path:'/work/long-synthetic-filename.ts'})}},{id:'fixture-edit',function:{name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Update File: src/fixture.ts\n+fixture\n*** End Patch'})}}]},{role:'tool',message_index:41,tool_call_id:'fixture-edit',tool_success:true,content:'Applied'},{role:'tool',message_index:42,tool_call_id:'fixture-failed',tool_success:false,content:'Synthetic unsuccessful result'}],inference:{account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'},model:'fixture-model',reasoning_effort:'medium',service_tier:null},run:{state:window.fixtureRunOutcome,tool_previews:[{name:'host_browser'}]}}};
                 else if(c.op==='workspace_file')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{path:c.path,text:'# Current file preview\n',truncated:false,observed_at_ms:Date.now(),observed_bytes:23,file_bytes:23,preview_sha256:'a'.repeat(64)}};
                 else if(c.op==='workspace_changes')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:{scope:c.scope,path:c.path||'.',text:c.scope==='status'?' M src/fixture.ts\0?? docs/new.md\0':'diff --git a/src/fixture.ts b/src/fixture.ts\n@@ -1 +1 @@\n-old\n+new\n',truncated:false,observed_at_ms:Date.now()}};
                 else if(c.op==='controls')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',result:c.section==='tools'?{section:'tools',execution:'idle',value:{inventory:[{name:'read_file',description:'Read a workspace file'}],source:'builtin_preflight'}}:c.section==='files'?{section:'files',execution:'idle',value:{files:['src/fixture.ts','docs/new.md'],truncated:false,excluded_directories:['.git','node_modules','target','vendor','.venv'],observed_at_ms:Date.now()}}:{section:'skills',execution:'idle',value:{skills:[{name:'review',description:'Review the workspace',path:'/work/.agents/skills/review/SKILL.md',scope:'/work'}],can_read:true,discovery_incomplete:false}}};
@@ -92,13 +93,13 @@ try {
             close(){this.readyState=3;this.dispatchEvent(new Event('close'));}
         }
         window.WebSocket=Socket;
-    });
+    },{runOutcome});
     await page.goto(origin);
     await page.getByRole('option',{name:/Fixture profile/}).waitFor({state:'attached'});
     check(await page.getByRole('form',{name:'New voyage composer'}).isVisible(),`${label}: new voyage composer is missing`);
     check(await page.getByRole('textbox',{name:'Message'}).isVisible(),`${label}: new voyage message is missing`);
     check(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),`${label}: empty draft permits sending`);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-empty.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-empty.png`});
     if(label==='desktop') await page.locator('.voyage-card').filter({hasText:'Browser layout fixture'}).click();
     if(label==='mobile'){
         await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
@@ -117,7 +118,7 @@ try {
         const selectTheme=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='var(--foreground)';document.body.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {expected,actual:getComputedStyle(document.querySelector('.sidebar [data-slot="select-combobox-trigger"]')).color};});
         const lightness=value=>Number(value.match(/\(([\d.]+)/)?.[1]);
         check(Math.abs(lightness(selectTheme.actual)-lightness(selectTheme.expected))<0.02,`mobile: native select foreground ${JSON.stringify(selectTheme)}`);
-        await page.screenshot({path:`${output}/${label}-${viewport.width}-dark-empty.png`});
+        await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-dark-empty.png`});
         await page.getByRole('button',{name:'Account and appearance'}).click();
         await page.getByRole('menuitem',{name:'Appearance settings',exact:true}).click();
         await page.getByRole('button',{name:'light',exact:true}).click();
@@ -135,7 +136,7 @@ try {
     check((await vesselCard.boundingBox()).height<100,`${label}: overview card is not compact`);
     check(await page.getByText('Needs confirmation').count()===0,`${label}: pending pairing panel is still shown`);
     await page.waitForTimeout(180);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-overview.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-vessel-overview.png`});
     await vesselCard.getByRole('button',{name:'View details for Fixture Vessel'}).click();
     await page.locator('.connections-maintenance #update-current').getByText('1.0.2').waitFor();
     check(await page.locator('.connections-maintenance').getByText('Newer release published').count()===0,`${label}: another channel falsely claims a newer release`);
@@ -144,7 +145,7 @@ try {
     check(await page.locator('.connections-dialog #update-check').isVisible(),`${label}: update action is not visible`);
     check(await page.locator('.connections-dialog').getByRole('button',{name:'Remove from Helm Web…'}).count()===0,`${label}: removal action is exposed before opening its disclosure`);
     check(await page.locator('.connections-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Vessel manager overflows horizontally`);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-maintenance.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-vessel-maintenance.png`});
     check(await page.locator('#update-check').isDisabled(),`${label}: current stable build can be installed again`);
     await page.getByRole('button',{name:'Release channel',exact:true}).click();await page.getByRole('option',{name:'Latest development build',exact:true}).click();
     await page.locator('#update-selected-version').filter({hasText:'Latest development version: 1.0.3-nightly.20260928.1.1'}).waitFor();
@@ -155,7 +156,7 @@ try {
     check(await page.evaluate(()=>window.fixtureCommands.find(c=>c.op==='update_apply')?.release_id==='a'.repeat(64)),`${label}: verified release identity was lost`);
     check(await page.locator('#update-review').isHidden(),`${label}: automatic install exposed a second approval step`);
     await page.locator('#update-status').scrollIntoViewIfNeeded();
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-updating.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-vessel-updating.png`});
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.getByRole('button',{name:'Account and appearance'}).click();
@@ -168,11 +169,11 @@ try {
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
     await page.locator('.connections-card').getByText('Version 1.0.2').waitFor();
     await page.waitForTimeout(180);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-overview-dark.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-vessel-overview-dark.png`});
     await page.locator('.connections-dialog').getByRole('button',{name:'View details for Fixture Vessel'}).click();
     await page.locator('#update-status').filter({hasText:/Installing|Checking the saved update/}).waitFor();
     await page.locator('#update-status').scrollIntoViewIfNeeded();
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-updating-dark.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-vessel-updating-dark.png`});
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='update_apply').length===1),`${label}: reopening repeated installation`);
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
@@ -190,7 +191,7 @@ try {
     check(!await goalDialog.getByRole('checkbox').isChecked(),`${label}: continuation consent was preselected`);
     check(await goalDialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Goal form overflows horizontally`);
     await goalDialog.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-goal-review.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-goal-review.png`});
     await goalDialog.getByRole('button',{name:'Save paused goal',exact:true}).click();
     await page.getByRole('button',{name:'Goal · Paused',exact:true}).waitFor();
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='goal_update').length===1),`${label}: Goal set was not exactly once`);
@@ -200,11 +201,11 @@ try {
     check(await goalView.getByText('Verify the synthetic output <script>plain text</script>',{exact:true}).isVisible(),`${label}: canonical Goal objective missing`);
     check(await goalView.locator('script').count()===0,`${label}: Goal objective executed as HTML`);
     await goalView.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-goal-state.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-goal-state.png`});
     await page.keyboard.press('Escape');
     check(await page.getByRole('button',{name:'Goal · Paused',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Goal close lost focus`);
 
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-before-model.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-before-model.png`});
     check(await conversation.getByRole('button',{name:'Previous user message'}).count()===1,`${label}: turn navigation is missing`);
     // The synthetic fixture has no prior scroll restoration. Move to the last
     // user turn before asserting previous-turn navigation.
@@ -222,10 +223,10 @@ try {
     await page.evaluate(link=>{window.location.hash=new URL(link).hash;},copiedLink);
     await page.waitForFunction(()=>document.activeElement?.getAttribute('data-message-index')==='35');
     check(await conversation.locator('.message.user').first().textContent().then(text=>text.includes('You')),`${label}: author hierarchy missing`);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-linked-turn-light.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-linked-turn-light.png`});
     await page.evaluate(()=>document.documentElement.classList.add('dark'));
     await conversation.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-linked-turn-dark.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-linked-turn-dark.png`});
     await page.evaluate(()=>document.documentElement.classList.remove('dark'));
     await page.evaluate(link=>{window.location.hash=new URL(link).hash.replace(/-r\d+$/,'-r999');},copiedLink);
     await conversation.getByRole('status').filter({hasText:'different conversation revision'}).waitFor();
@@ -248,11 +249,11 @@ try {
     }
     const lightModelTheme=await inspectModelTheme();
     check(lightModelTheme.background===lightModelTheme.expectedBackground&&lightModelTheme.color===lightModelTheme.expectedColor,`${label}: light model picker does not use theme colors`);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-model-picker-light.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-model-picker-light.png`});
     await page.evaluate(()=>document.documentElement.classList.add('dark'));
     const darkModelTheme=await inspectModelTheme();
     check(darkModelTheme.background===darkModelTheme.expectedBackground&&darkModelTheme.color===darkModelTheme.expectedColor&&darkModelTheme.background!==lightModelTheme.background,`${label}: model picker does not adapt to dark appearance`);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-model-picker-dark.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-model-picker-dark.png`});
     await page.evaluate(()=>document.documentElement.classList.remove('dark'));
     const populatedModelBounds=await modelDialog.boundingBox();
     await modelDialog.getByRole('textbox',{name:'Search models'}).fill('missing-model');
@@ -275,10 +276,10 @@ try {
     check(await discovery.getByRole('button',{name:'src/fixture.ts'}).isVisible(),`${label}: file catalogue is missing`);
     check(await discovery.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: discovery dialog overflows horizontally`);
     await discovery.evaluate(el=>Promise.allSettled(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-discovery-light.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-discovery-light.png`});
     await page.evaluate(()=>document.documentElement.classList.add('dark'));
     await page.waitForFunction(()=>{const dialog=document.querySelector('[role="dialog"][aria-labelledby]');if(!dialog)return false;const probe=document.createElement('span');probe.style.backgroundColor='var(--popover)';dialog.append(probe);const matches=getComputedStyle(probe).backgroundColor===getComputedStyle(dialog).backgroundColor;probe.remove();return matches;});
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-discovery-dark.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-discovery-dark.png`});
     await page.evaluate(()=>document.documentElement.classList.remove('dark'));
     await discovery.getByRole('textbox',{name:'Search actions, tools, skills, and files'}).fill('review');
     await discovery.getByRole('button',{name:/review/}).click();
@@ -344,7 +345,7 @@ try {
         await page.evaluate(theme=>document.documentElement.classList.toggle('dark',theme==='dark'),theme);
         const visibleGeometry=await page.evaluate(()=>[...document.querySelectorAll('.conversation:not([hidden]) .conversation-header,.conversation:not([hidden]) .tool-group-heading')].map(el=>{const r=el.getBoundingClientRect();return {width:r.width,left:r.left,right:r.right,text:el.textContent};}));
         check(visibleGeometry.every(r=>r.width>0&&r.left>=0&&r.right<=viewport.width),`${label}/${viewport.width}/${theme}: header or summary exceeds viewport`);
-        await page.screenshot({path:`${output}/${label}-${viewport.width}-${viewport.height}-${theme}-summary-header.png`});
+        await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${viewport.height}-${theme}-summary-header.png`});
     }
 
     const headerGeometry=await conversation.locator('.conversation-header').evaluate(el=>{
@@ -356,7 +357,7 @@ try {
     if(headerGeometry.status&&headerGeometry.changes){const a=headerGeometry.status,b=headerGeometry.changes;check(a.right<=b.left||a.bottom<=b.top||a.top>=b.bottom,`${label}/${viewport.width}: status overlaps Changes`);}
     check(before.documentWidth<=viewport.width,`${label}/${viewport.width}: document overflows horizontally`);
 
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-closed.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-closed.png`});
     await page.getByRole('button',{name:'Changes',exact:true}).click();
     check(await page.getByLabel('Recorded changes').isVisible(),`${label}: recorded changes dock did not open`);
     await page.getByLabel('Changed files').getByRole('button',{name:/src\/fixture\.ts/}).waitFor();
@@ -364,12 +365,12 @@ try {
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='operator_tool').length===0),`${label}: opening Changes started an operator run`);
     await page.getByText('Inspect workspace explicitly').click();
     check(await page.getByLabel('Executing-host inspection').isVisible(),`${label}: explicit inspection is missing`);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-workspace.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-workspace.png`});
     await page.getByRole('button',{name:'Recorded edits',exact:true}).click();
     check(await page.getByText('src/fixture.ts').first().isVisible(),`${label}: recorded patch path is missing`);
     await page.waitForTimeout(180);
     if(label==='mobile')check(await page.locator('.task-browser-panel').evaluate(el=>Math.abs(el.getBoundingClientRect().width-innerWidth)<1),`${label}: review dock does not fill the viewport`);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-changes.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-changes.png`});
     await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
@@ -387,7 +388,7 @@ try {
     check((await draft.inputValue()).startsWith(draftBeforeFile)&& (await draft.inputValue()).includes('docs/new.md'),`${label}: file reference lost existing draft`);
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['operator_tool','submit','steer'].includes(c.op)).length===0),`${label}: Files review dispatched a run`);
     check(await page.getByLabel('Workspace files').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Files panel overflows horizontally`);
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-files-light.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-files-light.png`});
     await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
@@ -397,13 +398,13 @@ try {
     await page.waitForFunction(()=>document.querySelector('.host-browser-viewer')?.querySelector('.browser-next-mirror'));
     await page.waitForTimeout(150);
     const opened=await geometry();
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-open.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-open.png`});
     await page.getByRole('button',{name:'Browse privately',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('.browser-primary')?.textContent==='Continue agent'&&!document.querySelector('.browser-primary')?.hidden);
     const privateState=await geometry();
     const privateLabel=await page.locator('.browser-primary').textContent();
     const privateAccessibleLabel=await page.locator('.browser-primary').getAttribute('aria-label');
-    await page.screenshot({path:`${output}/${label}-${viewport.width}-private.png`});
+    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-private.png`});
     const commandsBeforeClose=await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='host_browser').map(c=>c.operation.action));
     check(before.toggleHit,`${label}: Browser toggle not hit-testable`);
     check(before.toggle.right<=viewport.width && before.toggle.y>=0,`${label}: Browser toggle outside viewport`);
@@ -431,7 +432,7 @@ try {
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     check(await page.getByRole('button',{name:'Files',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Escape after dock switch restored the wrong trigger`);
-    report.viewports.push({label,viewport,before,opened,privateState,closed,commands,errors});
+    report.viewports.push({runOutcome,label,viewport,before,opened,privateState,closed,commands,errors});
     await context.close();
  }
 } catch(error) {
