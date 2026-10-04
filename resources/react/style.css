@@ -317,3 +317,14 @@
 .voyage-card[data-group=working][data-status-tone=active]:not([aria-current=true]) .card-title{font-weight:400}
 /* A static hollow live mark is enough in navigation, including reduced-motion mode. */
 .voyage-card[data-group=working][data-status-tone=active] .card-status i{animation:none;border:1px solid currentColor;background:transparent;width:6px;height:6px}
+
+/* Header status is a separate line inside the space reserved for dock actions. */
+.conversation-header{align-items:flex-start;min-height:72px}
+.conversation-header .status-label{display:flex;max-width:100%;white-space:normal;overflow-wrap:anywhere;font-size:12px;margin-top:4px;line-height:1.4}
+/* Short viewports must scroll the body rather than lose the setup footer. */
+.settings-dialog.profile-setup{max-width:calc(100vw - 2rem)}
+.profile-setup>form{min-height:0;max-height:min(720px,90dvh)}
+.profile-setup .setup-body{min-height:0}
+.profile-setup .setup-actions{flex-wrap:wrap;gap:8px}
+.profile-setup .setup-actions>button{white-space:normal;height:auto;min-height:36px}
+@media(max-width:600px){.conversation-header{padding-right:144px}.conversation-title h1{white-space:normal;overflow-wrap:anywhere}.conversation-header .status-label{display:flex}}

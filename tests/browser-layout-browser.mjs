@@ -34,8 +34,8 @@ const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH 
 const report = {capturedAt:new Date().toISOString(),chromium:browser.version(),entry:entry.file,sha256:createHash('sha256').update(await readFile(`${build}/${entry.file}`)).digest('hex'),synthetic:true,viewports:[],failures:[]};
 const check = (value, message) => {if(!value)report.failures.push(message);};
 try {
- for(const viewport of (process.env.LAYOUT_VIEWPORT==='mobile'?[{width:390,height:844}]:[{width:1440,height:900},{width:390,height:844}])) {
-    const label = viewport.width===1440?'desktop':'mobile';
+ for(const viewport of (process.env.LAYOUT_VIEWPORT==='mobile'?[{width:390,height:844}]:[{width:1280,height:900},{width:858,height:882},{width:390,height:844},{width:320,height:568}])) {
+    const label = viewport.width>600?'desktop':'mobile';
     const context = await browser.newContext({viewport,reducedMotion:'reduce'});
     const page = await context.newPage();
     const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('PAGE',e.message);});page.on('response',r=>{if(r.status()>=400)console.error('HTTP',r.status(),r.url());});
@@ -98,7 +98,7 @@ try {
     check(await page.getByRole('form',{name:'New voyage composer'}).isVisible(),`${label}: new voyage composer is missing`);
     check(await page.getByRole('textbox',{name:'Message'}).isVisible(),`${label}: new voyage message is missing`);
     check(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),`${label}: empty draft permits sending`);
-    await page.screenshot({path:`${output}/${label}-empty.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-empty.png`});
     if(label==='desktop') await page.locator('.voyage-card').click();
     if(label==='mobile'){
         await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
@@ -117,7 +117,7 @@ try {
         const selectTheme=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='var(--foreground)';document.body.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {expected,actual:getComputedStyle(document.querySelector('.sidebar [data-slot="select-combobox-trigger"]')).color};});
         const lightness=value=>Number(value.match(/\(([\d.]+)/)?.[1]);
         check(Math.abs(lightness(selectTheme.actual)-lightness(selectTheme.expected))<0.02,`mobile: native select foreground ${JSON.stringify(selectTheme)}`);
-        await page.screenshot({path:`${output}/${label}-dark-empty.png`});
+        await page.screenshot({path:`${output}/${label}-${viewport.width}-dark-empty.png`});
         await page.getByRole('button',{name:'Account and appearance'}).click();
         await page.getByRole('menuitem',{name:'Appearance'}).click();
         await page.getByRole('button',{name:'light',exact:true}).click();
@@ -135,7 +135,7 @@ try {
     check((await vesselCard.boundingBox()).height<100,`${label}: overview card is not compact`);
     check(await page.getByText('Needs confirmation').count()===0,`${label}: pending pairing panel is still shown`);
     await page.waitForTimeout(180);
-    await page.screenshot({path:`${output}/${label}-vessel-overview.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-overview.png`});
     await vesselCard.getByRole('button',{name:'View details for Fixture Vessel'}).click();
     await page.locator('.connections-maintenance #update-current').getByText('1.0.2').waitFor();
     check(await page.locator('.connections-maintenance').getByText('Newer release published').count()===0,`${label}: another channel falsely claims a newer release`);
@@ -144,7 +144,7 @@ try {
     check(await page.locator('.connections-dialog #update-check').isVisible(),`${label}: update action is not visible`);
     check(await page.locator('.connections-dialog').getByRole('button',{name:'Remove from Helm Web…'}).count()===0,`${label}: removal action is exposed before opening its disclosure`);
     check(await page.locator('.connections-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Vessel manager overflows horizontally`);
-    await page.screenshot({path:`${output}/${label}-vessel-maintenance.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-maintenance.png`});
     check(await page.locator('#update-check').isDisabled(),`${label}: current stable build can be installed again`);
     await page.getByRole('button',{name:'Release channel',exact:true}).click();await page.getByRole('option',{name:'Latest development build',exact:true}).click();
     await page.locator('#update-selected-version').filter({hasText:'Latest development version: 1.0.3-nightly.20260928.1.1'}).waitFor();
@@ -155,7 +155,7 @@ try {
     check(await page.evaluate(()=>window.fixtureCommands.find(c=>c.op==='update_apply')?.release_id==='a'.repeat(64)),`${label}: verified release identity was lost`);
     check(await page.locator('#update-review').isHidden(),`${label}: automatic install exposed a second approval step`);
     await page.locator('#update-status').scrollIntoViewIfNeeded();
-    await page.screenshot({path:`${output}/${label}-vessel-updating.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-updating.png`});
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
     await page.getByRole('button',{name:'Account and appearance'}).click();
@@ -168,11 +168,11 @@ try {
     await page.getByRole('menuitem',{name:'Manage Vessels'}).click();
     await page.locator('.connections-card').getByText('Version 1.0.2').waitFor();
     await page.waitForTimeout(180);
-    await page.screenshot({path:`${output}/${label}-vessel-overview-dark.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-overview-dark.png`});
     await page.locator('.connections-dialog').getByRole('button',{name:'View details for Fixture Vessel'}).click();
     await page.locator('#update-status').filter({hasText:/Installing|Checking the saved update/}).waitFor();
     await page.locator('#update-status').scrollIntoViewIfNeeded();
-    await page.screenshot({path:`${output}/${label}-vessel-updating-dark.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-vessel-updating-dark.png`});
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='update_apply').length===1),`${label}: reopening repeated installation`);
     await page.getByRole('button',{name:'Close Vessel connections'}).click();
     if(label==='mobile') await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
@@ -190,7 +190,7 @@ try {
     check(!await goalDialog.getByRole('checkbox').isChecked(),`${label}: continuation consent was preselected`);
     check(await goalDialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Goal form overflows horizontally`);
     await goalDialog.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${label}-goal-review.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-goal-review.png`});
     await goalDialog.getByRole('button',{name:'Save paused goal',exact:true}).click();
     await page.getByRole('button',{name:'Goal · Paused',exact:true}).waitFor();
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='goal_update').length===1),`${label}: Goal set was not exactly once`);
@@ -200,11 +200,11 @@ try {
     check(await goalView.getByText('Verify the synthetic output <script>plain text</script>',{exact:true}).isVisible(),`${label}: canonical Goal objective missing`);
     check(await goalView.locator('script').count()===0,`${label}: Goal objective executed as HTML`);
     await goalView.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${label}-goal-state.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-goal-state.png`});
     await page.keyboard.press('Escape');
     check(await page.getByRole('button',{name:'Goal · Paused',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Goal close lost focus`);
 
-    await page.screenshot({path:`${output}/${label}-before-model.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-before-model.png`});
     check(await conversation.getByRole('button',{name:'Previous user message'}).count()===1,`${label}: turn navigation is missing`);
     // The synthetic fixture has no prior scroll restoration. Move to the last
     // user turn before asserting previous-turn navigation.
@@ -222,10 +222,10 @@ try {
     await page.evaluate(link=>{window.location.hash=new URL(link).hash;},copiedLink);
     await page.waitForFunction(()=>document.activeElement?.getAttribute('data-message-index')==='35');
     check(await conversation.locator('.message.user').first().textContent().then(text=>text.includes('You')),`${label}: author hierarchy missing`);
-    await page.screenshot({path:`${output}/${label}-linked-turn-light.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-linked-turn-light.png`});
     await page.evaluate(()=>document.documentElement.classList.add('dark'));
     await conversation.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${label}-linked-turn-dark.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-linked-turn-dark.png`});
     await page.evaluate(()=>document.documentElement.classList.remove('dark'));
     await page.evaluate(link=>{window.location.hash=new URL(link).hash.replace(/-r\d+$/,'-r999');},copiedLink);
     await conversation.getByRole('status').filter({hasText:'different conversation revision'}).waitFor();
@@ -248,11 +248,11 @@ try {
     }
     const lightModelTheme=await inspectModelTheme();
     check(lightModelTheme.background===lightModelTheme.expectedBackground&&lightModelTheme.color===lightModelTheme.expectedColor,`${label}: light model picker does not use theme colors`);
-    await page.screenshot({path:`${output}/${label}-model-picker-light.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-model-picker-light.png`});
     await page.evaluate(()=>document.documentElement.classList.add('dark'));
     const darkModelTheme=await inspectModelTheme();
     check(darkModelTheme.background===darkModelTheme.expectedBackground&&darkModelTheme.color===darkModelTheme.expectedColor&&darkModelTheme.background!==lightModelTheme.background,`${label}: model picker does not adapt to dark appearance`);
-    await page.screenshot({path:`${output}/${label}-model-picker-dark.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-model-picker-dark.png`});
     await page.evaluate(()=>document.documentElement.classList.remove('dark'));
     await modelDialog.getByRole('textbox',{name:'Search models'}).fill('missing-model');
     check(await modelDialog.getByText('No models match your search.',{exact:true}).isVisible(),`${label}: model search empty state missing`);
@@ -271,10 +271,10 @@ try {
     check(await discovery.getByRole('button',{name:'src/fixture.ts'}).isVisible(),`${label}: file catalogue is missing`);
     check(await discovery.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: discovery dialog overflows horizontally`);
     await discovery.evaluate(el=>Promise.allSettled(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${label}-discovery-light.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-discovery-light.png`});
     await page.evaluate(()=>document.documentElement.classList.add('dark'));
     await page.waitForFunction(()=>{const dialog=document.querySelector('[role="dialog"][aria-labelledby]');if(!dialog)return false;const probe=document.createElement('span');probe.style.backgroundColor='var(--popover)';dialog.append(probe);const matches=getComputedStyle(probe).backgroundColor===getComputedStyle(dialog).backgroundColor;probe.remove();return matches;});
-    await page.screenshot({path:`${output}/${label}-discovery-dark.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-discovery-dark.png`});
     await page.evaluate(()=>document.documentElement.classList.remove('dark'));
     await discovery.getByRole('textbox',{name:'Search actions, tools, skills, and files'}).fill('review');
     await discovery.getByRole('button',{name:/review/}).click();
@@ -336,7 +336,16 @@ try {
         return {toggle:rect('.task-browser-action'),toggleHit:toggle.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)),panel:rect('.task-browser-panel'),composer:rect('.conversation:not([hidden]) form'),draft:rect('.conversation:not([hidden]) textarea'),transcript:rect('.conversation:not([hidden]) .transcript'),scrollTop:transcript.scrollTop,scrollHeight:transcript.scrollHeight,documentWidth:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('.conversation:not([hidden]) *')].filter(el=>el.getBoundingClientRect().right>innerWidth+1).map(el=>({tag:el.tagName,cls:el.className,text:el.textContent.slice(0,70),right:el.getBoundingClientRect().right})),primary:rect('.browser-primary'),privacy:rect('.browser-privacy'),activeLabel:document.activeElement.getAttribute('aria-label'),sameTranscript:transcript===window.savedTranscript,sameDraft:document.querySelector('.conversation:not([hidden]) textarea')===window.savedDraft};
     });
     const before=await geometry();
-    await page.screenshot({path:`${output}/${label}-closed.png`});
+    const headerGeometry=await conversation.locator('.conversation-header').evaluate(el=>{
+        const status=el.querySelector('.status-label')?.getBoundingClientRect();
+        const changes=document.querySelector('.dock-actions .review-action')?.getBoundingClientRect();
+        return {status:status?{left:status.left,right:status.right,top:status.top,bottom:status.bottom,width:status.width}:null,changes:changes?{left:changes.left,right:changes.right,top:changes.top,bottom:changes.bottom}:null};
+    });
+    check(headerGeometry.status?.width>0,`${label}/${viewport.width}: header status has zero width`);
+    if(headerGeometry.status&&headerGeometry.changes){const a=headerGeometry.status,b=headerGeometry.changes;check(a.right<=b.left||a.bottom<=b.top||a.top>=b.bottom,`${label}/${viewport.width}: status overlaps Changes`);}
+    check(before.documentWidth<=viewport.width,`${label}/${viewport.width}: document overflows horizontally`);
+
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-closed.png`});
     await page.getByRole('button',{name:'Changes',exact:true}).click();
     check(await page.getByLabel('Recorded changes').isVisible(),`${label}: recorded changes dock did not open`);
     await page.getByLabel('Changed files').getByRole('button',{name:/src\/fixture\.ts/}).waitFor();
@@ -344,12 +353,12 @@ try {
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='operator_tool').length===0),`${label}: opening Changes started an operator run`);
     await page.getByText('Inspect workspace explicitly').click();
     check(await page.getByLabel('Executing-host inspection').isVisible(),`${label}: explicit inspection is missing`);
-    await page.screenshot({path:`${output}/${label}-workspace.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-workspace.png`});
     await page.getByRole('button',{name:'Recorded edits',exact:true}).click();
     check(await page.getByText('src/fixture.ts').first().isVisible(),`${label}: recorded patch path is missing`);
     await page.waitForTimeout(180);
     if(label==='mobile')check(await page.locator('.task-browser-panel').evaluate(el=>Math.abs(el.getBoundingClientRect().width-innerWidth)<1),`${label}: review dock does not fill the viewport`);
-    await page.screenshot({path:`${output}/${label}-changes.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-changes.png`});
     await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
@@ -367,7 +376,7 @@ try {
     check((await draft.inputValue()).startsWith(draftBeforeFile)&& (await draft.inputValue()).includes('docs/new.md'),`${label}: file reference lost existing draft`);
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['operator_tool','submit','steer'].includes(c.op)).length===0),`${label}: Files review dispatched a run`);
     check(await page.getByLabel('Workspace files').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Files panel overflows horizontally`);
-    await page.screenshot({path:`${output}/${label}-files-light.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-files-light.png`});
     await page.getByRole('button',{name:'Close panel',exact:true}).click();
     await page.locator('.task-browser-panel').waitFor({state:'detached'});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
@@ -377,13 +386,13 @@ try {
     await page.waitForFunction(()=>document.querySelector('.host-browser-viewer')?.querySelector('.browser-next-mirror'));
     await page.waitForTimeout(150);
     const opened=await geometry();
-    await page.screenshot({path:`${output}/${label}-open.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-open.png`});
     await page.getByRole('button',{name:'Browse privately',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('.browser-primary')?.textContent==='Continue agent'&&!document.querySelector('.browser-primary')?.hidden);
     const privateState=await geometry();
     const privateLabel=await page.locator('.browser-primary').textContent();
     const privateAccessibleLabel=await page.locator('.browser-primary').getAttribute('aria-label');
-    await page.screenshot({path:`${output}/${label}-private.png`});
+    await page.screenshot({path:`${output}/${label}-${viewport.width}-private.png`});
     const commandsBeforeClose=await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='host_browser').map(c=>c.operation.action));
     check(before.toggleHit,`${label}: Browser toggle not hit-testable`);
     check(before.toggle.right<=viewport.width && before.toggle.y>=0,`${label}: Browser toggle outside viewport`);
