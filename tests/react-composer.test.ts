@@ -45,7 +45,7 @@ test('actual composer preserves keyboard, run transitions and command safety gat
             assert.equal(button('Send'),null);
             assert.equal(button('Send to current run')!.disabled,false);
             assert.equal(button('Stop run')!.disabled,false);
-            await keyboard();assert.deepEqual(effects.at(-1),['v:s','steer']);
+            const coldCount=effects.length;await keyboard();assert.equal(effects.length,coldCount);
         }
         await React.act(async()=>button('Stop run')!.click());
         assert.deepEqual(effects.at(-1),['v:s','cancel']);
@@ -75,9 +75,9 @@ test('actual composer preserves keyboard, run transitions and command safety gat
         const count=effects.length;await keyboard();assert.equal(effects.length,count);
         assert.equal(pending[0].command_id,'uncertain-access','render/keypress never consumes uncertain records');
         pending=[{session_id:'s',command_id:'uncertain-send',op:'submit'}];await render();
-        assert.equal(button('Send to current run')!.disabled,false,'a distinct message is allowed after a fresh snapshot');
+        assert.equal(button('Send to current run')!.disabled,true,'cold unknown message payload refuses without invented fingerprint history');
         assert.equal(button('Stop run')!.disabled,true,'cancel still requires receipt resolution');
-        await keyboard();assert.deepEqual(effects.at(-1),['v:s','steer']);
+        const coldCount=effects.length;await keyboard();assert.equal(effects.length,coldCount);
         assert.equal(pending[0].command_id,'uncertain-send');
         pending=[];tab.snapshot.run.state='idle';await render();assert.equal(button('Stop run'),null);
         await React.act(async()=>root.render(React.createElement(Composer,{workspace,onSettings:()=>{}})));
