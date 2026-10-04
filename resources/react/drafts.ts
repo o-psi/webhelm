@@ -85,6 +85,7 @@ export class DraftSlot {
     private writing?:Promise<void>;
     private ready:Promise<void>;
     private failed=false;
+    get storageFailed(){return this.failed;}
     constructor(private repository:DraftRepository,private key:string,private changed:()=>void){
         this.ready=repository.read(key).then(record=>{
             this.revision=record?.revision??null;
@@ -118,6 +119,6 @@ export class DraftSlot {
 }
 
 /** Hide only empty successful-clear feedback, never review or storage failures. */
-export function showDraftFeedback(slot:{message:string;failed?:boolean;value:Draft}){
-    return slot.failed||slot.value.delivery==='review'||Boolean(slot.value.text||slot.value.pictures.length)||slot.message!=='Draft cleared on this browser.';
+export function showDraftFeedback(slot:{message:string;storageFailed?:boolean;value:Draft}){
+    return slot.storageFailed||slot.value.delivery==='review'||Boolean(slot.value.text||slot.value.pictures.length)||slot.message!=='Draft cleared on this browser.';
 }

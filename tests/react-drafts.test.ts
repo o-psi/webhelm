@@ -62,10 +62,21 @@ test('workspace waits for hydration, restores voyage-scoped content, and sends n
 
 test('empty cleared draft feedback is quiet without hiding review or failed storage',async()=>{
  const {showDraftFeedback}=await import('../resources/react/drafts');
- const slot={message:'Draft cleared on this browser.',failed:false,value:{text:'',pictures:[]}};
+ const slot={message:'Draft cleared on this browser.',storageFailed:false,value:{text:'',pictures:[]}};
  assert.equal(showDraftFeedback(slot),false);
- assert.equal(showDraftFeedback({...slot,failed:true}),true);
+ assert.equal(showDraftFeedback({...slot,storageFailed:true}),true);
  assert.equal(showDraftFeedback({...slot,value:{...slot.value,delivery:'review' as const}}),true);
  assert.equal(showDraftFeedback({...slot,message:'Draft storage unavailable'}),true);
  assert.equal(showDraftFeedback({...slot,value:{text:'unsent',pictures:[]}}),true);
+});
+
+
+test('real DraftSlot storage failure remains visible through readonly observation',async()=>{
+ const {showDraftFeedback}=await import('../resources/react/drafts');
+ const repository=new Repository();repository.fail=true;
+ const slot=new DraftSlot(repository,'failed-clear',()=>{});
+ await assert.rejects(slot.discard(),/Storage full/);
+ assert.equal(slot.storageFailed,true);
+ assert.equal(showDraftFeedback(slot),true);
+ assert.match(slot.message,/Storage full/);
 });
