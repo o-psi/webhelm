@@ -8,7 +8,7 @@ import {Card} from './components/ui/card';
 import {Collapsible,CollapsibleContent,CollapsibleTrigger} from './components/ui/collapsible';
 import {Sheet,SheetContent,SheetDescription,SheetTitle,SheetTrigger} from './components/ui/sheet';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from './components/ui/dialog';
-import {ArrowDownIcon,ArrowUpIcon,CheckIcon,ChevronDownIcon,ChevronRightIcon,CopyIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,UserRoundIcon,XIcon} from 'lucide-react';
+import {ArrowDownIcon,ArrowUpIcon,CheckIcon,ChevronDownIcon,ChevronRightIcon,CopyIcon,MenuIcon,PaperclipIcon,PlusIcon,RefreshCwIcon,SearchIcon,ServerIcon,Settings2Icon,SquareIcon,XIcon} from 'lucide-react';
 import {ExecutionPanel} from './ExecutionPanel';
 import {TurnLink,linkedTurn} from './TurnLink';
 import {MessageActions} from './MessageActions';
@@ -22,6 +22,7 @@ import {ImagePart,Output} from './MessageParts';
 import {VoyageActions} from './VoyageActions';
 import {Settings} from './Settings';
 import {WebSettings,type WebSettingsPage} from './WebSettings';
+import {AccountMenu} from './AccountMenu';
 import {InferenceControls} from './InferenceControls';
 import {NewVoyage,type NewVoyageMessage,type RecoveryDraft} from './NewVoyage';
 import {completeNewVoyage} from './new-voyage-delivery';
@@ -366,9 +367,11 @@ export function App({bootstrap,draftRepository}: {bootstrap: Bootstrap;draftRepo
                         <DropdownMenuContent portalContainer={mobilePortal} side="top" align="start" className="w-64"><DropdownMenuLabel>Vessel connections</DropdownMenuLabel>{connections.map((c:any)=><p className="px-2 py-1 text-xs text-muted-foreground" key={c.id}>{c.name} · {c.status}</p>)}<DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Manage Vessels</DropdownMenuItem></DropdownMenuContent>
                     </DropdownMenu></div>
                     {connections.some((connection:any)=>!connection.client)&&<Button variant="ghost" size="icon" className="icon-button" aria-label="Reconnect Vessels" title="Reconnect Vessels" onClick={()=>fleet.reconnect()}><RefreshCwIcon aria-hidden="true"/></Button>}
-                    <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="icon-button" aria-label="Account and appearance"><UserRoundIcon aria-hidden="true"/></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent portalContainer={mobilePortal} side="top" align="end" className="w-48"><DropdownMenuLabel>Settings</DropdownMenuLabel><DropdownMenuItem onSelect={()=>{setMobile(false);setWebSettingsPage('account');}}>HelmWeb Account</DropdownMenuItem><DropdownMenuItem onSelect={()=>{setMobile(false);setWebSettingsPage('appearance');}}>Appearance</DropdownMenuItem><DropdownMenuItem onSelect={()=>{setMobile(false);setManage(true);}}>Vessel connections</DropdownMenuItem><DropdownMenuItem onSelect={()=>{if(newHasDraft||[...workspace.tabs.values()].some(tab=>tab.draft.trim()||tab.pictures.length))setLogoutReview(true);else logoutForm.current?.requestSubmit();}}>Sign out</DropdownMenuItem></DropdownMenuContent>
-                    </DropdownMenu>
+                    <AccountMenu name={bootstrap.accountName} email={bootstrap.accountEmail} appearance={appearance} onAppearanceChange={setAppearance} portalContainer={mobilePortal}
+                        onAccount={()=>{setMobile(false);setWebSettingsPage('account');}}
+                        onAppearanceSettings={()=>{setMobile(false);setWebSettingsPage('appearance');}}
+                        onConnections={()=>{setMobile(false);setManage(true);}}
+                        onLogout={()=>{if(newHasDraft||[...workspace.tabs.values()].some(tab=>tab.draft.trim()||tab.pictures.length))setLogoutReview(true);else logoutForm.current?.requestSubmit();}}/>
                     <form ref={logoutForm} action={bootstrap.logoutUrl} method="post" hidden><Input type="hidden" name="_token" value={csrf()}/></form>
                 </div>
             </footer>
