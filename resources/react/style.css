@@ -310,3 +310,10 @@
 .settings-dialog.web-settings-dialog[data-state=open]{display:block;width:min(760px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:90dvh;overflow:hidden;padding:0}.web-settings-dialog>header{margin:0}.web-settings-dialog p{margin-bottom:0}
 
 }
+
+/* Quiet background work without fading controls or suppressing actionable states.
+   Group membership remains owned by presentation.ts; tone retains offline/failure meaning. */
+.voyage-card[data-group=working][data-status-tone=active]{--tone:var(--muted-foreground)}
+.voyage-card[data-group=working][data-status-tone=active]:not([aria-current=true]) .card-title{font-weight:400}
+/* A static hollow live mark is enough in navigation, including reduced-motion mode. */
+.voyage-card[data-group=working][data-status-tone=active] .card-status i{animation:none;border:1px solid currentColor;background:transparent;width:6px;height:6px}

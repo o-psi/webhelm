@@ -42,3 +42,13 @@ test('attention stays visible while older settled voyages collapse without hidin
  assert.equal(voyageGroup({...all.find(v=>v.session_id==='done-1'),observed:{run:{state:'completed'}}},0,1),'attention','an exact pending receipt promotes the open voyage');
  assert.equal(voyageGroup({...all.find(v=>v.session_id==='running'),observed:{run:{state:'running'}}},0,1),'working','a pending receipt does not mislabel active work as a human decision');
 });
+
+test('quiet working presentation preserves attention and unavailable status boundaries',()=>{
+ const running=voyage('running','running');
+ const item={...running,connection:{id:'a'},observed:{run:{state:'running'}}};
+ assert.equal(voyageGroup(item),'working');
+ assert.equal(voyageGroup(item,1),'attention','an actionable decision must not receive quiet working styling');
+ assert.equal(cardStatus(item,false).tone,'muted','offline work must keep its availability presentation');
+ assert.equal(cardStatus({...item,state:'cleanup_unconfirmed'},true).tone,'warning');
+ assert.equal(voyageGroup({...item,state:'cleanup_unconfirmed'}),'attention');
+});
