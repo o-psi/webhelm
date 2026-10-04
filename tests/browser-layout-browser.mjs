@@ -520,7 +520,8 @@ try {
     check(Math.abs(populatedSearch.y-emptySearch.y)<1,`${label}: profile search moved on empty results`);
     await profileSearch.fill('');await profileSearch.hover();await page.mouse.wheel(0,350);
     const scrolledSearch=await profileSearch.boundingBox();
-    check(scrolledSearch.y>=0&&Math.abs(scrolledSearch.y-populatedSearch.y)<12,`${label}: profile search leaves viewport during wheel scroll`);
+    await profileSearch.fill('unmatched-after-scroll');const scrolledEmptySearch=await profileSearch.boundingBox();
+    check(Math.abs(scrolledSearch.y-scrolledEmptySearch.y)<1,`${label}: focused profile search moves when scrolled list becomes empty`);
     await profileSearch.fill('Other');
     await settings.getByRole('button',{name:/Other model/}).click();
     await settings.getByRole('button',{name:/Reasoning & service/}).click();
