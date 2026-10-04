@@ -395,12 +395,13 @@ are left untouched but are never opened, restored, updated or migrated. Drafts
 never synchronize between windows or devices. Exact execution receipt recovery
 remains separate; uncertain sends are never automatically repeated.
 
-Storage is bounded to 64 drafts and 32 MiB per account, with 64 KiB of UTF-8 text
-and the existing four-picture/4 MiB prepared-image limit per draft. Nothing is
-automatically evicted. Conflicting tabs, unavailable storage and quota failures
-show a warning and preserve the current text for copying. Sending waits for the
-recovery marker to save. Runtime credentials, grants and command receipts stay
-outside the draft store.
+The existing message and prepared-picture validation limits still apply; they
+are not persistent draft-storage quotas. Each window owns independent composer
+state, so there are no cross-window draft-save conflicts or draft-storage quota
+errors. Copy unsent work before leaving the page. Before dispatch, the separate
+execution intent journal must retain the exact command identity; a journal write
+failure prevents dispatch and leaves composition available for review. Runtime
+credentials and grants are not composer state.
 
 ### Console verification
 
@@ -430,10 +431,11 @@ The stopped recovery action keeps its accessible label/title consistent with its
 displayed intent. The same Chromium fixture prepares that assertion after
 synthetic close and requires all replay instances to be retired; runtime restart
 admission remains enforced by the executing Voyage.
-Run `node tests/browser-drafts-browser.mjs` against the built bundle for real
-IndexedDB reload, prepared-picture retention, tenant/voyage isolation, conflicting
-tabs, accepted/uncertain send handling, new-voyage approval reset and discard checks
-at desktop and mobile widths. This uses synthetic transport without provider calls.
+Run `node tests/browser-drafts-browser.mjs` against the built bundle for sandboxed
+Chromium checks at desktop and mobile widths: volatile reload, prepared-picture
+and tab retention, account/window isolation, accepted-send clearing, exact
+uncertain-send receipt retention without replay, new-composer reload clearing and
+explicit sign-out. This uses synthetic transport without provider calls.
 `node tests/browser-conversation-browser.mjs` exercises the built shell with
 synthetic public-v2 frames in real Chromium at wide desktop, narrow desktop and
 mobile widths, in light and dark themes. It checks a 128-message recent history,
