@@ -36,14 +36,20 @@ async function mount({availability='available',usageReply,modelReply,existing=fa
     return {commands,actions,button,click,fill,async renew(profilesChanged=false){if(profilesChanged)catalogue.revision++;connection.client={...connection.client};await act(async()=>root.render(React.createElement(Settings,{...props})));},closed:()=>closed,text:()=>document.body.textContent!,async dispose(){await act(async()=>root.unmount());dom.window.close();}};
 }
 
+// Model rows share catalogue presentation; profile/account rows retain their own classes.
+function modelButtons(){
+    assert.equal(document.querySelector('#profile-setup-title')!.textContent,'Choose model','model choices are scoped to the Models step');
+    return [...document.querySelectorAll<HTMLButtonElement>('.setup-body button[aria-pressed]')];
+}
+
 test('profile navigation preserves unsaved name/model and keeps the current step independent',async()=>{
     const view=await mount();try{
         assert.equal(document.querySelector('select'),null,'overview is compact');
         await view.click('Profile');await view.click('Actions for Everyday');await view.click('Edit');
         await view.fill('Profile name','My draft');
         await view.click('Model');await view.fill('Search models','Other');
-        assert.equal(document.querySelectorAll('.setup-choice').length,1,'model search filters the actual choices');
-        await act(async()=>document.querySelector<HTMLButtonElement>('.setup-choice')!.click());
+        assert.equal(modelButtons().length,1,'model search filters the actual choices');
+        await act(async()=>modelButtons()[0].click());
         await view.click('Provider account');await view.click('Back');
         assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'My draft');
         assert.match(view.text(),/Other model/);
@@ -107,7 +113,7 @@ test('connection renewal while in a picker retains the unsaved profile and model
     const view=await mount();try{
         await view.click('Profile');await view.click('Actions for Everyday');await view.click('Edit');
         await view.fill('Profile name','Keep this draft');await view.click('Model');
-        await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('.setup-choice')].find(item=>item.textContent?.startsWith('Other model'))!.click());
+        await act(async()=>modelButtons().find(item=>item.textContent?.startsWith('Other model'))!.click());
         await view.click('Reasoning & service');await view.renew();await view.click('Back');
         assert.equal(document.querySelector<HTMLInputElement>('input')!.value,'Keep this draft');assert.match(view.text(),/Other model/);
         await view.click('Save profile');assert.equal(view.commands.find(command=>command.op==='save_profile').profile.model,'other');
