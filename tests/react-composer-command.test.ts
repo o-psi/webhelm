@@ -28,3 +28,17 @@ test('new goal delivery uses fresh metadata only and recovery never replays',asy
     await completeNewVoyage(workspace,'k',message);assert.deepEqual(calls,['read','goal']);
     calls.length=0;await completeNewVoyage(workspace,'k',{...message,send:false,applyAccess:false});assert.deepEqual(calls,['read']);
 });
+
+test('uncertain payload guards compare exact prepared content and refuse cold journal ambiguity',async()=>{
+    const {Workspace}=await import('../resources/react/workspace');
+    const entries=[{op:'submit',command_id:'unknown',session_id:'s'}];
+    const connection:any={client:{},journal:{entries:()=>entries}};
+    const workspace=new Workspace(()=>new Map([['v',connection]]));
+    const tab:any={key:'k',vessel:'v',session:'s',incarnation:'i',snapshot:{},freshAt:Date.now(),stale:false,busy:false,draft:'Exact text',pictures:[{name:'image.png',base64:'preparedbytes'}]};
+    assert.equal(workspace.actionable(tab,'submit'),false,'cold journal cannot prove payload distinctness');
+    (workspace as any).messagePayloads.set(JSON.stringify(['k','i','unknown']),JSON.stringify([tab.draft,tab.pictures.map((p:any)=>[p.name,p.base64])]));
+    assert.equal(workspace.actionable(tab,'submit'),false,'unchanged uncertain payload');
+    tab.pictures[0].base64='differentpreparedbytes';
+    assert.equal(workspace.actionable(tab,'submit'),true,'fresh distinct prepared picture permitted');
+    tab.incarnation='different';assert.equal(workspace.actionable(tab,'submit'),false,'fingerprint never crosses incarnation');
+});
