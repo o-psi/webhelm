@@ -44,7 +44,7 @@ try{
                 const c=f.request.command;window.fixtureCommands.push(c);const envelope=result=>({session_id:c.session_id,incarnation:'i',result});let result;
                 if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',features:['execution_profiles'],workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='catalogue')result=sessions.map((session,index)=>({session_id:session,incarnation:'i',name:`Draft voyage ${index+1}`,state:'live',catalogue:{summary:{run_state:'idle'}}}));
-                else if(c.op==='snapshot')result=envelope({session_id:c.session_id,name:'Draft voyage',workspace:'/work',revision:1,observation_cursor:5,messages:[],run:{state:'idle'}});
+                else if(c.op==='snapshot')result=envelope({session_id:c.session_id,name:`Draft voyage ${sessions.indexOf(c.session_id)+1}`,workspace:'/work',revision:1,observation_cursor:5,messages:[],run:{state:'idle'}});
                 else if(c.op==='decisions')result=envelope([]);
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture',model:'m',account}]};
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};
@@ -69,8 +69,8 @@ try{
     await page.goto(path);await ready(page);await editor(page).fill('Private unsent <literal> 界');
     await page.locator('.conversation:not([hidden]) input[type="file"]').setInputFiles({name:'tiny.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII=','base64')});
     await page.locator('.conversation:not([hidden]) .pictures img').waitFor();
-    await page.getByText('Draft voyage 2',{exact:true}).click();await ready(page);assert.equal(await editor(page).inputValue(),'');
-    await page.getByText('Draft voyage 1',{exact:true}).click();await ready(page);assert.equal(await editor(page).inputValue(),'Private unsent <literal> 界');
+    if(width<1024)await page.getByRole('button',{name:'Open voyage navigation'}).click();await page.locator('button.voyage-card').filter({hasText:'Draft voyage 2'}).click();await ready(page);assert.equal(await editor(page).inputValue(),'');
+    if(width<1024)await page.getByRole('button',{name:'Open voyage navigation'}).click();await page.locator('button.voyage-card').filter({hasText:'Draft voyage 1'}).click();await ready(page);assert.equal(await editor(page).inputValue(),'Private unsent <literal> 界');
     assert.equal(await page.locator('.conversation:not([hidden]) .pictures img').count(),1);
     const second=await context.newPage();await second.goto(path);await ready(second);assert.equal(await editor(second).inputValue(),'');await second.close();
     await page.reload();await ready(page);assert.equal(await editor(page).inputValue(),'');assert.equal(await page.locator('.conversation:not([hidden]) .pictures img').count(),0);
@@ -80,7 +80,7 @@ try{
     const identity=await page.evaluate(()=>window.fixtureCommands.filter(command=>['submit','submit_content'].includes(command.op)).at(-1).command_id);
     await page.reload();await ready(page);assert.equal(await editor(page).inputValue(),'');
     assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),2);
-    const receiptIds=await page.evaluate(()=>window.fixtureCommands.filter(command=>command.op==='receipt').map(command=>command.command_id));assert.ok(receiptIds.includes(identity));
+    const receiptIds=await page.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('helm-web:intent:')).map(key=>JSON.parse(localStorage.getItem(key)).command_id));assert.ok(receiptIds.includes(identity));
     await page.goto(path+'?tenant=draft-account-b');await ready(page);assert.equal(await editor(page).inputValue(),'');
     await page.goto(origin);const composer=page.locator('.new-voyage');await composer.locator('textarea').waitFor();await composer.locator('textarea').fill('New unsent message');
     await page.reload();await composer.locator('textarea').waitFor();assert.equal(await composer.locator('textarea').inputValue(),'');
