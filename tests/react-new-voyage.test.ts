@@ -20,7 +20,7 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
     const {createRoot}=await import('react-dom/client');
     const {NewVoyage}=await import('../resources/react/NewVoyage');
     const commands:any[]=[],created:any[]=[],advanced:any[]=[];
-    let capabilityReads=0,accountReads=0;
+    let capabilityReads=0,accountReads=0;let failModels=unknownModels;
     const connection:any={id:'c',name:'Fixture Vessel',vessel_id:'v',voyages:[],client:{async exchange({command}:any){
         commands.push(command);
         let result:any;
@@ -28,7 +28,7 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
             case 'capabilities':result={vessel_id:'v',scope:scoped?'scoped':'owner',rights:['create','account_use','execute'],features:['execution_profiles'],workspaces:revokeWorkspace&&++capabilityReads>1?[]:[{path:'/work',name:'Work'}]};break;
             case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
             case 'accounts':accountReads++;result={accounts:[{id:'account',connection_id:'provider',identity_generation:accountChanged&&accountReads>1?2:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
-            case 'account_models':if(unknownModels)throw Error('Catalogue unavailable');result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
+            case 'account_models':if(failModels)throw Error('Catalogue unavailable');result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
             case 'start_account':if(uncertain)return {protocol:1,outcome_unknown:true,result:null};result={session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'};break;
             case 'resolve_start_account':result={command_id:command.command_id,session_id:command.session_id,status:'created',process:{session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'}};break;
             default:throw new Error(command.op);
@@ -62,7 +62,7 @@ async function mount({uncertain=false,recovery=null,scoped=false,revokeWorkspace
         const option=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.textContent?.includes('Other model')&&!item.getAttribute('aria-label')?.includes('favorites'))!;
         assert.ok(option);await act(async()=>option.click());
     };
-    return {dom,commands,created,advanced,button,dispose,choose,chooseModel};
+    return {dom,commands,created,advanced,button,dispose,choose,chooseModel,allowModels:()=>{failModels=false;}};
 }
 
 test('uncertain message transfer starts as a reviewable draft and sends nothing',async()=>{
@@ -203,12 +203,33 @@ test('all five draft controls share presentation and unavailable catalogue never
         for(const name of ['Account','Model','Service tier','Reasoning','Access']){
             assert.ok([...document.querySelectorAll('button')].some(item=>item.getAttribute('aria-label')?.startsWith(name+':')),name);
         }
-        for(const name of ['Model','Service tier','Reasoning']){
+        for(const name of ['Service tier','Reasoning']){
             const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith(name+':'))!;
             assert.equal(trigger.disabled,true);
         }
         await view.choose('Access','Read only');
         assert.equal(view.commands.some(command=>['start_account','submit','set_access','set_account_inference','save_profile'].includes(command.op)),false);
         assert.equal(view.button('Create without message').disabled,false,'unchanged saved profile is usable without a fabricated catalogue override');
+    }finally{await view.dispose();}
+});
+
+test('failed draft catalogue is inspectable and retry is read-only before successful choices',async()=>{
+    const view=await mount({unknownModels:true,scoped:true,revokeWorkspace:true});
+    try{
+        assert.match(document.body.textContent||'',/Catalogue unavailable/);
+        const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith('Model:'))!;
+        assert.equal(trigger.disabled,false);
+        await act(async()=>trigger.click());
+        assert.match(document.querySelector('[role="dialog"]')?.textContent||'',/Catalogue unavailable/);
+        assert.equal(document.querySelectorAll('[data-model-choice]').length,0);
+        await act(async()=>document.dispatchEvent(new view.dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+        view.allowModels();
+        await act(async()=>view.button('Retry model catalogue').click());
+        assert.equal(view.commands.filter(command=>command.op==='account_models').length,2);
+        assert.equal(view.commands.some(command=>['start_account','submit','save_profile','set_account_inference'].includes(command.op)),false);
+        await view.chooseModel();
+        await act(async()=>view.button('Create without message').click());
+        assert.equal(view.commands.some(command=>command.op==='start_account'),false,'revoked workspace still blocks creation after catalogue recovery');
+        assert.match(document.body.textContent||'',/workspace is no longer permitted/);
     }finally{await view.dispose();}
 });

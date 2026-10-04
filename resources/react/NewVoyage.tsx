@@ -31,6 +31,7 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     const [caps,setCaps]=useState<any>(null),[path,setPath]=useState(''),[catalogue,setCatalogue]=useState<any>(null),[accounts,setAccounts]=useState<any[]>([]),[profileId,setProfileId]=useState('');
     const [choicesFor,setChoicesFor]=useState<{vessel:string;path:string;client:any;reloadToken:number}|null>(null);
     const [modelOptions,setModelOptions]=useState<any[]>([]),[modelChoicesFor,setModelChoicesFor]=useState<string|null>(null);
+    const [modelError,setModelError]=useState('');
     const [modelOpen,setModelOpen]=useState(false),[modelsRefresh,setModelsRefresh]=useState(0);
     const [serviceChoice,setServiceChoice]=useState<string|null>(null);
     const [modelChoice,setModelChoice]=useState<string|null>(null),[reasoningChoice,setReasoningChoice]=useState<string|null>(null);
@@ -104,12 +105,12 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
     },[caps,path,vessel,connection?.client,reloadToken]);
     useEffect(()=>{setModelChoice(null);setReasoningChoice(null);setServiceChoice(null);setAccountOverride(null);setAccountReview(false);},[profileId,path,vessel]);
     useEffect(()=>{
-        const epoch=++modelsGeneration.current;setModelOptions([]);setModelChoicesFor(null);
+        const epoch=++modelsGeneration.current;setModelOptions([]);setModelChoicesFor(null);setModelError('');
         if(!profile||!profileAccount?.ready||!connection?.client||!modelContext)return;
         void vesselRead(connection,'account_models',{workspace:path,account:profileAccount.binding}).then(value=>{
             if(epoch!==modelsGeneration.current||connection.client!==fleet.connections.get(vessel)?.client||!sameAccount(value.account,profileAccount.binding))return;
             setModelOptions(value.models||[]);setModelChoicesFor(modelContext);
-        }).catch(()=>{/* Saved profiles can still be used when model discovery is unavailable. */});
+        }).catch(error=>{if(epoch===modelsGeneration.current&&connection.client===fleet.connections.get(vessel)?.client)setModelError(error.message||'Model catalogue unavailable.');});
         return()=>{modelsGeneration.current++;};
     },[modelContext,connection?.client,modelsRefresh]);
     const pending=(()=>{try{creation.current??=new Creation(localStorage,tenant);return {records:creation.current.pending(),error:false};}catch{return {records:[],error:true};}})();
@@ -190,10 +191,11 @@ export function NewVoyage({fleet,tenant,drafts,onDraftChange,hidden,resetToken,r
                     {pending.error&&<p className="composer-feedback" role="alert">Recovery storage is unavailable. Creating a voyage is disabled.</p>}
                     {pictures.length>0&&<div className="new-voyage-pictures flex flex-wrap gap-2">{pictures.map((picture,index)=><div className="flex max-w-40 items-center gap-1 rounded-md border px-2 text-xs" key={`${picture.name}:${index}`}><span className="truncate" title={picture.name}>{picture.name}</span><Button variant="ghost" size="icon-xs" type="button" aria-label={`Remove ${picture.name}`} disabled={busy} onClick={()=>setPictures(current=>current.filter((_,i)=>i!==index))}><XIcon aria-hidden="true"/></Button></div>)}</div>}
                     <ComposerInput ref={input} rows={3} value={text} disabled={busy||!draftReady} onChange={event=>setText(event.target.value)} onSend={()=>void create(true)} placeholder="Ask for changes, send follow-ups, or attach pictures"/>
+                    {modelError&&<p className="composer-feedback" role="alert">{modelError} Saved profile settings are unchanged; model overrides are unavailable. <Button type="button" variant="ghost" disabled={busy||!connection?.client||!profileAccount?.ready} onClick={()=>setModelsRefresh(value=>value+1)}>Retry model catalogue</Button></p>}
                     <Input ref={pictureInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event=>{const files=[...(event.target.files||[])];event.target.value='';void addPictures(files);}}/>
                     <div className="new-voyage-primary"><ComposerOptions className="new-voyage-inference">
                         <ComposerOptionTrigger name="Account" label={profileAccount?.label||'Unavailable'} disabled={busy||!profile||!connection?.client} onClick={()=>setAccountReview(true)}/>
-                        <ModelPicker trigger={<ComposerOptionTrigger name="Model" label={modelLabel(currentModel,selectedModel||'Loading models…')} disabled={busy||!modelsReady}/>} open={modelOpen} onOpenChange={setModelOpen} models={modelOptions} current={selectedModel} provider={profileAccount?.label||'Account'} loading={!modelsReady} error="" disabled={busy||!modelsReady} onChoose={value=>{setModelChoice(value);setReasoningChoice('');setServiceChoice(null);setModelOpen(false);}} onRefresh={()=>setModelsRefresh(value=>value+1)}/>
+                        <ModelPicker trigger={<ComposerOptionTrigger name="Model" label={modelLabel(currentModel,selectedModel||'Loading models…')} disabled={busy||!profileAccount?.ready||!connection?.client}/>} open={modelOpen} onOpenChange={setModelOpen} models={modelOptions} current={selectedModel} provider={profileAccount?.label||'Account'} loading={!modelsReady&&!modelError} error={modelError} disabled={busy||!modelsReady} onChoose={value=>{setModelChoice(value);setReasoningChoice('');setServiceChoice(null);setModelOpen(false);}} onRefresh={()=>setModelsRefresh(value=>value+1)}/>
                         <ComposerChoice name="Reasoning" value={selectedReasoning} disabled={busy||!modelsReady||!currentModel} options={[{value:'',label:'Provider default'},...(currentModel?.reasoning_efforts||[]).map((value:string)=>({value,label:value}))]} onChange={setReasoningChoice}/>
                         <ComposerChoice name="Service tier" value={selectedService} disabled={busy||!modelsReady||!currentModel} options={[{value:'',label:'Provider default'},...(currentModel?.service_tiers||[]).map((value:string)=>({value,label:value}))]} onChange={setServiceChoice}/>
                         <ComposerChoice name="Access" value={access} disabled={busy} options={[{value:'read-only',label:'Read only'},{value:'approval',label:'Approval'},{value:'unrestricted',label:'Full access'}]} onChange={value=>setAccess(value as NewVoyageMessage['access'])}/>
