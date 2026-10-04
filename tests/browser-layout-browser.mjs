@@ -75,7 +75,7 @@ try {
                 else if(c.op==='update_apply')result=updateRecord={...updateRecord,phase:'applying',message:'Installing the approved release.'};
                 else if(c.op==='update_status')result=updateRecord;
                 else if(c.op==='profiles')result={revision:1,can_manage:true,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture profile',model:'fixture-model',account:{account_id:'a',connection_id:'p',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'}}]};
-                else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account with a long provider subscription identity and workspace-specific description',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',transports:['chatgpt_oauth']}]};
+                else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture account with a long provider subscription identity and workspace-specific description',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Fixture provider',endpoint:'https://chatgpt.com/backend-api/codex',transports:['chatgpt_oauth']}]};
                 else if(c.op==='account_usage')result={account:c.account,refresh_status:'fresh',snapshot:{windows:[]}};
                 else if(c.op==='account_models')result={account:c.account,models:[{id:'fixture-model',display_name:'Fixture model with a long readable catalogue description and capability label',reasoning_efforts:['low','medium']},{id:'other-model',display_name:'Other model',reasoning_efforts:['low']}]};
                 else if(c.op==='inspect')result={session_id:'22222222-2222-4222-8222-222222222222',incarnation:'i',state:'live',workspace:'/work'};
@@ -578,6 +578,19 @@ try {
     await page.keyboard.press('Escape');
     await page.evaluate(()=>{window.fixtureDiscoveryErrors=false;});
     check(await page.evaluate(()=>window.fixtureCommands.filter(c=>['save_profile','set_account_inference','operator_tool','submit','steer'].includes(c.op)).length)===readOnlyBefore,`${label}: read-only loading/error audit executed effects`);
+    await conversation.getByRole('button',{name:/^Account:/}).click();
+    await settings.getByRole('button',{name:/Provider account/}).click();
+    await settings.getByRole('button',{name:'Add subscription account',exact:true}).click();
+    await settings.locator('#enrollment-panel:not([hidden])').waitFor();
+    for(const theme of ['light','dark']){
+        await page.evaluate(theme=>document.documentElement.classList.toggle('dark',theme==='dark'),theme);
+        const inset=await settings.locator('#enrollment-panel').evaluate(panel=>{
+            const p=panel.getBoundingClientRect();return [...panel.querySelectorAll('#enrollment-label,#enrollment-start')].map(el=>{const r=el.getBoundingClientRect();return {left:r.left-p.left,right:p.right-r.right,width:r.width};});
+        });
+        check(inset.length===2&&inset.every(r=>r.width>0&&r.left>=12&&r.right>=12),`${label}/${theme}: subscription fields lack horizontal inset ${JSON.stringify(inset)}`);
+        await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-${theme}-subscription-inset.png`});
+    }
+    await settings.getByRole('button',{name:'Close settings',exact:true}).click();
     // Explicit user close, not malformed initial stopped attach, exercises lifecycle.
     await page.getByRole('button',{name:'Browser',exact:true}).click();
     const viewer=page.locator('.host-browser-viewer');
