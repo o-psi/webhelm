@@ -1,0 +1,11 @@
+[Unit]
+Description=Check canonical Helm Web main for verified deployment every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=5min
+AccuracySec=30s
+Unit=helm-web-update.service
+
+[Install]
+WantedBy=timers.target

@@ -320,8 +320,40 @@ sudo -n /usr/local/sbin/helm-web-update request
 /usr/local/sbin/helm-web-update status
 ```
 
+### Automatic main deployment
+
+Administrator provisioning enables `helm-web-update.timer`: main is checked five
+minutes after boot and five minutes after the previous job finishes, with up to
+30 seconds coalescing. Builds have a 30-minute timeout, so this is not a five-minute
+deployment latency guarantee. The timer invokes the same fixed service and flock;
+no webhook, GitHub secret, live checkout pull or additional Vessel rights are added.
+A lightweight canonical-main probe skips clone, staging, backup and build when the
+installed source is current or the candidate is retry-exhausted. The actual clone
+SHA remains authoritative if main changes between probe and clone.
+
+The root-only `/srv/helm/deployments/helm-web-attempts.json` ledger permits three
+build attempts per SHA (initial plus two retries). Recording happens atomically
+before builds; interrupted builds consume an attempt. Changed main has its own
+budget; returning to an exhausted SHA does not reset it. Manual requests obey the
+same cap. `retry_exhausted` is a clean no-build outcome. Malformed state refuses
+admission, rather than being mistaken for exhaustion. `recovery_required`, unknown
+receipt phases and interrupted `activating` receipts fence all future deployment
+before overwriting the receipt. Administrators must first inspect/recover the app
+and database; only then may they repair the receipt or remove a reviewed source
+entry to authorize another attempt. Never erase state simply to silence failures.
+
+Install reviewed files with the existing administrator-only provisioner (never
+from a Voyage). Verify `systemctl is-enabled helm-web-update.timer`,
+`systemctl list-timers helm-web-update.timer`, `systemctl cat helm-web-update.service`,
+service journal, receipt and live `.helm-source`. Verify origin `/up`, `/landing`,
+matching built assets and public HTTPS health before declaring success.
+`systemctl disable --now helm-web-update.timer` pauses future checks but does not
+cancel a running service. Offline tests: `python3 tests/deploy-update.test.py`;
+Also run `python3 tests/deploy-update-subprocess.test.py` for sandboxed updater
+control-flow checks; these install nothing and are not production acceptance evidence.
+
 The receipt reports `preparing`, `activating`, `succeeded`, `failed`,
-`recovery_required` or `current`
+`recovery_required`, `retry_exhausted` or `current`
 with the exact source commit. Check `journalctl -u helm-web-update.service` as an
 administrator for failure details. `request` returning means the job was queued,
 not that deployment succeeded. Do not issue repeated requests while one is active.

@@ -1,0 +1,64 @@
+#!/usr/bin/python3
+"""Fail-closed deployment admission. Called only under the updater's flock."""
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+
+def guard(path):
+    if not path.exists():
+        return
+    receipt = json.loads(path.read_text())
+    # An interrupted activation has no observed rollback result. Never overwrite it.
+    if receipt.get('phase') not in {'preparing', 'succeeded', 'current', 'failed', 'retry_exhausted'}:
+        raise ValueError('Receipt requires administrator recovery review')
+
+
+def admit(path, source, consume=True):
+    if not re.fullmatch(r'[0-9a-f]{40}', source):
+        raise ValueError('Invalid source identity')
+    attempts = json.loads(path.read_text()) if path.exists() else {}
+    if not isinstance(attempts, dict) or any(
+        not re.fullmatch(r'[0-9a-f]{40}', key) or type(value) is not int or not 0 <= value <= 3
+        for key, value in attempts.items()
+    ):
+        raise ValueError('Invalid attempt ledger; administrator review required')
+    count = attempts.get(source, 0)
+    if count >= 3:
+        return 1
+    if not consume:
+        return 0
+    attempts[source] = count + 1
+    temporary = path.with_name(path.name + '.tmp')
+    with temporary.open('w') as stream:
+        os.chmod(temporary, 0o600)
+        json.dump(attempts, stream, sort_keys=True)
+        stream.write('\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+    descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    return 0
+
+
+def main():
+    if len(sys.argv) == 3 and sys.argv[1] == 'guard':
+        guard(Path(sys.argv[2]))
+        return 0
+    if len(sys.argv) == 4 and sys.argv[1] in {'admit', 'check'}:
+        return admit(Path(sys.argv[2]), sys.argv[3], sys.argv[1] == 'admit')
+    raise ValueError('Expected guard RECEIPT or admit LEDGER SOURCE')
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (ValueError, OSError) as error:
+        print(f'Deployment admission refused: {error}', file=sys.stderr)
+        sys.exit(2)
