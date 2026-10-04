@@ -216,28 +216,18 @@ try {
     await page.locator('.voyage-card').filter({hasText:'Browser layout fixture'}).click();
     if(label==='mobile')await page.locator('.mobile-navigation').waitFor({state:'hidden'});
     const conversation=page.locator('.conversation:not([hidden])');
-    await page.getByRole('button',{name:'Set goal',exact:true}).click();
-    const goalDialog=page.getByRole('dialog',{name:'Set goal',exact:true});
-    await goalDialog.getByRole('textbox',{name:'Objective',exact:true}).fill('Verify the synthetic output <script>plain text</script>');
-    check(!await goalDialog.getByRole('checkbox').isChecked(),`${label}: continuation consent was preselected`);
-    check(await goalDialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Goal form overflows horizontally`);
-    await goalDialog.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-goal-review.png`});
-    await goalDialog.getByRole('button',{name:'Save paused goal',exact:true}).click();
-    await page.getByRole('button',{name:'Goal · Paused',exact:true}).waitFor();
-    check(await page.evaluate(()=>window.fixtureCommands.filter(c=>c.op==='goal_update').length===1),`${label}: Goal set was not exactly once`);
-    check(await page.evaluate(()=>window.fixtureCommands.find(c=>c.op==='goal_update').action.continue_automatically===false),`${label}: paused Goal acquired continuation`);
-    await page.getByRole('button',{name:'Goal · Paused',exact:true}).click();
-    const goalView=page.getByRole('dialog',{name:'Voyage goal',exact:true});
-    check(await goalView.getByText('Verify the synthetic output <script>plain text</script>',{exact:true}).isVisible(),`${label}: canonical Goal objective missing`);
-    check(await goalView.locator('script').count()===0,`${label}: Goal objective executed as HTML`);
-    await goalView.evaluate(el=>Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished)));
-    const goalBounds=await goalView.boundingBox();
-    check(goalBounds.width>0&&goalBounds.x>=0&&goalBounds.y>=0&&goalBounds.x+goalBounds.width<=viewport.width&&goalBounds.y+goalBounds.height<=viewport.height,`${label}: short viewport clips Goal dialog`);
-    await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-goal-state.png`});
-    await page.keyboard.press('Escape');
-    check(await page.getByRole('button',{name:'Goal · Paused',exact:true}).evaluate(el=>el===document.activeElement),`${label}: Goal close lost focus`);
-
+    const goalInput=page.locator('.conversation:not([hidden]) textarea[aria-label="Message"]');
+    await goalInput.fill('/goal Verify the synthetic output <script>plain text</script>');
+    await goalInput.press('Enter');
+    await page.waitForFunction(()=>window.fixtureCommands.filter(c=>c.op==='goal_update').length===1);
+    check(await page.evaluate(()=>window.fixtureCommands.find(c=>c.op==='goal_update').action.continue_automatically===false),`${label}: ordinary goal silently authorized continuation`);
+    await goalInput.fill('/goal');await goalInput.press('Enter');
+    const goalView=page.getByRole('region',{name:'Goal review'});
+    // Inline section is nonmodal; inspect its actual accessible container.
+    const inlineGoal=page.locator('section[aria-label="Goal review"]');
+    await inlineGoal.waitFor();check(await inlineGoal.locator('script').count()===0,`${label}: Goal objective became HTML`);
+    check(await page.getByRole('dialog').count()===0,`${label}: Goal status opened a modal`);
+    await inlineGoal.getByRole('button',{name:'Close goal review',exact:true}).click();
     await page.screenshot({path:`${output}/${runOutcome}-${label}-${viewport.width}-before-model.png`});
     check(await conversation.getByRole('button',{name:'Previous user message'}).count()===1,`${label}: turn navigation is missing`);
     // The synthetic fixture has no prior scroll restoration. Move to the last
