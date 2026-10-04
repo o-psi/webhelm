@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {sidebarActions} from '../js/sidebar-actions.js';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
-import {NativeSelect} from './components/ui/native-select';
+import {SelectCombobox} from './components/ui/select-combobox';
 import {Dialog,DialogContent,DialogTitle} from './components/ui/dialog';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuLabel,DropdownMenuSeparator,DropdownMenuTrigger} from './components/ui/dropdown-menu';
 import {Card,CardContent} from './components/ui/card';
@@ -43,9 +43,9 @@ export function VoyageActions({connection,voyage,onChanged,portalContainer,acces
                     <div id="sidebar-details-summary" hidden><Card size="sm"><CardContent><dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2"><dt>Name</dt><dd id="sidebar-details-name" className="break-all"/><dt>Process</dt><dd id="sidebar-details-process"/><dt>Latest run</dt><dd id="sidebar-details-run"/><dt>Access</dt><dd id="sidebar-details-access"/><dt>Workspace</dt><dd id="sidebar-details-workspace" className="break-all"/></dl></CardContent></Card></div>
                     <div id="sidebar-details-advanced" hidden><Collapsible><CollapsibleTrigger asChild><Button variant="ghost" type="button">Technical details</Button></CollapsibleTrigger><CollapsibleContent forceMount><pre id="sidebar-action-details"/></CollapsibleContent></Collapsible></div>
                     <label id="sidebar-name-field" hidden>Name<Input id="sidebar-name" maxLength={256}/></label>
-                    <label id="sidebar-access-field" hidden>Access mode<NativeSelect id="sidebar-access"><option value="read-only">Read only</option><option value="approval">Approval</option><option value="unrestricted">Full access</option></NativeSelect></label>
+                    <label id="sidebar-access-field" hidden>Access mode<SelectCombobox id="sidebar-access"><option value="read-only">Read only</option><option value="approval">Approval</option><option value="unrestricted">Full access</option></SelectCombobox></label>
                     <Alert id="sidebar-access-review" hidden><AlertDescription id="sidebar-access-summary"/></Alert>
-                    <label id="sidebar-branch-field" hidden>Branch through<NativeSelect id="sidebar-branch"/><Button variant="ghost" id="sidebar-branch-more" type="button">Load more branch points</Button></label>
+                    <label id="sidebar-branch-field" hidden>Branch through<SelectCombobox id="sidebar-branch"/><Button variant="ghost" id="sidebar-branch-more" type="button">Load more branch points</Button></label>
                     <label id="sidebar-retain-field" hidden>Recent messages to retain<Input id="sidebar-retain" type="number" min="0" max="4294967295" defaultValue="128"/></label>
                     <label id="sidebar-confirm-field" hidden><span id="sidebar-confirm-label"/><Input id="sidebar-confirm" autoComplete="off"/></label>
                     <footer><Button variant="ghost" id="sidebar-reconcile" type="button">Check pending receipt</Button><Button variant="outline" id="sidebar-dismiss" type="button">Close</Button><Button id="sidebar-submit" type="submit" disabled>Confirm</Button></footer>

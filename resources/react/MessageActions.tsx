@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {PencilIcon} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {Textarea} from './components/ui/textarea';
-import {NativeSelect} from './components/ui/native-select';
+import {SelectCombobox} from './components/ui/select-combobox';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from './components/ui/dialog';
 import {VoyageActions} from './VoyageActions';
 import {messagePoint,placeMessageDraft,reviewMessageDraft,type DraftPlacement,type MessageDraftReview} from './message-draft';
@@ -37,7 +37,7 @@ export function MessageActions({tab,workspace,message,connection,voyage,active,o
             {busy&&<p role="status">Reading complete message…</p>}
             {review&&<>
                 <label className="grid gap-2 text-sm">Message text<Textarea aria-label="Edited message text" value={text} onChange={event=>setText(event.target.value)} rows={8}/></label>
-                {review.draft&&<label className="grid gap-2 text-sm">Composer text<NativeSelect aria-label="Prepare edited message" value={placement} onChange={event=>setPlacement(event.target.value as DraftPlacement)}><option value="append">Keep my draft and add this text</option><option value="replace">Replace my draft text</option></NativeSelect></label>}
+                {review.draft&&<label className="grid gap-2 text-sm">Composer text<SelectCombobox aria-label="Prepare edited message" value={placement} onChange={event=>setPlacement(event.target.value as DraftPlacement)}><option value="append">Keep my draft and add this text</option><option value="replace">Replace my draft text</option></SelectCombobox></label>}
                 <p className="text-sm text-muted-foreground">{review.pictureIds.length?`${review.pictureIds.length} currently attached picture${review.pictureIds.length===1?' stays':'s stay'} in the composer.`:'No currently attached pictures will be changed.'}</p>
                 {review.historicalPictures>0&&<p className="text-sm text-muted-foreground">Pictures from this earlier message stay in its history. Add the pictures you want to include in the new draft.</p>}
             </>}

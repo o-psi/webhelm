@@ -1,4 +1,4 @@
-import {NativeSelect} from './components/ui/native-select';
+import {SelectCombobox} from './components/ui/select-combobox';
 import {Input} from './components/ui/input';
 import {Button} from './components/ui/button';
 import {Badge} from './components/ui/badge';
@@ -145,8 +145,8 @@ export function Settings({fleet,workspace,tab,location,profileOnly=false,tenant,
                     {!tab&&<p>Creating a voyage does not send a message. The Vessel sets its initial access mode; review it before your first message.</p>}
                 </>}
                 {screen==='location'&&<>
-                    <label>Vessel<NativeSelect disabled={!!tab||busy} value={vessel} onChange={event=>setVessel(event.target.value)}>{[...fleet.connections.values()].map((item:any)=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</NativeSelect></label>
-                    <label>Workspace{currentCaps?.scope==='owner'&&!tab?<Input value={path} onChange={event=>setPath(event.target.value)} placeholder="Existing absolute folder on this Vessel" disabled={busy}/>:<NativeSelect disabled={!!tab||busy} value={path} onChange={event=>setPath(event.target.value)}>{tab?<option value={path}>{path}</option>:(currentCaps?.workspaces||[]).map((item:any)=><option key={item.path} value={item.path}>{item.name} · {item.path}</option>)}</NativeSelect>}</label>
+                    <label>Vessel<SelectCombobox disabled={!!tab||busy} value={vessel} onChange={event=>setVessel(event.target.value)}>{[...fleet.connections.values()].map((item:any)=><option key={item.id} value={item.id}>{item.name}{!item.client?' · offline':''}</option>)}</SelectCombobox></label>
+                    <label>Workspace{currentCaps?.scope==='owner'&&!tab?<Input value={path} onChange={event=>setPath(event.target.value)} placeholder="Existing absolute folder on this Vessel" disabled={busy}/>:<SelectCombobox disabled={!!tab||busy} value={path} onChange={event=>setPath(event.target.value)}>{tab?<option value={path}>{path}</option>:(currentCaps?.workspaces||[]).map((item:any)=><option key={item.path} value={item.path}>{item.name} · {item.path}</option>)}</SelectCombobox>}</label>
                     <p>{tab?'An existing voyage keeps its Vessel and workspace.':'Use an existing folder on the Vessel.'}</p>
                 </>}
                 {screen==='profiles'&&<>
@@ -182,7 +182,7 @@ export function Settings({fleet,workspace,tab,location,profileOnly=false,tenant,
                     <p>These settings belong to this profile. Save the profile when you’re done.</p>
                     <label>Reasoning <output>{reasoning||'Provider default'}</output><Slider className="setup-range" min={0} max={Math.max(1,reasoningStops.length-1)} step={1} value={[Math.max(0,reasoningStops.indexOf(reasoning))]} aria-label="Reasoning" aria-valuetext={reasoning||'Provider default'} disabled={busy||reasoningStops.length<2} onValueChange={value=>setReasoning(reasoningStops[value[0]])}/></label>
                     <div className="setup-range-labels"><span>Default</span><span>{reasoningStops.at(-1)||'Default'}</span></div>
-                    <label>Service tier<NativeSelect value={service} disabled={busy} onChange={event=>setService(event.target.value)}><option value="">Provider default</option>{[...new Set<string>([...(selectedModel?.service_tiers||[]),...(service?[service]:[])])].map(value=><option key={value}>{value}</option>)}</NativeSelect></label>
+                    <label>Service tier<SelectCombobox value={service} disabled={busy} onChange={event=>setService(event.target.value)}><option value="">Provider default</option>{[...new Set<string>([...(selectedModel?.service_tiers||[]),...(service?[service]:[])])].map(value=><option key={value}>{value}</option>)}</SelectCombobox></label>
                 </>}
                 {screen==='usage'&&<>
                     <p>{selected?.label}</p>

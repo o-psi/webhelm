@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
-import {NativeSelect} from './components/ui/native-select';
+import {SelectCombobox} from './components/ui/select-combobox';
 import type {Tab,Workspace} from './workspace';
 import type {InspectionScope} from './inspection-command';
 
@@ -45,7 +45,7 @@ export function LiveInspection({tab,workspace}:{tab:Tab;workspace:Workspace}){
     },[runId,tab.freshAt,tab.stale,tab.snapshot?.revision,tab.snapshot?.run?.state,tab.snapshot?.run?.run_id,tab.snapshot?.pending_cleanup_run]);
     return <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4" aria-label="Executing-host inspection">
         <p className="m-0 text-xs text-muted-foreground">Read the executing Voyage’s workspace through its advertised tools. Git output may include changes outside this voyage. Missing output never means a clean tree.</p>
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><label className="grid gap-1 text-xs">View<NativeSelect value={scope} disabled={requesting||Boolean(runId)} onChange={event=>setScope(event.target.value as InspectionScope)}>{scopes.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</NativeSelect></label><label className="grid gap-1 text-xs">Relative path<Input value={path} disabled={requesting||Boolean(runId)} onChange={event=>setPath(event.target.value)} placeholder="."/></label><Button type="button" className="self-end" disabled={!canInspect} onClick={()=>void inspect()}>{requesting?'Checking…':runId?'Observing…':'Inspect'}</Button></div>
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><label className="grid gap-1 text-xs">View<SelectCombobox value={scope} disabled={requesting||Boolean(runId)} onChange={event=>setScope(event.target.value as InspectionScope)}>{scopes.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</SelectCombobox></label><label className="grid gap-1 text-xs">Relative path<Input value={path} disabled={requesting||Boolean(runId)} onChange={event=>setPath(event.target.value)} placeholder="."/></label><Button type="button" className="self-end" disabled={!canInspect} onClick={()=>void inspect()}>{requesting?'Checking…':runId?'Observing…':'Inspect'}</Button></div>
         {runId&&<p className="text-xs text-muted-foreground" role="status">Waiting for the exact admitted run and canonical result. Closing this view does not cancel the run.</p>}
         {error&&<p className="text-sm text-destructive" role="alert">{error}</p>}
         {result&&<pre className="min-h-0 flex-1 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-all" aria-label="Inspection result">{result}</pre>}

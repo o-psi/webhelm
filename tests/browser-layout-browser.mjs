@@ -114,7 +114,7 @@ try {
         await page.getByRole('button',{name:'Open voyage navigation',exact:true}).click();
         await page.locator('.sidebar').click({position:{x:150,y:400}});
         await page.waitForTimeout(300);
-        const selectTheme=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='var(--foreground)';document.body.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {expected,actual:getComputedStyle(document.querySelector('.sidebar [data-slot="native-select"]')).color};});
+        const selectTheme=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='var(--foreground)';document.body.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return {expected,actual:getComputedStyle(document.querySelector('.sidebar [data-slot="select-combobox-trigger"]')).color};});
         const lightness=value=>Number(value.match(/\(([\d.]+)/)?.[1]);
         check(Math.abs(lightness(selectTheme.actual)-lightness(selectTheme.expected))<0.02,`mobile: native select foreground ${JSON.stringify(selectTheme)}`);
         await page.screenshot({path:`${output}/${label}-dark-empty.png`});
@@ -146,7 +146,7 @@ try {
     check(await page.locator('.connections-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: Vessel manager overflows horizontally`);
     await page.screenshot({path:`${output}/${label}-vessel-maintenance.png`});
     check(await page.locator('#update-check').isDisabled(),`${label}: current stable build can be installed again`);
-    await page.locator('#update-channel').selectOption('nightly');
+    await page.getByRole('button',{name:'Release channel',exact:true}).click();await page.getByRole('option',{name:'Latest development build',exact:true}).click();
     await page.locator('#update-selected-version').filter({hasText:'Latest development version: 1.0.3-nightly.20260928.1.1'}).waitFor();
     await page.locator('#update-check').click();
     await page.waitForFunction(()=>window.fixtureCommands.filter(c=>c.op==='update_apply').length===1);

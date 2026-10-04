@@ -1,4 +1,4 @@
-import {NativeSelect} from './components/ui/native-select';
+import {SelectCombobox} from './components/ui/select-combobox';
 import {Button} from './components/ui/button';
 import {Alert,AlertDescription} from './components/ui/alert';
 import React, {useEffect, useRef} from 'react';
@@ -27,10 +27,10 @@ export function VesselUpdateMarkup({releases,installed}: {releases?:Releases; in
         <h4 id="update-vessel-name" className="sr-only">Vessel update</h4>
         <div className="rounded-lg bg-muted/50 px-3 py-2"><span className="text-xs font-medium text-muted-foreground">Installed version</span><p id="update-current" className="break-all font-mono text-sm font-semibold"/></div>
         <div id="update-source" className="vessel-update-source space-y-3">
-            <div className="space-y-2"><label htmlFor="update-channel" className="block text-sm font-medium">Release channel</label><NativeSelect id="update-channel" defaultValue={installedChannel} className="w-full sm:max-w-xs">
+            <div className="space-y-2"><label htmlFor="update-channel" className="block text-sm font-medium">Release channel</label><SelectCombobox id="update-channel" defaultValue={installedChannel} className="w-full sm:max-w-xs">
                 <option value="stable">Latest stable release</option>
                 <option value="nightly">Latest development build</option>
-            </NativeSelect><div id="update-selected-version" className="text-sm font-semibold">Checking published version…</div></div>
+            </SelectCombobox><div id="update-selected-version" className="text-sm font-semibold">Checking published version…</div></div>
             <Button variant="default" type="button" id="update-check" className="w-full sm:w-auto">Update this Vessel</Button>
             <p className="text-xs text-muted-foreground">The Vessel verifies the selected version, then installs it and restarts its services. Development builds may include unfinished features.</p>
         </div>

@@ -2,7 +2,7 @@ import React,{useEffect,useRef} from 'react';
 import {Button} from './components/ui/button';
 import {Card} from './components/ui/card';
 import {Input} from './components/ui/input';
-import {NativeSelect} from './components/ui/native-select';
+import {SelectCombobox} from './components/ui/select-combobox';
 import {accountEnrollment} from '../js/account-enrollment.js';
 
 // The adapter retains private device codes and receipts; React owns the controls.
@@ -20,7 +20,7 @@ export function Enrollment({connection,workspace,tenant,onRefreshed,onTitleChang
         <Card id="enrollment-panel" hidden aria-label="Add subscription account">
             <header hidden={autoOpen}><strong id="enrollment-title"/><Button variant="ghost" id="enrollment-close" type="button" aria-label="Close account sign-in">×</Button></header>
             <p>Your sign-in stays on your Vessel.</p>
-            <div id="enrollment-setup"><div id="enrollment-provider-field" hidden><label>Subscription provider<NativeSelect id="enrollment-provider"/></label></div><label>Account name<Input id="enrollment-label" maxLength={128} autoComplete="off" placeholder="Personal or Work"/></label></div>
+            <div id="enrollment-setup"><div id="enrollment-provider-field" hidden><label>Subscription provider<SelectCombobox id="enrollment-provider"/></label></div><label>Account name<Input id="enrollment-label" maxLength={128} autoComplete="off" placeholder="Personal or Work"/></label></div>
             <div id="enrollment-private" hidden><p>Enter this code on the provider’s sign-in page.</p><p id="enrollment-code" aria-label="Private sign-in code"/><a id="enrollment-link" target="_blank" rel="noopener noreferrer">Open provider sign-in ↗</a></div>
             <p id="enrollment-status" role="status"/>
             <Button variant="outline" id="enrollment-cancel" type="button" hidden>Cancel sign-in</Button>
