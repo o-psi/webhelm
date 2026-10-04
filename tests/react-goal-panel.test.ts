@@ -37,9 +37,24 @@ test('Goal dialog requires replacement consent, retains a stale draft, escapes t
         await click('Save paused goal');
         assert.match(dom.window.document.querySelector('[role="alert"]')!.textContent!,/changed since review/);
         assert.equal(input.value,'New private objective');assert.equal(actions.length,0);
-        await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+        // FocusScope restores focus from its deferred unmount callback, after the
+        // closing commit. Await that observable boundary before reopening a scope.
+        const trigger=button('Goal · Paused');
+        let stopObserving=()=>{};
+        const restored=new Promise<void>((resolve,reject)=>{
+            const focused=()=>{cleanup();resolve();};
+            const timeout=setTimeout(()=>{cleanup();reject(new Error('Goal close did not restore trigger focus within 250 ms'));},250);
+            const cleanup=()=>{clearTimeout(timeout);trigger.removeEventListener('focus',focused);};
+            stopObserving=cleanup;trigger.addEventListener('focus',focused);
+        });
+        try{
+            await act(async()=>dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+            await act(async()=>restored);
+        }finally{stopObserving();}
         assert.equal(dom.window.document.querySelector('[role="dialog"]'),null);
-        assert.equal(dom.window.document.activeElement,button('Goal · Paused'));
+        // Compare identity as a boolean: a failed DOM-node strict comparison can
+        // serialize the entire React/jsdom object graph under the memory budget.
+        assert.ok(dom.window.document.activeElement===trigger,'Goal trigger owns settled keyboard focus');
         await click('Goal · Paused');await click('Replace goal');
         const fresh=dom.window.document.querySelector('textarea')!;
         await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(fresh,'Fresh objective');fresh.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
