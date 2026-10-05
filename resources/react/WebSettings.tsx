@@ -1,11 +1,13 @@
 import React from 'react';
+import {AttentionPolicySettings} from './AttentionPolicySettings';
 import {Button} from './components/ui/button';
 import {Card,CardContent,CardDescription,CardHeader,CardTitle} from './components/ui/card';
 import {Dialog,DialogContent,DialogTitle} from './components/ui/dialog';
 import {ExternalLinkIcon,MonitorIcon,UserRoundIcon,XIcon} from 'lucide-react';
 
-export type WebSettingsPage = 'account' | 'appearance';
+export type WebSettingsPage = 'account' | 'appearance' | 'inbox';
 export type WebAccount = {
+    tenantId?: string;
     accountName?: string; accountEmail?: string; plan?: string; vesselLimit?: number;
     vessels: {id:string}[]; paidThrough?: string | null; billingEnabled?: boolean;
     billingCheckoutUrl?: string; billingPortalUrl?: string | null;
@@ -28,6 +30,7 @@ export function WebSettings({account,page,onPageChange,appearance,onAppearanceCh
             <nav className="flex flex-wrap gap-1 border-b p-3 sm:flex-col sm:flex-nowrap sm:border-r sm:border-b-0" aria-label="Settings pages">
                 <Button variant={page==='account'?'secondary':'ghost'} type="button" className="justify-start" aria-current={page==='account'?'page':undefined} onClick={()=>onPageChange('account')}><UserRoundIcon aria-hidden="true"/>HelmWeb Account</Button>
                 <Button variant={page==='appearance'?'secondary':'ghost'} type="button" className="justify-start" aria-current={page==='appearance'?'page':undefined} onClick={()=>onPageChange('appearance')}><MonitorIcon aria-hidden="true"/>Appearance</Button>
+                <Button variant={page==='inbox'?'secondary':'ghost'} type="button" className="justify-start" aria-current={page==='inbox'?'page':undefined} onClick={()=>onPageChange('inbox')}>Inbox</Button>
             </nav>
             <div className="max-h-[min(70dvh,620px)] min-h-0 space-y-4 overflow-y-auto p-5">
                 {page==='account' && <section aria-label="HelmWeb Account" className="space-y-4">
@@ -38,6 +41,7 @@ export function WebSettings({account,page,onPageChange,appearance,onAppearanceCh
                     {!account.billingEnabled && <p className="text-sm text-muted-foreground">Paid plans are being prepared. Your current connection allowance is shown above.</p>}
                     <p className="text-xs text-muted-foreground">If your plan limit falls, Helm Web keeps the Vessels you put first in Manage Vessels. Voyages already running on their hosts continue.</p>
                 </section>}
+                {page==='inbox' && <AttentionPolicySettings tenantId={account.tenantId}/>}
                 {page==='appearance' && <section aria-label="Appearance" className="space-y-4"><div><h3 className="text-lg font-semibold">Appearance</h3><p className="text-sm text-muted-foreground">Choose how Helm Web looks in this browser.</p></div><div className="grid gap-2">{(['light','dark','system'] as const).map(mode=><Button key={mode} variant={appearance===mode?'secondary':'outline'} type="button" className="justify-start capitalize" aria-pressed={appearance===mode} onClick={()=>onAppearanceChange(mode)}>{mode}</Button>)}</div></section>}
             </div>
         </div>

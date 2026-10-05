@@ -21,14 +21,14 @@ test('global settings has HelmWeb Account and Appearance pages', async () => {
     const {createRoot} = await import('react-dom/client');
     const {WebSettings} = await import('../resources/react/WebSettings.tsx');
     const root = createRoot(dom.window.document.querySelector('#mount')!);
-    let page: 'account' | 'appearance' = 'account';
+    let page: 'account' | 'appearance' | 'inbox' = 'account';
     let appearance = 'system';
     let manage = 0;
     const account = {accountName:'Captain', accountEmail:'captain@example.test', plan:'free',
         vesselLimit:8, vessels:[{id:'one'}], billingEnabled:true,
         billingCheckoutUrl:'/billing/checkout', billingPortalUrl:'https://billing.stripe.com/p/login/example'};
     const render = () => React.act(async()=>root.render(React.createElement(WebSettings, {
-        account, page, onPageChange:(value:'account'|'appearance')=>{page=value;},
+        account, page, onPageChange:(value:'account'|'appearance'|'inbox')=>{page=value;},
         appearance, onAppearanceChange:(value:string)=>{appearance=value;},
         onManageVessels:()=>{manage++;}, onClose:()=>{},
     })));

@@ -47,3 +47,28 @@ Laravel driver and Auth::login (selected serialization), not manually encoded.
 APP_ENV is local before bootstrap; runningUnitTests is asserted false so real
 CSRF enforcement cannot be bypassed by fixture mode. Prior 79a671a runtime failed
 at routed GET and is not qualification evidence.
+
+## On-demand Inbox settings (frontend qualification pending)
+
+WebSettings now exposes an Inbox page, receiving tenantId from its existing
+account bootstrap prop; no App/RequestContext or composer changes. Invalid/missing
+tenant identity fails closed. Three/seven/off selection is explicit Save only,
+with configured preference separate from unavailable/disabled effect.
+
+HTTP intents retain only bounded tenant/UUID/revision/choice/prepared metadata,
+in separate per-operation keys. Retention precedes PATCH. One outstanding record
+blocks another save; races across tabs can create separate records which each
+require exact server CAS/receipt reconciliation. At most eight retained records
+are inspected; excess/corrupt/unavailable storage blocks writes without eviction.
+Timeout, close, abort, reload and expired login never automatically resend PATCH.
+Cold receipt GET unwraps {status,body}; 404 remains unknown and blocks new semantic
+retry. Confirmed outcomes clear only identical metadata, not a newer intent.
+Journal keys are tenant-scoped, contain no auth/session/composer/private titles,
+and survive logout for same-tenant reauthentication receipt reads. 401/403 fences
+that client against further reads/writes; late generation responses are ignored.
+Dialog cleanup aborts requests but preserves intent. Reads have an eight-second
+bound and 8192-byte response cap. No new dependency or provider operation.
+
+Focused frontend source tests: tests/react-attention-policy.test.ts. These are
+not execution evidence until supervisor runs bounded focused/full/type/build and
+actual Settings render qualification. Full #18/#39 acceptance remains incomplete.
