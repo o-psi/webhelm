@@ -639,3 +639,34 @@ even after a locally recorded deadline, until an identity-bound definitive
 receipt resolves it. Recovery may move retained input to a reviewed new-voyage
 composer, but never automatically repeats the original command. Legacy creation
 timestamps do not reconstruct a conclusive admission deadline.
+
+### Uploaded image retention and cleanup
+
+The current policy is bounded retention, not selective in-session garbage
+collection. Uploaded pictures are immutable, session-owned artifacts. The image
+store permits at most **128 images and 64 MiB of image payload per session**;
+its database also has a 64 MiB storage ceiling. Capacity exhaustion refuses a new
+upload without evicting existing artifacts. Unsubmitted uploads and blobs left by
+an interrupted branch copy remain within these bounds. Removing a thumbnail,
+clearing a composer or compacting history does not reclaim uploaded artifacts.
+Branches receive independent copies, preserving their canonical image identities.
+
+Reclamation occurs through explicitly confirmed **whole-session deletion** with
+exact session identity. It requires an idle voyage, observed cleanup and no
+unresolved owned resources or retained run callbacks. Deletion removes dedicated
+managed image/artifact/resource directories, refusing unsafe symlink directories;
+cleanup is recorded as observed only after successful removal. Browser attachment
+removal does not request this lifecycle operation.
+
+This policy is grounded in Core [`e11ee1df`][image-retention-core]:
+`voyage/src/images.rs` (store quotas, immutable insertion, resolution and copying),
+`voyage/src/attachment/journal/branch.rs` (destination-owned copies before branch
+admission), and `voyage/src/attachment/journal/{lifecycle,deletion}.rs` plus
+`voyage/src/attachment/runtime/lifecycle.rs` (exact deletion, resource/cleanup
+fences and managed-directory removal). Exact-head executed runtime qualification
+for quota refusal, interrupted/unsubmitted retention, copy independence, cleanup
+refusal and deletion remains pending; tracked source/tests are not an executed
+pass. Actual native-platform qualification is also not claimed. This documentation
+does not close Web #30 or Core #313.
+
+[image-retention-core]: https://github.com/o-psi/helm.vessel.voyage/tree/e11ee1df2d39878680bd85c024d39e33eb24ab3d
