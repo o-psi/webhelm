@@ -127,6 +127,73 @@ test('an installed current channel version disables Update',t=>{
  assert.match($('update-check').textContent!,/Already up to date/);
 });
 
+test('a saved failed attempt on an older installation is clearly historical while the current version is up to date',async t=>{
+ const {root,$}=fixture(t,'1.0.3'),seen:any[]=[];
+ const key='helm-web:update:update-test:v:identity';
+ localStorage.setItem(key,JSON.stringify({operation_id:id}));
+ const message='Installed release has no declared rollback reader formats; a verified legacy migration/backup plan is required before publication';
+ const record=Object.freeze({operation_id:id,phase:'failed',current_release:hash,message});
+ const update=controls(t,root);
+ update.bind(vessel(async({command}:any)=>{seen.push(command);return reply(record);}),{...capabilities('1.0.3'),running_release:'b'.repeat(64)});
+ await settle();
+ assert.equal($('update-status').textContent,'This Vessel now runs 1.0.3. The saved failed attempt belongs to a previous installation.');
+ assert.ok(!$('update-status').textContent!.includes(message));
+ assert.equal($('update-current').textContent,'1.0.3');
+ assert.equal(($('update-check') as HTMLButtonElement).disabled,true);
+ assert.match($('update-check').textContent!,/Already up to date/);
+ assert.equal($('update-refresh').hidden,false);
+ assert.equal($('update-continue').hidden,true);
+ $('update-refresh').click();await settle();
+ assert.deepEqual(seen.map(command=>[command.op,command.operation_id]),[['update_status',id],['update_status',id]]);
+ assert.deepEqual(JSON.parse(localStorage.getItem(key)!),{operation_id:id});
+ assert.equal(record.message,message);
+});
+
+test('a failed attempt on the current installation retains its actual failure',async t=>{
+ const {root,$}=fixture(t),seen:any[]=[];
+ localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:id}));
+ const message='Preparation failed: original rollback information is unavailable.';
+ const record={operation_id:id,phase:'failed',current_release:hash,message};
+ const update=controls(t,root);
+ update.bind(vessel(async({command}:any)=>{seen.push(command);return reply(record);}),{...capabilities(),running_release:hash.toUpperCase()});
+ await settle();
+ assert.equal($('update-status').textContent,message);
+ assert.equal(($('update-check') as HTMLButtonElement).disabled,false);
+ assert.deepEqual(seen.map(command=>command.op),['update_status']);
+});
+
+test('missing or malformed release identities never relabel a failed attempt as historical',async t=>{
+ const message='Preparation failed and still needs review.';
+ const validRunning='b'.repeat(64);
+ for(const [original,running] of [[undefined,validRunning],[null,validRunning],['a'.repeat(63),validRunning],
+                                  ['g'.repeat(64),validRunning],[[hash],validRunning],[hash,undefined],[hash,'unknown'],[hash,[validRunning]]]){
+  const {root,$}=fixture(t);
+  localStorage.setItem('helm-web:update:update-test:v:identity',JSON.stringify({operation_id:id}));
+  const update=controls(t,root);
+  update.bind(vessel(async()=>reply({operation_id:id,phase:'failed',current_release:original,message})),{...capabilities(),running_release:running});
+  await settle();
+  assert.equal($('update-status').textContent,message);
+  assert.equal($('update-refresh').hidden,false);
+ }
+});
+
+test('different installation identities retain preparing ready applying and unconfirmed obligations',async t=>{
+ for(const phase of ['preparing','ready','applying','unconfirmed']){
+  const {root,$}=fixture(t),seen:any[]=[];
+  const key='helm-web:update:update-test:v:identity';localStorage.setItem(key,JSON.stringify({operation_id:id}));
+  const message=`The original update remains ${phase}.`;
+  const record={operation_id:id,phase,current_release:hash,message,expires_at:Math.floor(Date.now()/1000)+1800};
+  const update=controls(t,root);
+  update.bind(vessel(async({command}:any)=>{seen.push(command);return reply(record);}),{...capabilities('1.0.3'),running_release:'b'.repeat(64)});
+  await settle();
+  assert.equal($('update-status').textContent,message);
+  assert.equal($('update-refresh').hidden,false);
+  assert.equal($('update-continue').hidden,true);
+  assert.deepEqual(seen.map(command=>[command.op,command.operation_id]),[['update_status',id]]);
+  assert.deepEqual(JSON.parse(localStorage.getItem(key)!),{operation_id:id});
+ }
+});
+
 test('legacy stable and nightly advertisements refuse all new update effects',async t=>{
  for(const version of ['1.0.2','1.0.3-nightly.20260928.1.1']){
   const {root,$}=fixture(t,version),seen:any[]=[];
