@@ -68,3 +68,17 @@ test('typed presentation retains interrupted-work warning and turn navigation',a
     assert.match(view.recovery_notice,/unknown effects/);
     assert.equal(view.message_offset,90);assert.equal(view.total_messages,100);
 });
+
+test('ordinary 64KiB partial and live answer reassembles without oversized wire entity',()=>{
+    const reducer=new EventInitialization();reducer.accept(begin);
+    const value={partial_text:'é'.repeat(32768),live_text:'é'.repeat(32768)};
+    const serialized=JSON.stringify(value);let offset=0,sequence=0;
+    // Chunk on code points; offsets remain encoded byte positions.
+    for(let start=0;start<serialized.length;start+=4096){
+        const text=serialized.slice(start,start+4096);
+        reducer.accept({kind:'entity',fence,sequence:sequence++,entity_kind:'artifact',entity_id:`chunk:${offset}`,value:{encoding:'entity_json_utf8',entity_kind:'run',entity_id:'run',offset,total_bytes:new TextEncoder().encode(serialized).length,text}});
+        offset+=new TextEncoder().encode(text).length;
+    }
+    const scope=reducer.accept({kind:'complete',fence,sequence,cursor:40});
+    assert.deepEqual(scope.entities.get('run:run'),value);
+});
