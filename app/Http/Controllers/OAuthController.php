@@ -58,7 +58,7 @@ class OAuthController extends Controller
 
     private function clearAttempt(Request $request): void
     {
-        $request->session()->forget(['helm_oauth_attempt', 'state', 'code_verifier']);
+        $request->session()->forget(['helm_oauth_attempt', 'state', 'code_verifier', 'helm_microsoft_nonce']);
     }
 
     private function failed(Request $request): RedirectResponse

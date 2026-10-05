@@ -19,6 +19,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \Illuminate\Support\Facades\Event::listen(function (\SocialiteProviders\Manager\SocialiteWasCalled $event): void {
+            $event->extendSocialite('microsoft', \App\Services\MicrosoftProvider::class);
+        });
         // A full fleet renews up to 64 independent leases every 30 seconds.
         \Illuminate\Support\Facades\RateLimiter::for('console-tickets', function (\Illuminate\Http\Request $request) {
             $user = $request->user()?->id ?? $request->ip();

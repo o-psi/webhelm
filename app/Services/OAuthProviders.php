@@ -30,7 +30,11 @@ class OAuthProviders
         $driver->redirectUrl(rtrim(config('app.url'), '/').'/auth/'.$provider.'/callback');
         $driver->setScopes(config('oauth.providers.'.$provider.'.scopes'));
         $driver->enablePKCE();
-        $driver->setHttpClient(new Client(['connect_timeout' => 5, 'timeout' => 15]));
+        $httpOptions = ['connect_timeout' => 5, 'timeout' => 15];
+        if ($provider === 'microsoft') {
+            $httpOptions['allow_redirects'] = false;
+        }
+        $driver->setHttpClient(new Client($httpOptions));
         return $driver;
     }
 }

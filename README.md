@@ -183,9 +183,19 @@ An opt-in authenticated **Helm Web console** at `/` gives each OAuth identity a
 personal tenant with its own publicly reachable Vessel connections over a direct
 authenticated WebSocket after same-origin credential bootstrap. See
 [console setup and limits](https://github.com/o-psi/helm.vessel.voyage/blob/main/docs/helm-web.md).
-Signed-out visitors go to `/landing`. Google, X and GitHub sign-in are shown only
+Signed-out visitors go to `/landing`. Google, X, GitHub and Microsoft sign-in are shown only
 when their application credentials are configured.
 The console never executes agents on the web host.
+
+## Microsoft sign-in configuration
+
+Register a Web application in Microsoft Entra with **Any Entra ID tenant + Personal Microsoft accounts** (work/school and personal accounts). Register the exact production redirect URI `https://helm.vessel.voyage/auth/microsoft/callback`; other deployments use their canonical `APP_URL` plus `/auth/microsoft/callback`. Privately provision `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` in the deployment environment, then refresh the Laravel configuration cache through the normal deployment process. Never commit credentials or paste them into issues. App registration and live provider verification are separate from code installation.
+
+The fixed `common` authority supports both account types. Login requests `openid`, `profile` and delegated Microsoft Graph `User.Read`; it does not request offline access, collect email/contact fields, retain provider tokens, or grant app roles from Microsoft claims. Register a server-side **Web** redirect, not a SPA redirect; implicit and public-client flows are unnecessary. Credential expiry/rotation remains an operator responsibility.
+
+The locked Socialite Microsoft driver supplies signature verification, discovery and signing-key refresh. The application additionally enforces exact audience/authorized party, tenant issuer, expiry/issued time and a one-use nonce alongside the existing state and S256 PKCE checks. Identity is the signed opaque app subject qualified by tenant, never email or a guessed Graph ID format. Personal tenants remain isolated, including equal subjects from different Microsoft tenants. Microsoft profile HTTP requests use fixed endpoints, bounded timeouts and no redirects. Only `id` and `displayName` are retrieved from Graph.
+
+Run `php tests/microsoft-oauth.php`, `php tests/oauth.php` and `php tests/oauth-sqlite-race.php` after installing the lockfile. Microsoft checks use locally generated signed RSA tokens and mocked HTTP, covering both account types, key rollover, failure/refusal paths, replay, tenant identity and logout. They render the shared login controls with only unrelated Vite asset emission disabled. These checks do not establish successful production Microsoft sign-in. Verify real first/repeat login, logout, denied consent and invalid/expired callbacks after private app configuration. See [Microsoft registration](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) and [Socialite provider documentation](https://socialiteproviders.com/Microsoft/).
 
 ## Development
 

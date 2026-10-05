@@ -90,3 +90,7 @@ under the local resource limits, with PHP extensions available to child processe
 This is Linux/SQLite service-level concurrency evidence; it is not live two-user
 OAuth, HTTP/session isolation, a production load benchmark, or native MySQL and
 PostgreSQL verification. Keep those acceptance records separate.
+
+## Microsoft identity verification
+
+`php tests/microsoft-oauth.php` exercises the actual registered Socialite driver with locally generated RSA-signed ID tokens and only a mocked HTTP transport. It verifies personal and work/school login through the common authority, exact audience/issuer/nonce/expiry checks, S256 PKCE, one-use callback state, key rollover without token-exchange replay, tenant-qualified opaque subjects, empty personal tenants, safe failures, provider-token exclusion and session logout. Shared Blade login controls are rendered with only Vite asset emission disabled. Run the existing OAuth and SQLite race checks as well. Provider apps, private production credentials and live sign-in remain separately required; fixtures are not live provider evidence.

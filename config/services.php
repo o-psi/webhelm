@@ -11,6 +11,7 @@ return [
     'google' => $oauth('google', 'GOOGLE'),
     'x' => $oauth('x', 'X'),
     'github' => $oauth('github', 'GITHUB'),
+    'microsoft' => $oauth('microsoft', 'MICROSOFT') + ['tenant' => 'common'],
 
     /*
     |--------------------------------------------------------------------------
