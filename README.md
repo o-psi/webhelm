@@ -88,9 +88,11 @@ no migration for this interface cutover.
 
 The sidebar keeps attention and active voyages above recent work, with older
 settled voyages available through search or filters. New and existing voyages use
-the same compact, bottom-docked composer. **Configure** opens destination, model,
-reasoning and access choices on demand; new-draft overrides do not edit the saved
-profile. Tool activity stays compact until expanded. The discovery button opens
+the same compact, bottom-docked composer. **Configure** shows Model, Reasoning and Access in one compact group. A
+new voyage’s destination summary opens its Vessel, Workspace and Profile choices;
+an existing voyage keeps its bound destination visible. **More options** contains
+Account, Service tier and profile/execution management. New-draft overrides do not
+edit the saved profile. Tool activity stays compact until expanded. The discovery button opens
 local actions plus the executing Voyage’s advertised tools and filesystem skills
 when `skills_catalog` and workspace read access are available. Selection inserts
 text into the saved draft and never sends it. Tool inventory is a live-run view or

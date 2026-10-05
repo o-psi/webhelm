@@ -375,3 +375,20 @@
 .inbox-policy-settings>header{flex-shrink:0}
 .inbox-policy-settings>div{flex:1;min-height:0}
 .inbox-policy-settings>div>div{max-height:none}
+
+/* Both composer adapters share a small primary view and secondary disclosure. */
+.composer-configuration{display:grid;gap:8px;padding-top:2px}
+.composer-config-bound,.composer-config-destination>summary{font-size:12px;color:var(--muted-foreground);overflow-wrap:anywhere}
+.composer-config-destination>summary{cursor:pointer;line-height:1.5}
+.composer-config-destination>summary span:first-child{margin-right:8px;font-weight:500;color:var(--foreground)}
+.composer-config-destination>summary:focus-visible,.composer-config-more>summary:focus-visible{outline:2px solid var(--ring);outline-offset:3px;border-radius:4px}
+.composer-config-context{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 0}
+.composer-config-context label{display:grid;gap:3px;min-width:0;color:var(--muted-foreground);font-size:12px}
+.composer-config-context [data-slot="select-combobox-wrapper"]{min-width:0;max-width:100%}
+.composer-config-primary.composer-settings{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr) minmax(0,1fr);gap:6px}
+.composer-config-primary>.composer-option-trigger,.composer-config-primary>[data-slot="button"]{width:100%;min-width:0;justify-content:space-between}
+.composer-config-more>summary{width:fit-content;cursor:pointer;color:var(--muted-foreground);font-size:12px;line-height:1.5}
+.composer-config-advanced{display:grid;gap:8px;padding-top:8px}
+.composer-config-actions{display:flex;flex-wrap:wrap;gap:6px}
+@media(max-width:639px){.composer-config-context{grid-template-columns:repeat(2,minmax(0,1fr))}.composer-config-context>label:last-child{grid-column:1/-1}.composer-config-primary.composer-settings{grid-template-columns:repeat(2,minmax(0,1fr))}.composer-config-primary>*:first-child{grid-column:1/-1}.composer-config-primary>[data-slot="button"]{min-height:36px}.composer-config-advanced .composer-settings{display:grid;grid-template-columns:minmax(0,1fr)}.composer-config-actions>[data-slot="button"]{max-width:100%}}
+.composer-surface>[aria-label="Composer configuration"]{max-height:min(320px,45dvh);overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}

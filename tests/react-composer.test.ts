@@ -15,11 +15,12 @@ test('actual composer preserves keyboard, run transitions and command safety gat
     const {Workspace}=await import('../resources/react/workspace.ts');
     const root=createRoot(dom.window.document.querySelector('#mount')!);
     let pending:any[]=[];
-    const workspace=new Workspace(()=>new Map([['v',{client:{},journal:{entries:()=>pending}} as any]]));
+    const connection:any={id:'v',name:'Fixture Vessel',client:{},journal:{entries:()=>pending}};
+    const workspace=new Workspace(()=>new Map([['v',connection]]));
     const tab:any={key:'v:s',vessel:'v',session:'s',incarnation:'i',scope:'owner',rights:[],capabilities:[],snapshot:{revision:7,access:'approval',run:{state:'idle'}},freshAt:Date.now(),stale:false,busy:false,draft:'A message',pictures:[],draftLoading:false};
     const effects:Array<[string,string]>=[];
     workspace.act=async(key,op)=>{effects.push([key,op]);};
-    const render=async()=>{await React.act(async()=>root.render(React.createElement(Composer,{tab,workspace,onSettings:()=>{}})));};
+    const render=async()=>{await React.act(async()=>root.render(React.createElement(Composer,{tab,workspace,connection,voyage:{session_id:'s',name:'Fixture',incarnation:'i',access:'approval'},onSettings:()=>{}})));};
     const button=(label:string)=>dom.window.document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
     const keyboard=async(init:KeyboardEventInit={})=>{
         const event=new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...init});
@@ -89,6 +90,19 @@ test('actual composer preserves keyboard, run transitions and command safety gat
         const sharedLabels=[...dom.window.document.querySelectorAll('.composer-surface-footer button')].map(el=>el.getAttribute('aria-label')||el.textContent);
         assert.deepEqual(sharedLabels.slice(0,2),['Attach pictures','Discover actions, tools, skills, and files']);
         assert.ok(sharedLabels.includes('Configure'));assert.ok(sharedLabels.includes('Send'));
+        const beforeConfigure=effects.length;
+        await React.act(async()=>{[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent==='Configure')!.click();});
+        const config=dom.window.document.querySelector('[aria-label="Composer configuration"]')!;
+        assert.equal(config.querySelector<HTMLDetailsElement>('.composer-config-more')!.open,false);
+        assert.equal(config.querySelectorAll('.composer-config-primary button').length,3);
+        assert.equal(config.querySelector('.composer-config-destination'),null,'existing destination remains bound');
+        await React.act(async()=>config.querySelector<HTMLElement>('.composer-config-more summary')!.click());
+        assert.equal(config.querySelector<HTMLDetailsElement>('.composer-config-more')!.open,true);
+        assert.ok(config.querySelector('button[aria-label^="Account:"]'));
+        assert.ok(config.querySelector('button[aria-label^="Service tier:"]'));
+        assert.equal(effects.length,beforeConfigure,'configuration disclosure does not dispatch');
+        await React.act(async()=>{[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent==='Configure')!.click();});
+
         assert.equal(dom.window.document.querySelector('[aria-label="Composer configuration"]'),null);
         await keyboard();
         assert.ok(dom.window.document.querySelector('[aria-label="Goal review"]'),'bare goal status is nonmodal while message receipt is pending');

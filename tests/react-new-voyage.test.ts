@@ -41,7 +41,7 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
     const root=createRoot(document.getElementById('root')!);
     await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map(bootstrapPending?[['c',connection]]:[['c',connection],['second',second]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,recovery,onCreated:(vessel:string,process:any,message:any)=>{created.push({vessel,process,message});},onAdvanced:(location:any)=>advanced.push(location)})));
     await act(async()=>{await new Promise(resolve=>setTimeout(resolve,230));});
-    const button=(label:string)=>{const found=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>(item.getAttribute('aria-label')||item.textContent||'').trim()===label);assert.ok(found,label);return found;};
+    const button=(label:string)=>{const found=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>(label==='Account'?item.getAttribute('aria-label')?.startsWith('Account:'):(item.getAttribute('aria-label')||item.textContent||'').trim()===label));assert.ok(found,label);return found;};
     const dispose=async()=>{
         await act(async()=>root.unmount());
         // Let portal focus restoration and animation-frame cleanup settle while its
@@ -51,7 +51,7 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
         for(const [name,descriptor] of previous){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else Reflect.deleteProperty(globalThis,name);}
     };
     const ensureConfig=async()=>{if(!document.querySelector('[aria-label="Composer configuration"]'))await act(async()=>button('Configure').click());};
-    const choose=async(name:string,value:string)=>{await ensureConfig();
+    const choose=async(name:string,value:string)=>{await ensureConfig();if(name==='Service tier'){const node=document.querySelector<HTMLDetailsElement>('.composer-config-more');if(node&&!node.open)await act(async()=>node.querySelector<HTMLElement>('summary')!.click());}
         const trigger=[...document.querySelectorAll<HTMLButtonElement>('button')].find(item=>item.getAttribute('aria-label')?.startsWith(name+':'))!;
         assert.ok(trigger,name);
         await act(async()=>trigger.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})));
@@ -66,7 +66,7 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
         assert.ok(option);await act(async()=>option.click());
     };
     const releaseBootstrap=async(success:boolean)=>{connection.connecting=false;connection.status=success?'Connected':'Connection refused';connection.client=success?readyClient:null;await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,onCreated:()=>assert.fail('Bootstrap must not create a voyage'),onAdvanced:()=>{}})));};
-    const openConfig=async()=>{if(!document.querySelector('[aria-label="Composer configuration"]'))await act(async()=>button('Configure').click());};
+    const openConfig=async({details=true}={})=>{await ensureConfig();if(details){for(const selector of ['.composer-config-destination','.composer-config-more']){const node=document.querySelector<HTMLDetailsElement>(selector);if(node&&!node.open)await act(async()=>node.querySelector<HTMLElement>('summary')!.click());}}};
     const openRecovery=async()=>{if(!document.querySelector('[aria-label="Pending work review"]'))await act(async()=>button('Review pending work').click());};
     return {openConfig,openRecovery,releaseBootstrap,dom,commands,created,advanced,button,dispose,choose,chooseModel,allowModels:()=>{failModels=false;}};
 }
@@ -167,10 +167,10 @@ test('scoped workspace recovery uses an authorized choice and rechecks revocatio
 test('composer account review retains the reviewed model on reopen without saving a profile',async()=>{
     const view=await mount();
     try{
-        await view.openConfig();await act(async()=>view.button('Review account').click());
+        await view.openConfig();await act(async()=>view.button('Account').click());
         await view.choose('Model','Other model');
         await act(async()=>view.button('Use account and model').click());
-        await view.openConfig();await act(async()=>view.button('Review account').click());
+        await view.openConfig();await act(async()=>view.button('Account').click());
         assert.ok([...document.querySelectorAll('button')].some(item=>item.getAttribute('aria-label')==='Model: Other model'));
         await act(async()=>view.button('Cancel account review').click());
         await view.openConfig();await act(async()=>view.button('Create without message').click());
@@ -183,7 +183,7 @@ test('composer account review retains the reviewed model on reopen without savin
 test('reviewed account generation change prevents creation',async()=>{
     const view=await mount({accountChanged:true});
     try{
-        await view.openConfig();await act(async()=>view.button('Review account').click());
+        await view.openConfig();await act(async()=>view.button('Account').click());
         await act(async()=>view.button('Use account and model').click());
         await view.openConfig();await act(async()=>view.button('Create without message').click());
         assert.equal(view.commands.some(command=>command.op==='start_account'),false);
@@ -249,7 +249,7 @@ test('failed draft catalogue is inspectable and retry is read-only before succes
 test('account review resolves reordered exact binding to the observed label and selected radio without effects',async()=>{
     const view=await mount({reorderedProfile:true});
     try{
-        await view.openConfig();await act(async()=>view.button('Review account').click());
+        await view.openConfig();await act(async()=>view.button('Account').click());
         const section=document.querySelector<HTMLElement>('[aria-label="Review composer account"]')!;
         const expectedLabel='Account · Provider · chatgpt oauth';
         const trigger=section.querySelector<HTMLButtonElement>(`button[aria-label="Account: ${expectedLabel}"]`)!;
@@ -339,4 +339,25 @@ test('goal draft with pictures refuses before creation and retains content',asyn
   assert.equal(view.commands.some(c=>c.op==='start_account'),false);
   assert.equal(input.value,'/goal retain pictures');
  }finally{await view.dispose();}
+});
+
+
+test('Configure starts with essential choices; secondary options and destination are disclosed without creating a voyage',async()=>{
+    const view=await mount();
+    try{
+        await view.openConfig({details:false});
+        const panel=document.querySelector('[aria-label="Composer configuration"]')!;
+        assert.equal(panel.querySelector<HTMLDetailsElement>('.composer-config-more')!.open,false);
+        assert.equal(panel.querySelector<HTMLDetailsElement>('.composer-config-destination')!.open,false);
+        const labels=[...panel.querySelectorAll('.composer-config-primary button')].map(b=>b.getAttribute('aria-label'));
+        assert.equal(labels.length,3);assert.ok(labels.some(x=>x?.startsWith('Model:')));assert.ok(labels.some(x=>x?.startsWith('Reasoning:')));assert.ok(labels.some(x=>x?.startsWith('Access:')));
+        assert.equal(panel.textContent!.includes('Review account'),false);assert.equal(panel.textContent!.includes('Saved profile'),false);
+        await view.openConfig();
+        assert.equal(panel.querySelector<HTMLDetailsElement>('.composer-config-more')!.open,true);assert.equal(panel.querySelector<HTMLDetailsElement>('.composer-config-destination')!.open,true);
+        assert.ok(view.button('Account'));assert.ok(view.button('Manage profiles'));
+        await act(async()=>view.button('Configure').click());
+        await view.openConfig({details:false});
+        assert.equal(document.querySelector<HTMLDetailsElement>('.composer-config-more')!.open,false);
+        assert.equal(view.commands.some(c=>['start_account','submit','set_account_inference','set_access'].includes(c.op)),false);
+    }finally{await view.dispose();}
 });
