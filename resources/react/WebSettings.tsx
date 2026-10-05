@@ -24,9 +24,9 @@ export function WebSettings({account,page,onPageChange,appearance,onAppearanceCh
 }) {
     const limit = account.vesselLimit ?? 64;
     const count = account.vessels.length;
-    return <Dialog open onOpenChange={open=>{if(!open)onClose();}}><DialogContent showCloseButton={false} className="settings-dialog web-settings-dialog w-[min(760px,calc(100vw-24px))] max-w-none gap-0 p-0 sm:max-w-none" aria-labelledby="web-settings-title">
+    return <Dialog open onOpenChange={open=>{if(!open)onClose();}}><DialogContent showCloseButton={false} className={`settings-dialog web-settings-dialog ${page==='inbox'?'inbox-policy-settings':''} w-[min(760px,calc(100vw-24px))] max-w-none gap-0 p-0 sm:max-w-none`} aria-labelledby="web-settings-title">
         <header className="flex items-center gap-3 border-b px-5 py-4"><DialogTitle asChild><h2 id="web-settings-title" className="flex-1 text-base font-semibold">Settings</h2></DialogTitle><Button variant="ghost" size="icon" type="button" aria-label="Close settings" onClick={onClose}><XIcon aria-hidden="true"/></Button></header>
-        <div className="grid min-h-0 sm:grid-cols-[190px_minmax(0,1fr)]">
+        <div className={`grid min-h-0 ${page==='inbox'?'grid-rows-[auto_minmax(0,1fr)] sm:grid-rows-1':''} sm:grid-cols-[190px_minmax(0,1fr)]`}>
             <nav className="flex flex-wrap gap-1 border-b p-3 sm:flex-col sm:flex-nowrap sm:border-r sm:border-b-0" aria-label="Settings pages">
                 <Button variant={page==='account'?'secondary':'ghost'} type="button" className="justify-start" aria-current={page==='account'?'page':undefined} onClick={()=>onPageChange('account')}><UserRoundIcon aria-hidden="true"/>HelmWeb Account</Button>
                 <Button variant={page==='appearance'?'secondary':'ghost'} type="button" className="justify-start" aria-current={page==='appearance'?'page':undefined} onClick={()=>onPageChange('appearance')}><MonitorIcon aria-hidden="true"/>Appearance</Button>

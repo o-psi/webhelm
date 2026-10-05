@@ -99,3 +99,8 @@ test('actual Save retains unknown identity across close/reopen and reconciles wi
         assert.equal((dom.window.document.querySelector('input[value="off"]') as HTMLInputElement).checked,true);
     }finally{await React.act(async()=>root.unmount());for(const [key,value] of Object.entries(saved))(globalThis as any)[key]=value;dom.window.close();}
 });
+
+test('fetch injection is invoked as a function rather than with a client receiver',async()=>{
+    const client=new PolicyClient(tenant,(function(this:unknown){assert.equal(this,undefined);return Promise.resolve(new Response(JSON.stringify(view)));}) as typeof fetch);
+    assert.equal((await client.read()).revision,1);
+});

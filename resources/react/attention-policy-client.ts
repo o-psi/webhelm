@@ -14,7 +14,7 @@ export function outcome(value:any,intent:PolicyIntent):value is PolicyOutcome {
 }
 export class PolicyClient {
     private generation=0;private controllers=new Set<AbortController>();private authorized=true;
-    constructor(private tenant:string,private fetcher:typeof fetch=fetch){if(!isUuid(tenant))throw Error('Account unavailable.');}
+    constructor(private tenant:string,private fetcher:typeof fetch=(...args)=>fetch(...args)){if(!isUuid(tenant))throw Error('Account unavailable.');}
     close(){this.generation++;for(const controller of this.controllers)controller.abort();this.controllers.clear();}
     private async request(path:string,method='GET',body?:unknown){
         if(!this.authorized)throw Error('Sign in again to inspect the retained receipt.');
@@ -23,7 +23,8 @@ export class PolicyClient {
         try{
             const token=method==='PATCH'&&typeof document!=='undefined'?document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content:undefined;
             if(method==='PATCH'&&!token)throw Error('Policy request unavailable. Nothing sent.');
-            const response=await this.fetcher(path,{method,credentials:'same-origin',cache:'no-store',signal:controller.signal,
+            const fetcher=this.fetcher;
+            const response=await fetcher(path,{method,credentials:'same-origin',cache:'no-store',signal:controller.signal,
                 headers:{Accept:'application/json','X-Helm-Expected-Tenant':this.tenant,...(body?{'Content-Type':'application/json','X-CSRF-TOKEN':token!}:{})},...(body?{body:JSON.stringify(body)}:{})});
             if(generation!==this.generation)throw Error('Policy context changed. Retained receipt must be checked.');
             if(response.status===401||response.status===403){this.authorized=false;this.close();throw Error('Sign in again to inspect the retained receipt.');}

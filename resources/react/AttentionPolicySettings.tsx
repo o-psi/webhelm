@@ -50,7 +50,7 @@ export function AttentionPolicySettings({tenantId}:{tenantId?:string}){
         <p className="text-sm text-muted-foreground">Choose the tenant-wide stale-work preference. This does not execute, approve, archive or settle any voyage.</p>
         <fieldset disabled={!view||busy||pending}><legend>Stale-work policy</legend>{([['three_days','Three days (default)'],['seven_days','Seven days'],['off','Off']] as const).map(([value,label])=><label key={value} className="flex items-center gap-2 py-2"><input type="radio" name="attention-policy" value={value} checked={choice===value} onChange={()=>setChoice(value)}/>{label}</label>)}</fieldset>
         <p>{view?.eligibility.effect==='disabled'?'Automatic settlement is disabled.':'Automatic settlement is unavailable until authoritative work and obligation facts are available.'}</p>
-        <div className="flex gap-2"><Button type="button" disabled={!view||busy||pending||choice===view.stale_policy} onClick={()=>void save()}>Save preference</Button><Button type="button" variant="outline" disabled={busy||!isUuid(tenantId)} onClick={()=>void reconcile()}>Check current policy and receipts</Button></div>
+        <div className="flex flex-col gap-2 sm:flex-row"><Button type="button" disabled={!view||busy||pending||choice===view.stale_policy} onClick={()=>void save()}>Save preference</Button><Button type="button" variant="outline" disabled={busy||!isUuid(tenantId)} onClick={()=>void reconcile()}>Check current policy and receipts</Button></div>
         <p role="status" aria-live="polite">{busy?'Checking policy…':notice}</p>
     </section>;
 }
