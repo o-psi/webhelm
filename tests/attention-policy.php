@@ -150,11 +150,11 @@ policyCheck(DB::table('sessions')->where('id', $sessionId)->exists(), 'actual se
 policyCheck(!$app->runningUnitTests(), 'real CSRF not unit-test bypassed');
 $cookieName = config('session.cookie');
 $cookie = app('encrypter')->encrypt(Illuminate\Cookie\CookieValuePrefix::create($cookieName, app('encrypter')->getKey()).$sessionId, false);
-$routed = function (string $method, string $path, ?array $body = null, bool $signedIn = true, ?string $token = null) use ($http, $cookieName, $cookie): Symfony\Component\HttpFoundation\Response {
+$routed = function (string $method, string $path, ?array $body = null, bool $signedIn = true, ?string $token = null, ?string $expectedTenant = null) use ($http, $cookieName, $cookie, $other): Symfony\Component\HttpFoundation\Response {
     auth()->forgetGuards();
     app('session')->forgetDrivers();
     $request = Illuminate\Http\Request::create($path, $method, [], $signedIn ? [$cookieName => $cookie] : [], [],
-        ['HTTP_ACCEPT' => 'application/json', 'CONTENT_TYPE' => 'application/json', 'HTTP_X_CSRF_TOKEN' => $token ?? ''],
+        ['HTTP_ACCEPT' => 'application/json', 'CONTENT_TYPE' => 'application/json', 'HTTP_X_CSRF_TOKEN' => $token ?? '', 'HTTP_X_HELM_EXPECTED_TENANT' => $expectedTenant ?? $other->id],
         $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR));
     $response = $http->handle($request);
     $http->terminate($request, $response);
@@ -164,6 +164,14 @@ $httpRead = $routed('GET', '/console/attention-policy');
 fwrite(STDERR, 'attention-policy routed_get status='.$httpRead->getStatusCode()."\n");
 policyCheck($httpRead->getStatusCode() === 200 && str_contains($httpRead->headers->get('Cache-Control'), 'no-store'), 'routed session GET private status='.$httpRead->getStatusCode());
 policyCheck($routed('GET', '/console/attention-policy', null, false)->getStatusCode() === 401, 'routed anonymous refused');
+// The active cookie belongs to the other tenant; an old tab's expectation must
+// not read or mutate that account, even with a currently valid CSRF token.
+$staleScopeOperation = (string) Str::uuid();
+policyCheck($routed('GET', '/console/attention-policy', null, true, null, $tenant->id)->getStatusCode() === 403, 'stale account scope GET refused');
+policyCheck($routed('PATCH', '/console/attention-policy', ['operation_id' => $staleScopeOperation, 'expected_revision' => 0, 'stale_policy' => 'off'], true, $csrf, $tenant->id)->getStatusCode() === 403, 'stale account scope PATCH refused');
+policyCheck($a->read($other->id)['revision'] === 0 && $a->receipt($other->id, $staleScopeOperation) === null, 'stale scope has no mutation or admitted receipt');
+policyCheck($routed('GET', '/console/attention-policy/receipts/'.$id, null, true, null, $tenant->id)->getStatusCode() === 403, 'stale account scope receipt refused');
+
 $httpOperation = (string) Str::uuid();
 $httpPayload = ['operation_id' => $httpOperation, 'expected_revision' => 0, 'stale_policy' => 'seven_days'];
 policyCheck($routed('PATCH', '/console/attention-policy', $httpPayload)->getStatusCode() === 419, 'routed CSRF missing rejected');

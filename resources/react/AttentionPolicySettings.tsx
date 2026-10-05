@@ -28,7 +28,7 @@ export function AttentionPolicySettings({tenantId}:{tenantId?:string}){
         setView(null);setPending(true);setNotice('');
         if(!isUuid(tenantId)){setNotice('Account unavailable. Policy changes are disabled.');return;}
         let current:{client:PolicyClient;journal:PolicyIntents;active:boolean};
-        try{current={client:new PolicyClient(),journal:new PolicyIntents(localStorage,tenantId),active:true};}catch{setNotice('Policy intent storage unavailable. Nothing will be sent.');return;}
+        try{current={client:new PolicyClient(tenantId),journal:new PolicyIntents(localStorage,tenantId),active:true};}catch{setNotice('Policy intent storage unavailable. Nothing will be sent.');return;}
         context.current=current;void reconcile();
         const changed=()=>{current.client.close();void reconcile();};
         window.addEventListener('storage',changed);

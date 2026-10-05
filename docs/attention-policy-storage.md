@@ -72,3 +72,11 @@ bound and 8192-byte response cap. No new dependency or provider operation.
 Focused frontend source tests: tests/react-attention-policy.test.ts. These are
 not execution evidence until supervisor runs bounded focused/full/type/build and
 actual Settings render qualification. Full #18/#39 acceptance remains incomplete.
+
+The settings HTTP client binds every read, write and receipt lookup to its validated
+bootstrap tenant through `X-Helm-Expected-Tenant`. The server refuses a mismatch
+with the authenticated tenant before accessing policy storage. This expectation
+is not authority and never selects a tenant; it prevents an old tab from applying
+retained intent under an account changed in another window. Foreign-scope intents
+are refused before sending. Direct authenticated API callers without a scope hint
+remain confined to their current tenant.

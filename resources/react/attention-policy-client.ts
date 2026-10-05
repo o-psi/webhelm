@@ -14,7 +14,7 @@ export function outcome(value:any,intent:PolicyIntent):value is PolicyOutcome {
 }
 export class PolicyClient {
     private generation=0;private controllers=new Set<AbortController>();private authorized=true;
-    constructor(private fetcher:typeof fetch=fetch){}
+    constructor(private tenant:string,private fetcher:typeof fetch=fetch){if(!isUuid(tenant))throw Error('Account unavailable.');}
     close(){this.generation++;for(const controller of this.controllers)controller.abort();this.controllers.clear();}
     private async request(path:string,method='GET',body?:unknown){
         if(!this.authorized)throw Error('Sign in again to inspect the retained receipt.');
@@ -24,7 +24,7 @@ export class PolicyClient {
             const token=method==='PATCH'&&typeof document!=='undefined'?document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content:undefined;
             if(method==='PATCH'&&!token)throw Error('Policy request unavailable. Nothing sent.');
             const response=await this.fetcher(path,{method,credentials:'same-origin',cache:'no-store',signal:controller.signal,
-                headers:{Accept:'application/json',...(body?{'Content-Type':'application/json','X-CSRF-TOKEN':token!}:{})},...(body?{body:JSON.stringify(body)}:{})});
+                headers:{Accept:'application/json','X-Helm-Expected-Tenant':this.tenant,...(body?{'Content-Type':'application/json','X-CSRF-TOKEN':token!}:{})},...(body?{body:JSON.stringify(body)}:{})});
             if(generation!==this.generation)throw Error('Policy context changed. Retained receipt must be checked.');
             if(response.status===401||response.status===403){this.authorized=false;this.close();throw Error('Sign in again to inspect the retained receipt.');}
             const reader=response.body?.getReader();if(!reader)throw Error('Policy response unavailable.');
@@ -36,8 +36,8 @@ export class PolicyClient {
         }finally{clearTimeout(timer);this.controllers.delete(controller);}
     }
     async read(){const result=await this.request('/console/attention-policy');if(result.status!==200||!policyView(result.body))throw Error('Policy state unconfirmed.');return result.body;}
-    async save(intent:PolicyIntent){if(!isUuid(intent.operation_id))throw Error('Policy identity unavailable.');const result=await this.request('/console/attention-policy','PATCH',{operation_id:intent.operation_id,expected_revision:intent.expected_revision,stale_policy:intent.stale_policy});if(!outcome(result,intent))throw Error('Policy outcome unknown. Check original receipt.');return result;}
-    async receipt(intent:PolicyIntent){const result=await this.request(`/console/attention-policy/receipts/${intent.operation_id}`);
+    async save(intent:PolicyIntent){if(intent.tenant!==this.tenant||!isUuid(intent.operation_id))throw Error('Policy identity unavailable.');const result=await this.request('/console/attention-policy','PATCH',{operation_id:intent.operation_id,expected_revision:intent.expected_revision,stale_policy:intent.stale_policy});if(!outcome(result,intent))throw Error('Policy outcome unknown. Check original receipt.');return result;}
+    async receipt(intent:PolicyIntent){if(intent.tenant!==this.tenant||!isUuid(intent.operation_id))throw Error('Policy identity unavailable.');const result=await this.request(`/console/attention-policy/receipts/${intent.operation_id}`);
         if(result.status===404&&result.body?.error==='receipt_not_found'&&result.body?.outcome==='unknown'&&result.body?.retry_with_new_identity===false)return null;
         if(result.status!==200||!outcome(result.body,intent))throw Error('Policy receipt unconfirmed.');return result.body as PolicyOutcome;
     }

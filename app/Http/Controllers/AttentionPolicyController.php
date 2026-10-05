@@ -13,6 +13,11 @@ final class AttentionPolicyController extends Controller
     private function tenant(Request $request): string
     {
         abort_unless($request->user()?->tenant_id, 403);
+        // A stale tab must not apply an intent under a newly authenticated account.
+        // This expectation never selects or grants tenant authority.
+        $expected = $request->header('X-Helm-Expected-Tenant');
+        abort_if($expected !== null && (!Str::isUuid($expected)
+            || strtolower($expected) !== strtolower($request->user()->tenant_id)), 403);
         return $request->user()->tenant_id;
     }
 
