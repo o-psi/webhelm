@@ -99,6 +99,68 @@ test('uncertain command is journaled once and reconciled without replay', async 
     assert.equal(f.commands.filter(c => c.op === 'submit').length, 2);
     f.workspace.close();
 });
+const rewriteEntry = (f: ReturnType<typeof fixture>, change: (entry: any) => any) => {
+    const entry = f.connection.journal.entries()[0];
+    f.storage.setItem(f.connection.journal.key + entry.command_id, JSON.stringify(change(entry)));
+    return entry;
+};
+test('unknown receipt settles only after the command can no longer be admitted', async () => {
+    const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
+    f.workspace.draft(key, 'Not delivered'); f.mode('unknown'); await f.workspace.act(key, 'submit');
+    const entry = f.connection.journal.entries()[0];
+    assert.ok(entry.expires_at_ms > Date.now(), 'the journal records the admission deadline');
+    await f.workspace.reconcile(key);
+    assert.equal(f.storage.length, 1, 'an unexpired unknown may still be admitted');
+    assert.equal(f.workspace.tabs.get(key)?.receiptStates[entry.command_id], 'unknown');
+    assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!, 'submit'), false);
+    rewriteEntry(f, value => ({...value, expires_at_ms: Date.now() - 1}));
+    await f.workspace.reconcile(key);
+    assert.equal(f.storage.length, 0);
+    assert.match(f.workspace.tabs.get(key)?.notice || '', /message was not sent\. You can send it again\./);
+    assert.equal(f.workspace.tabs.get(key)?.receiptStates[entry.command_id], undefined);
+    assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!, 'submit'), true);
+    assert.equal(f.commands.filter(c => c.op === 'submit').length, 1, 'settling never replays the command');
+    f.workspace.close();
+});
+test('unknown receipt for an entry without a recorded deadline uses its creation time', async () => {
+    const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
+    f.workspace.draft(key, 'Older entry'); f.mode('unknown'); await f.workspace.act(key, 'submit');
+    rewriteEntry(f, ({expires_at_ms: _dropped, ...value}) => ({...value, created_at: Date.now() - 59000}));
+    await f.workspace.reconcile(key);
+    assert.equal(f.storage.length, 1, 'sixty seconds have not passed since the entry was written');
+    rewriteEntry(f, value => ({...value, created_at: Date.now() - 60001}));
+    await f.workspace.reconcile(key);
+    assert.equal(f.storage.length, 0);
+    f.workspace.draft(key, 'No usable time'); await f.workspace.act(key, 'submit');
+    rewriteEntry(f, ({expires_at_ms: _dropped, created_at: _created, ...value}) => value);
+    await f.workspace.reconcile(key);
+    assert.equal(f.storage.length, 1, 'an entry with no usable time stays pending');
+    f.workspace.close();
+});
+test('uncertain receipt reads keep an expired unknown entry pending', async () => {
+    const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
+    f.workspace.draft(key, 'Hold'); f.mode('unknown'); await f.workspace.act(key, 'submit');
+    const entry = rewriteEntry(f, value => ({...value, expires_at_ms: Date.now() - 1}));
+    const exchange = f.connection.client.exchange.bind(f.connection.client);
+    const receipt = (reply: (command: any) => any) => { f.connection.client.exchange = async (payload: any) => payload.command.op === 'receipt' ? reply(payload.command) : exchange(payload); };
+    const body = {session_id: 'a', result: {command_id: entry.command_id, status: 'unknown'}};
+    receipt(() => ({protocol: 1, outcome_unknown: true, result: body}));
+    await f.workspace.reconcile(key); assert.equal(f.storage.length, 1, 'uncertain outcome');
+    receipt(() => ({protocol: 1, outcome_unknown: false, error: 'unavailable', result: body}));
+    await f.workspace.reconcile(key); assert.equal(f.storage.length, 1, 'error reply');
+    receipt(() => ({protocol: 1, outcome_unknown: false, result: {...body, result: {...body.result, command_id: 'another'}}}));
+    await f.workspace.reconcile(key); assert.equal(f.storage.length, 1, 'receipt for another command');
+    receipt(() => ({protocol: 1, outcome_unknown: false, result: {...body, session_id: 'b'}}));
+    await f.workspace.reconcile(key); assert.equal(f.storage.length, 1, 'receipt for another voyage');
+    receipt(() => Promise.reject(new Error('offline')));
+    await f.workspace.reconcile(key); assert.equal(f.storage.length, 1, 'transport failure');
+    f.connection.client.exchange = exchange; f.mode('unknown_after_restart');
+    await f.workspace.reconcile(key);
+    assert.equal(f.storage.length, 1, 'unknown after restart stays locked past the deadline');
+    assert.equal(f.workspace.tabs.get(key)?.receiptStates[entry.command_id], 'unknown_after_restart');
+    assert.equal(f.commands.filter(c => c.op === 'submit').length, 1);
+    f.workspace.close();
+});
 test('confirmed admission clears only the submitted draft', async () => {
     const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
     f.workspace.draft(key, 'Hello'); await f.workspace.act(key, 'submit');
