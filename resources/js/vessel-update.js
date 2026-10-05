@@ -24,6 +24,7 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
     const active = (c, n) => context?.c === c && generation === n;
     const mayPrepare = record => !record || ['idle','discarded','complete','failed','ready'].includes(record.phase);
     const reviewExpired = record => record?.phase === 'ready' && (!Number.isSafeInteger(record.expires_at) || Date.now() >= record.expires_at * 1000);
+    const isReleaseIdentity = value => typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
     const selectedRelease = () => {
         const channel = $('update-channel').value;
         const release = releaseInfo(channel);
@@ -59,7 +60,12 @@ export function vesselUpdate(root, {show, resume, releaseInfo = /** @type {(chan
             : 'The saved prepared build has expired. Its operation is retained for status review after installer bootstrap.';
         const retainedPhase = phase === 'preparing' ? 'The saved update is preparing. Installation will not be approved by this client.'
             : phase === 'ready' ? 'The saved preparation remains available for status review.' : phaseMessage[phase];
-        const operationStatus = statusOverride || (expired ? expiryMessage : record?.message || (!supported ? retainedPhase : phaseMessage[phase]) || 'Check the current update status.');
+        const historicalFailure = phase === 'failed' && isReleaseIdentity(record?.current_release)
+            && isReleaseIdentity(context?.caps.running_release)
+            && record.current_release.toLowerCase() !== context.caps.running_release.toLowerCase();
+        const operationStatus = statusOverride || (historicalFailure
+            ? `This Vessel now runs ${context.caps.version || 'unknown'}. The saved failed attempt belongs to a previous installation.`
+            : expired ? expiryMessage : record?.message || (!supported ? retainedPhase : phaseMessage[phase]) || 'Check the current update status.');
         $('update-alert').hidden = phase === 'idle' && !statusOverride && !unsupported;
         text('update-status', unsupported ? `${unsupported}${record?.operation_id ? ` Saved update: ${operationStatus}` : ''}` : operationStatus);
         $('update-source').hidden = !supported || !mayPrepare(record) || Boolean(authorized && (phase === 'ready' || phase === 'preparing'));
