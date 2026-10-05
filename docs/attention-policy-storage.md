@@ -37,7 +37,6 @@ GET60/min. Receipts retain at most bounded scalar request hash and small policy
 response, not transcripts. Data-preserving rollback is mandatory.
 
 Offline checks: `php tests/attention-policy.php` with installed repository vendor
-and SQLite. Tests create isolated in-memory schema, never production migrations.
-Supervisor must qualify HTTP auth/CSRF/no-store, SQLite concurrent-process races
-and the bounded checks before integration; test source alone is not passing proof.
+and SQLite. Tests isolate config/routes/services caches, storage/views/logs, fake key and file-backed SQLite before bootstrap, assert selected paths before schema writes, and clean only their owned temporary root. Fork races use independent connections and ready/start barriers with bounded owned-child termination. Routed session/CSRF/auth/logout and cold receipt checks do not use OAuth or providers. Capacity is seeded in bounded batches.
+Supervisor must execute the bounded routed/race checks before integration; test source alone is not passing proof.
 Production migrations/publication are supervisor-owned. No dependencies added.

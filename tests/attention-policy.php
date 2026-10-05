@@ -1,14 +1,53 @@
 <?php
 
 // Offline isolated SQLite checks. Run with the repository's installed vendor tree.
-putenv('APP_ENV=testing');
-putenv('DB_CONNECTION=sqlite');
-putenv('DB_DATABASE=:memory:');
-putenv('CACHE_STORE=array');
-putenv('APP_KEY=base64:'.base64_encode(str_repeat('p', 32)));
+$ownedRoot = sys_get_temp_dir().'/attention-policy-'.bin2hex(random_bytes(12));
+mkdir($ownedRoot, 0700);
+foreach (['storage/framework/sessions', 'storage/framework/cache/data', 'storage/views', 'storage/logs'] as $directory) {
+    mkdir($ownedRoot.'/'.$directory, 0700, true);
+}
+touch($ownedRoot.'/database.sqlite');
+$originalEnvironment = [];
+foreach ([
+    'APP_ENV' => 'testing', 'APP_KEY' => 'base64:'.base64_encode(str_repeat('p', 32)),
+    'DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => $ownedRoot.'/database.sqlite',
+    'SESSION_DRIVER' => 'database', 'CACHE_STORE' => 'array', 'LOG_CHANNEL' => 'single',
+    'APP_CONFIG_CACHE' => $ownedRoot.'/absent-config.php',
+    'APP_ROUTES_CACHE' => $ownedRoot.'/absent-routes.php',
+    'APP_EVENTS_CACHE' => $ownedRoot.'/absent-events.php',
+    'APP_SERVICES_CACHE' => $ownedRoot.'/absent-services.php',
+    'APP_PACKAGES_CACHE' => $ownedRoot.'/absent-packages.php',
+    'LARAVEL_STORAGE_PATH' => $ownedRoot.'/storage', 'VIEW_COMPILED_PATH' => $ownedRoot.'/storage/views',
+] as $key => $value) {
+    $originalEnvironment[$key] = [getenv($key), $_ENV[$key] ?? null, $_SERVER[$key] ?? null];
+    putenv($key.'='.$value);
+    $_ENV[$key] = $_SERVER[$key] = $value;
+}
+$parentPid = getmypid();
+register_shutdown_function(function () use ($ownedRoot, $originalEnvironment, $parentPid): void {
+    if (getmypid() !== $parentPid) { return; }
+    foreach ($originalEnvironment as $key => [$environment, $env, $server]) {
+        putenv($environment === false ? $key : $key.'='.$environment);
+        if ($env === null) { unset($_ENV[$key]); } else { $_ENV[$key] = $env; }
+        if ($server === null) { unset($_SERVER[$key]); } else { $_SERVER[$key] = $server; }
+    }
+    if (is_dir($ownedRoot)) {
+        $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ownedRoot, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
+        foreach ($files as $file) {
+            if ($file->isDir() && !$file->isLink()) { rmdir($file->getPathname()); } else { unlink($file->getPathname()); }
+        }
+        rmdir($ownedRoot);
+    }
+});
 require __DIR__.'/../vendor/autoload.php';
 $app = require __DIR__.'/../bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+if (Illuminate\Support\Facades\DB::connection()->getDriverName() !== 'sqlite'
+    || Illuminate\Support\Facades\DB::connection()->getDatabaseName() !== $ownedRoot.'/database.sqlite'
+    || config('view.compiled') !== $ownedRoot.'/storage/views'
+    || $app->storagePath() !== $ownedRoot.'/storage') {
+    throw new RuntimeException('Fixture isolation failed before schema writes');
+}
 foreach (glob(__DIR__.'/../database/migrations/*.php') as $file) {
     (require $file)->up();
 }
@@ -56,6 +95,17 @@ policyCheck($b->change($tenant->id, $loser, ['expected_revision' => 0, 'stale_po
 policyCheck(DB::table('attention_policy_receipts')->count() === 4, 'duplicates do not grow storage');
 policyCheck(AttentionPolicy::eligibility('seven_days')['automatic_settlement'] === false, 'no automatic settlement');
 
+// Seed quota without 10000 mutations; preserve exact existing receipts.
+$seed = [];
+for ($index = 0; $index < AttentionPolicy::MAX_RECEIPTS - 4; $index++) {
+    $seed[] = ['tenant_id' => $tenant->id, 'operation_id' => (string) Str::uuid(),
+        'request_hash' => str_repeat('0', 64), 'status' => 422, 'response' => '{}', 'recorded_at' => now()];
+    if (count($seed) === 100) { DB::table('attention_policy_receipts')->insert($seed); $seed = []; }
+}
+if ($seed) { DB::table('attention_policy_receipts')->insert($seed); }
+policyCheck($a->change($tenant->id, (string) Str::uuid(), ['expected_revision' => 2, 'stale_policy' => 'off'])['status'] === 507, 'capacity refuses new admission');
+policyCheck($a->change($tenant->id, $id, $payload) === $first && $a->receipt($tenant->id, $id) === $first, 'capacity preserves duplicates and cold lookup');
+
 // Exercise controller boundary without a provider or HTTP server.
 $controller = new App\Http\Controllers\AttentionPolicyController();
 $request = Illuminate\Http\Request::create('/console/attention-policy', 'GET');
@@ -78,12 +128,55 @@ try {
     policyCheck($error->getStatusCode() === 403, 'controller refuses absent tenant');
 }
 
+
+// Real routed requests through web/session/auth/CSRF middleware. No OAuth.
+config(['helm.enabled' => true, 'session.driver' => 'database', 'session.encrypt' => false]);
+$app->instance('env', 'local'); // Do not allow testing-mode CSRF bypass.
+$http = $app->make(Illuminate\Contracts\Http\Kernel::class);
+$user = App\Models\User::create(['name' => 'HTTP policy', 'tenant_id' => $other->id]);
+$sessionId = Str::random(40);
+$csrf = Str::random(40);
+$loginKey = auth()->guard()->getName();
+DB::table('sessions')->insert(['id' => $sessionId, 'user_id' => $user->id,
+    'payload' => base64_encode(serialize(['_token' => $csrf, $loginKey => $user->id, 'helm_operator_until' => time() + 600])),
+    'last_activity' => time()]);
+$cookieName = config('session.cookie');
+$cookie = app('encrypter')->encrypt(Illuminate\Cookie\CookieValuePrefix::create($cookieName, app('encrypter')->getKey()).$sessionId, false);
+$routed = function (string $method, string $path, ?array $body = null, bool $signedIn = true, ?string $token = null) use ($http, $cookieName, $cookie): Symfony\Component\HttpFoundation\Response {
+    auth()->forgetGuards();
+    app('session')->forgetDrivers();
+    $request = Illuminate\Http\Request::create($path, $method, [], $signedIn ? [$cookieName => $cookie] : [], [],
+        ['HTTP_ACCEPT' => 'application/json', 'CONTENT_TYPE' => 'application/json', 'HTTP_X_CSRF_TOKEN' => $token ?? ''],
+        $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR));
+    $response = $http->handle($request);
+    $http->terminate($request, $response);
+    return $response;
+};
+$httpRead = $routed('GET', '/console/attention-policy');
+policyCheck($httpRead->getStatusCode() === 200 && str_contains($httpRead->headers->get('Cache-Control'), 'no-store'), 'routed session GET private');
+policyCheck($routed('GET', '/console/attention-policy', null, false)->getStatusCode() === 401, 'routed anonymous refused');
+$httpOperation = (string) Str::uuid();
+$httpPayload = ['operation_id' => $httpOperation, 'expected_revision' => 0, 'stale_policy' => 'seven_days'];
+policyCheck($routed('PATCH', '/console/attention-policy', $httpPayload)->getStatusCode() === 419, 'routed CSRF missing rejected');
+$httpWrite = $routed('PATCH', '/console/attention-policy', $httpPayload, true, $csrf);
+policyCheck($httpWrite->getStatusCode() === 200, 'routed CSRF valid PATCH');
+policyCheck($routed('GET', '/console/attention-policy/receipts/'.$id)->getStatusCode() === 404, 'routed foreign receipt inaccessible');
+policyCheck($routed('GET', '/console/attention-policy/receipts/'.$httpOperation)->getStatusCode() === 200, 'routed cold receipt');
+foreach ([['operation_id' => (string) Str::uuid()],
+    ['operation_id' => (string) Str::uuid(), 'expected_revision' => 1, 'stale_policy' => ['nested']],
+    ['operation_id' => (string) Str::uuid(), 'expected_revision' => -1, 'stale_policy' => 'off']] as $invalidInput) {
+    policyCheck($routed('PATCH', '/console/attention-policy', $invalidInput, true, $csrf)->getStatusCode() === 422, 'routed missing/nested/invalid validation');
+}
+policyCheck($routed('POST', '/console/logout', [], true, $csrf)->getStatusCode() === 302, 'routed logout');
+policyCheck($routed('GET', '/console/attention-policy')->getStatusCode() === 401, 'old session denied after logout');
+$app->instance('env', 'testing');
+
 // Actual two-process race against a disposable file-backed SQLite copy. No fallback
 // to pretending sequential calls are a race when pcntl is unavailable.
 if (!function_exists('pcntl_fork')) {
     throw new RuntimeException('Concurrent SQLite qualification requires pcntl; race not run.');
 }
-$database = tempnam(sys_get_temp_dir(), 'attention-policy-');
+$database = tempnam($ownedRoot, 'race-');
 unlink($database);
 DB::statement("VACUUM INTO '".str_replace("'", "''", $database)."'");
 $results = [];
@@ -101,13 +194,20 @@ try {
             throw new RuntimeException('Cannot fork SQLite race client');
         }
         if ($pid === 0) {
+            // Child must not run the parent owned-root shutdown cleanup.
             try {
                 config(['database.connections.sqlite.database' => $database]);
                 DB::purge('sqlite');
                 DB::statement('PRAGMA busy_timeout = 5000');
+                file_put_contents($database.'.ready'.$phase.$index, 'ready');
+                $deadline = microtime(true) + 5;
+                while (!file_exists($database.'.start'.$phase)) {
+                    if (microtime(true) > $deadline) { throw new RuntimeException('Race start barrier timeout'); }
+                    usleep(1000);
+                }
                 // Same exact operation races: both must return identical durable receipt.
                 $result = (new AttentionPolicyStore())->change($other->id, $phase === 'duplicate' ? $raceId : (string) Str::uuid(),
-                    ['expected_revision' => $phase === 'duplicate' ? 0 : 1, 'stale_policy' => 'seven_days']);
+                    ['expected_revision' => $phase === 'duplicate' ? 1 : 2, 'stale_policy' => 'seven_days']);
                 file_put_contents($resultPath, json_encode($result, JSON_THROW_ON_ERROR));
                 exit(0);
             } catch (Throwable $error) {
@@ -117,14 +217,24 @@ try {
         }
         $children[] = $pid;
     }
+    $deadline = microtime(true) + 5;
+    while (!file_exists($database.'.ready'.$phase.'0') || !file_exists($database.'.ready'.$phase.'1')) {
+        if (microtime(true) > $deadline) { throw new RuntimeException('Race ready barrier timeout'); }
+        usleep(1000);
+    }
+    file_put_contents($database.'.start'.$phase, 'start');
     foreach ($children as $pid) {
-        pcntl_waitpid($pid, $status);
+        $deadline = microtime(true) + 6;
+        while (pcntl_waitpid($pid, $status, WNOHANG) === 0) {
+            if (microtime(true) > $deadline) { throw new RuntimeException('Owned race child timeout'); }
+            usleep(1000);
+        }
         policyCheck(pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0, 'race client completed');
     }
     $left = json_decode(file_get_contents($results[0]), true, flags: JSON_THROW_ON_ERROR);
     $right = json_decode(file_get_contents($results[1]), true, flags: JSON_THROW_ON_ERROR);
     if ($phase === 'duplicate') {
-        policyCheck($left === $right && $left['body']['revision'] === 1, 'concurrent duplicates exact receipt once');
+        policyCheck($left === $right && $left['body']['revision'] === 2, 'concurrent duplicates exact receipt once');
     } else {
         $statuses = [$left['status'], $right['status']];
         sort($statuses);
@@ -132,11 +242,17 @@ try {
     }
     config(['database.connections.sqlite.database' => $database]);
     DB::purge('sqlite');
-    policyCheck((new AttentionPolicyStore())->read($other->id)['revision'] === ($phase === 'duplicate' ? 1 : 2), 'race mutation happened once');
+    policyCheck((new AttentionPolicyStore())->read($other->id)['revision'] === ($phase === 'duplicate' ? 2 : 3), 'race mutation happened once');
+    $children = [];
     DB::disconnect('sqlite');
     foreach ($results as $path) { unlink($path); }
     }
 } finally {
+    foreach ($children as $pid) {
+        if (pcntl_waitpid($pid, $status, WNOHANG) === 0) { posix_kill($pid, SIGTERM); pcntl_waitpid($pid, $status); }
+    }
+    foreach (glob($database.'.ready*') as $path) { unlink($path); }
+    foreach (glob($database.'.start*') as $path) { unlink($path); }
     DB::disconnect('sqlite');
     foreach (array_merge($results, [$database, $database.'-wal', $database.'-shm', $database.'-journal']) as $path) {
         if (file_exists($path)) {
