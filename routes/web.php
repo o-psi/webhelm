@@ -36,6 +36,9 @@ Route::middleware([ConsoleOperator::class,ConsoleHeaders::class])->group(functio
     Route::post('/console/qualification/browser/{job}/response', [\App\Http\Controllers\BrowserQualificationController::class, 'reply'])
         ->whereUuid('job')->name('qualification.browser.response')->middleware('throttle:60,1');
     Route::post('/billing/checkout', BillingCheckoutController::class)->name('billing.checkout')->middleware('throttle:10,1');
+    Route::get('/console/attention-policy', [\App\Http\Controllers\AttentionPolicyController::class, 'show'])->name('attention-policy.show');
+    Route::patch('/console/attention-policy', [\App\Http\Controllers\AttentionPolicyController::class, 'update'])->name('attention-policy.update')->middleware('throttle:30,1');
+    Route::get('/console/attention-policy/receipts/{operation}', [\App\Http\Controllers\AttentionPolicyController::class, 'receipt'])->whereUuid('operation')->name('attention-policy.receipt')->middleware('throttle:60,1');
     Route::get('/connections',[VesselConnectionController::class,'index'])->name('connections');
     Route::post('/connections',[VesselConnectionController::class,'store'])->name('connections.store')->middleware('throttle:10,1');
     Route::post('/connections/pair',[VesselConnectionController::class,'pair'])->name('connections.pair')->middleware('throttle:10,1');
