@@ -617,3 +617,17 @@ The bounded browser qualification coordinator's additional idle/media operations
 and exact proof fields are documented in
 [fixed qualification proofs](docs/browser-qualification-fixed-proofs.md).
 Their source contracts are separate from actual native qualification.
+
+Picture uploads bind immutable receipts to the final prepared container bytes,
+identifier, name, media type and encoded dimensions. The Web send path requires
+fresh selected-account model metadata explicitly advertising image input; it does
+not infer support from a model name. Uploading is an atomic transport operation:
+item states are shown without invented byte percentages. Unconfirmed uploads keep
+their exact identity and composition and are not automatically replayed. Sessionless
+promotion and orphan reclamation remain separate backend contracts, not browser
+thumbnail-removal effects.
+History acquisition uses the exact full-slice image chunk contract in Core
+`voyage/src/images.rs::Store::chunk`: at limit 65536 the producer returns the
+remaining full slice, next offset and EOF, with immutable metadata. Web permits
+at most 64 requests for a 4 MiB image and a 30-second total acquisition deadline;
+short nonfinal fragments or changed metadata are refused, not retried.

@@ -28,7 +28,7 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
             case 'capabilities':result={vessel_id:'v',scope:scoped?'scoped':'owner',rights:['create','account_use','execute'],features:['execution_profiles'],workspaces:revokeWorkspace&&++capabilityReads>1?[]:[{path:'/work',name:'Work'}]};break;
             case 'profiles':result={revision:3,default_profile_id:'everyday',profiles:[{id:'everyday',name:'Everyday',account:reorderedProfile?{transport:binding.transport,connection_revision:binding.connection_revision,identity_generation:binding.identity_generation,connection_id:binding.connection_id,account_id:binding.account_id}:binding,model:'m',reasoning_effort:'high',service_tier:null}]};break;
             case 'accounts':accountReads++;result={accounts:[{id:'account',connection_id:'provider',identity_generation:accountChanged&&accountReads>1?2:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
-            case 'account_models':if(failModels)throw Error('Catalogue unavailable');result={account:binding,models:[{id:'m',display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
+            case 'account_models':if(failModels)throw Error('Catalogue unavailable');result={account:binding,models:[{id:'m',input_modalities:['text','image'],display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',input_modalities:['text'],display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
             case 'start_account':if(uncertain)return {protocol:1,outcome_unknown:true,result:null};result={session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'};break;
             case 'resolve_start_account':result={command_id:command.command_id,session_id:command.session_id,status:'created',process:{session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'}};break;
             default:throw new Error(command.op);
@@ -68,7 +68,7 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
     const releaseBootstrap=async(success:boolean)=>{connection.connecting=false;connection.status=success?'Connected':'Connection refused';connection.client=success?readyClient:null;await act(async()=>root.render(React.createElement(NewVoyage,{fleet:{connections:new Map([['c',connection]])},tenant:'t',hidden:false,resetToken:0,reloadToken:0,onCreated:()=>assert.fail('Bootstrap must not create a voyage'),onAdvanced:()=>{}})));};
     const openConfig=async({details=true}={})=>{await ensureConfig();if(details){for(const selector of ['.composer-config-destination','.composer-config-more']){const node=document.querySelector<HTMLDetailsElement>(selector);if(node&&!node.open)await act(async()=>node.querySelector<HTMLElement>('summary')!.click());}}};
     const openRecovery=async()=>{if(!document.querySelector('[aria-label="Pending work review"]'))await act(async()=>button('Review pending work').click());};
-    return {openConfig,openRecovery,releaseBootstrap,dom,commands,created,advanced,button,dispose,choose,chooseModel,allowModels:()=>{failModels=false;}};
+    return {openConfig,openRecovery,releaseBootstrap,dom,commands,created,advanced,button,dispose,choose,chooseModel,allowModels:()=>{failModels=false;},denyModels:()=>{failModels=true;}};
 }
 
 test('uncertain message transfer starts as a reviewable draft and sends nothing',async()=>{
@@ -360,4 +360,39 @@ test('Configure starts with essential choices; secondary options and destination
         assert.equal(document.querySelector<HTMLDetailsElement>('.composer-config-more')!.open,false);
         assert.equal(view.commands.some(c=>['start_account','submit','set_account_inference','set_access'].includes(c.op)),false);
     }finally{await view.dispose();}
+});
+
+test('actual New image creation checks fresh image modalities',async()=>{
+ const view=await mount();
+ try{
+  const input=document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!;
+  await act(async()=>{Object.getOwnPropertyDescriptor(view.dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'Image message');input.dispatchEvent(new view.dom.window.Event('input',{bubbles:true}));});
+  const bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII='),c=>c.charCodeAt(0));
+  const fileInput=document.querySelector<HTMLInputElement>('input[type="file"]')!;Object.defineProperty(fileInput,'files',{configurable:true,value:[new File([bytes],'image.png',{type:'image/png'})]});
+  await act(async()=>{fileInput.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,20));});
+  assert.ok(view.button('Remove image.png'));assert.doesNotMatch(document.body.textContent!,/image.png: preparing/);
+  await act(async()=>view.button('Send').click());assert.equal(view.created.length,1);assert.equal(view.created[0].message.pictures.length,1);
+  assert.ok(view.commands.filter(command=>command.op==='account_models').length>=2,'admission refreshes catalogue rather than reusing discovery');
+ }finally{await view.dispose();}
+});
+
+
+test('uncertain picture creation reconciles read-only even when current model metadata is unavailable',async()=>{
+ const view=await mount({uncertain:true});
+ try{
+  const input=document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!;
+  await act(async()=>{Object.getOwnPropertyDescriptor(view.dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'Retain image intent');input.dispatchEvent(new view.dom.window.Event('input',{bubbles:true}));});
+  const bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII='),c=>c.charCodeAt(0));
+  const fileInput=document.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(fileInput,'files',{configurable:true,value:[new File([bytes],'retained.png',{type:'image/png'})]});
+  await act(async()=>{fileInput.dispatchEvent(new view.dom.window.Event('change',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,20));});
+  await act(async()=>view.button('Send').click());assert.equal(view.created.length,0);
+  const modelReads=view.commands.filter(c=>c.op==='account_models').length;view.denyModels();
+  await view.openRecovery();await act(async()=>view.button('Check creation · Fixture Vessel').click());
+  assert.equal(view.commands.filter(c=>c.op==='account_models').length,modelReads,'receipt lookup does not require model preflight');
+  assert.equal(view.commands.filter(c=>c.op==='start_account').length,1,'uncertain creation is never replayed');
+  assert.equal(view.commands.filter(c=>c.op==='resolve_start_account').length,1);
+  assert.equal(view.created.length,1);assert.equal(view.created[0].message.pictures.length,1);
+  assert.equal(view.created[0].message.text,'Retain image intent');assert.equal(view.created[0].message.send,false);assert.equal(view.created[0].message.applyAccess,false);
+ }finally{await view.dispose();}
 });

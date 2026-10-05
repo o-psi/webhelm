@@ -1,3 +1,4 @@
+import {requireImageModel} from './image-preflight';
 import type {SignoutDeparture} from './signout-departure';
 import {parseComposerCommand,type ComposerGoalIntent} from './composer-command';
 import {InlineGoalControls} from './InlineGoalControls';
@@ -46,6 +47,7 @@ export function NewVoyage({fleet,tenant,drafts,departure,onDraftChange,hidden,re
     const setText=(value:React.SetStateAction<string>)=>{contentGeneration.current++;updateText(value);};
     const setPictures=(value:React.SetStateAction<File[]>)=>{contentGeneration.current++;updatePictures(value);};
     const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[preparing,setPreparing]=useState(false);
+    const [preparationItems,setPreparationItems]=useState<{id:number;name:string;state:string}[]>([]);
     const input=useRef<HTMLTextAreaElement>(null),pictureInput=useRef<HTMLInputElement>(null),creation=useRef<Creation|null>(null),capsGeneration=useRef(0),profilesGeneration=useRef(0),modelsGeneration=useRef(0);
     const profile=catalogue?.profiles?.find((item:any)=>item.id===profileId);
     const [accountOverride,setAccountOverride]=useState<{account:any;model:string}|null>(null),[accountReview,setAccountReview]=useState(false);
@@ -131,7 +133,7 @@ export function NewVoyage({fleet,tenant,drafts,departure,onDraftChange,hidden,re
     const hasMessage=Boolean(text.trim()||pictures.length);
     async function addPictures(files:File[]){
         if(!files.length||busy||preparing||!draftReady)return;
-        setPreparing(true);
+        setPreparationItems(files.slice(0,MAX_PICTURES).map((file,id)=>({id,name:file.name,state:'preparing'})));setPreparing(true);
         try{
             let total=pictures.reduce((count,file)=>count+file.size,0);
             const prepared:File[]=[];
@@ -139,10 +141,10 @@ export function NewVoyage({fleet,tenant,drafts,departure,onDraftChange,hidden,re
                 if(pictures.length+prepared.length>=MAX_PICTURES)throw new Error('At most four pictures per message.');
                 const result=await preparePicture(file,MAX_PICTURE_BYTES-total);
                 const ready=new File([result.blob],result.name,{type:result.blob.type});
-                total+=ready.size;prepared.push(ready);
+                total+=ready.size;prepared.push(ready);setPreparationItems(items=>items.map(item=>item.id===prepared.length-1?{...item,state:'ready'}:item));
             }
-            setPictures(current=>[...current,...prepared]);setNotice('');
-        }catch(error){setNotice(error instanceof Error?error.message:'Picture unavailable.');}
+            setPictures(current=>[...current,...prepared]);setPreparationItems([]);setNotice('');
+        }catch(error){setPreparationItems(items=>items.map(item=>item.state==='preparing'?{...item,state:'failed'}:item));setNotice(error instanceof Error?error.message:'Picture unavailable.');}
         finally{setPreparing(false);}
     }
     const retainedGoalIntent=useRef<ComposerGoalIntent|undefined>(recovery?.goalIntent);
@@ -178,6 +180,7 @@ export function NewVoyage({fleet,tenant,drafts,departure,onDraftChange,hidden,re
                 if(serviceChoice!==null)settings.service_tier=selectedService||null;
                 else if(accountOverride||modelChoice!==null)settings.service_tier=null;
             }
+            if(pictures.length){const latest=await vesselRead(connection,'account_models',{workspace:path,account:settings.account});requireImageModel(latest,settings.account,settings.model);if(connection.client!==client||catalogue.revision!==selectedRevision)throw Error('Image account/model context changed. Review before creating.');}
             creation.current??=new Creation(localStorage,tenant);
             await draftSlot?.sending();
             const process=await creation.current.start(connection,path,settings);

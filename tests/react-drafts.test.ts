@@ -49,7 +49,7 @@ test('storage failure preserves text and a later explicit retry saves it',async(
 test('volatile ownership never opens legacy storage and loses content on a new window',async()=>{
  let access=0;const factory=()=>{access++;throw Error('legacy storage must remain untouched');};
  const repo=new BrowserDrafts('tenant',factory),slot=new DraftSlot(repo,'draft',()=>{});await slot.loaded();
- const picture=new File(['p'],'p.png',{type:'image/png'});slot.set({text:'Unsent',pictures:[picture]});await slot.flush();
+ const picture=new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII='),c=>c.charCodeAt(0))],'p.png',{type:'image/png'});slot.set({text:'Unsent',pictures:[picture]});await slot.flush();
  assert.equal((await repo.read('draft'))!.value.pictures[0],picture);
  assert.equal(await new BrowserDrafts('tenant',factory).read('draft'),null);assert.equal(access,0);
  await slot.discard();assert.equal(access,0);
@@ -69,7 +69,7 @@ test('content generations distinguish A to B to A from sending metadata',async()
  slot.set({text:'B',pictures:[]});slot.set({text:'A',pictures:[]});assert.ok(slot.contentGeneration>generation);await slot.flush();
 });
 test('workspace waits for hydration, restores voyage-scoped content, and sends nothing',async()=>{
-    const repo=new Repository(),key=JSON.stringify(['v','s']);repo.values.set(key,{revision:'a',value:{text:'Restored text',pictures:[new File(['p'],'p.png',{type:'image/png'})],delivery:'review'}});
+    const repo=new Repository(),key=JSON.stringify(['v','s']);repo.values.set(key,{revision:'a',value:{text:'Restored text',pictures:[new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII='),c=>c.charCodeAt(0))],'p.png',{type:'image/png'})],delivery:'review'}});
     const workspace=new Workspace(()=>new Map(),repo);workspace.open('v','s','Voyage');assert.equal(workspace.tabs.get(key)?.draftLoading,true);
     workspace.draft(key,'premature overwrite');await workspace.restoreDraft(key);
     const tab=workspace.tabs.get(key)!;assert.equal(tab.draft,'Restored text');assert.equal(tab.pictures.length,1);assert.equal(tab.pictures[0].name,'p.png');assert.equal(tab.draftLoading,false);assert.equal(repo.writes,0);

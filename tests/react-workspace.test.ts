@@ -4,6 +4,10 @@ import {Workspace} from '../resources/react/workspace.ts';
 import {BrowserDrafts} from '../resources/react/drafts';
 import {IntentJournal} from '../resources/js/vessel-client.js';
 
+const imageBytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII='),c=>c.charCodeAt(0));
+const imageAccount={account_id:'a',connection_id:'c',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
+const imageInference={account:imageAccount,model:'selected'};
+async function imageReceipt(command:any){const {preparedMetadata}=await import('../resources/js/image-metadata.js');return preparedMetadata(new Blob([imageBytes],{type:'image/png'}),command.name,command.upload_id);}
 class Storage {
     data = new Map<string, string>();
     get length() { return this.data.size; }
@@ -21,7 +25,8 @@ function fixture(drafts?:import('../resources/react/drafts').DraftRepository) {
         async exchange({command}: any) {
             commands.push(command);
             if (command.op === 'capabilities') return {protocol:1,outcome_unknown:false,result:{scope:'owner'}};
-            if (command.op === 'snapshot') return response(command.session_id, {session_id: command.session_id, revision, observation_cursor: cursor, messages: [], run: {state: 'idle'}});
+            if (command.op === 'snapshot') return response(command.session_id, {session_id: command.session_id, revision,inference:imageInference,workspace:'/work', observation_cursor: cursor, messages: [], run: {state: 'idle'}});
+            if(command.op==='account_models')return {protocol:1,outcome_unknown:false,result:{account:imageAccount,models:[{id:'selected',input_modalities:['image']}]}};
             if (command.op === 'decisions') return response(command.session_id, []);
             if (command.op === 'receipt') return response(command.session_id, {command_id: command.command_id, status: mode});
             if (mode === 'unknown') throw new Error('Disconnected after dispatch');
@@ -30,8 +35,8 @@ function fixture(drafts?:import('../resources/react/drafts').DraftRepository) {
         subscribe(_session: string, _incarnation: string, _after: number, listener: (event: any) => void, projection?: string | null) { subscriptions++; projections.push(projection); eventListener = listener; return () => { subscriptions--; if (eventListener === listener) eventListener = null; }; },
     };
     const connection = {id: 'vessel', name: 'Vessel', client, journal: new IntentJournal(storage, 'tenant:vessel'), voyages: [], status: 'Connected'};
-    const workspace = new Workspace(() => new Map([['vessel', connection]]),drafts);
-    return {workspace, connection, commands, storage, mode: (value: string) => { mode = value; }, subscriptions: () => subscriptions, projections, emit: (event: any) => eventListener?.(event), advanceSnapshot: () => { revision++; cursor++; }};
+    let currentConnection:any=connection;const workspace = new Workspace(() => new Map([['vessel',currentConnection]]),drafts);
+    return {replaceConnection:(value:any)=>{currentConnection=value;},workspace, connection, commands, storage, mode: (value: string) => { mode = value; }, subscriptions: () => subscriptions, projections, emit: (event: any) => eventListener?.(event), advanceSnapshot: () => { revision++; cursor++; }};
 }
 test('tabs retain isolated drafts and subscriptions while selection changes', async () => {
     const f = fixture();
@@ -151,7 +156,7 @@ test('root consent remains a typed response fenced to exact run and expiry', asy
 });
 test('pictures are bounded, private, and blocked as steering', async () => {
     const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
-    await f.workspace.attach(key,[new File(['picture'],'example.png',{type:'image/png'})]);
+    await f.workspace.attach(key,[new File([imageBytes],'example.png',{type:'image/png'})]);
     assert.equal(f.workspace.tabs.get(key)!.pictures.length,1);assert.equal(f.storage.length,0);
     await f.workspace.act(key,'steer');assert.equal(f.commands.filter(c=>c.op==='steer').length,0);
     await f.workspace.attach(key,[new File(['unsafe'],'example.svg',{type:'image/svg+xml'})]);
@@ -192,9 +197,9 @@ test('a failed automatic history read retries without showing a composer notice'
 test('image submission uses promoted attachment and separate durable mutation receipt',async()=>{
  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
  const original=f.connection.client.exchange.bind(f.connection.client);const uploads:any[]=[];
- f.connection.client.exchange=async(payload:any)=>{if(payload.command.op==='upload_image'){uploads.push(payload.command);return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7,media_type:'image/png'}}};}return original(payload);};
- await f.workspace.attach(key,[new File(['picture'],'example.png',{type:'image/png'})]);await f.workspace.act(key,'submit');
- assert.equal(uploads.length,1);assert.ok(uploads[0].upload_id);const command=f.commands.find(c=>c.op==='submit_content');assert.equal(command.content[0].attachment.id,'artifact');assert.equal(f.workspace.tabs.get(key)!.pictures.length,0);assert.equal(f.storage.length,0);f.workspace.close();
+ f.connection.client.exchange=async(payload:any)=>{if(payload.command.op==='upload_image'){uploads.push(payload.command);return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:await imageReceipt(payload.command)}};}return original(payload);};
+ await f.workspace.attach(key,[new File([imageBytes],'example.png',{type:'image/png'})]);await f.workspace.act(key,'submit');
+ assert.equal(uploads.length,1);assert.ok(uploads[0].upload_id);const command=f.commands.find(c=>c.op==='submit_content');assert.equal(command.content[0].attachment.id,uploads[0].upload_id);assert.equal(f.workspace.tabs.get(key)!.pictures.length,0);assert.equal(f.storage.length,0);f.workspace.close();
 });
 
 test('history-only connection remains readable when decisions are forbidden',async()=>{
@@ -212,7 +217,7 @@ test('image upload refusal is explained and does not reserve a submit command',a
  const original=f.connection.client.exchange.bind(f.connection.client);
  f.connection.client.exchange=async(payload:any)=>payload.command.op==='upload_image'
    ? {protocol:1,outcome_unknown:false,error:'invalid image header or resource limit'} : original(payload);
- await f.workspace.attach(key,[new File(['picture'],'example.png',{type:'image/png'})]);
+ await f.workspace.attach(key,[new File([imageBytes],'example.png',{type:'image/png'})]);
  await f.workspace.act(key,'submit');
  const tab=f.workspace.tabs.get(key)!;
  assert.match(tab.notice,/invalid image header or resource limit/);
@@ -230,7 +235,7 @@ test('uncertain image upload keeps its identity and requires status inspection b
    if(payload.command.op==='upload_image'){attempts++;throw new Error('Reply timed out; command outcome may be unknown.');}
    return original(payload);
  };
- await f.workspace.attach(key,[new File(['picture'],'example.png',{type:'image/png'})]);
+ await f.workspace.attach(key,[new File([imageBytes],'example.png',{type:'image/png'})]);
  await f.workspace.act(key,'submit');
  const tab=f.workspace.tabs.get(key)!;
  assert.match(tab.notice,/outcome may be unknown/);
@@ -239,27 +244,27 @@ test('uncertain image upload keeps its identity and requires status inspection b
  f.workspace.close();
 });
 
-test('two pictures wake Voyage and submit once from one Send after fresh status',async()=>{
+test('two pictures receive immutable artifacts and submit once after fresh status',async()=>{
  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
  const original=f.connection.client.exchange.bind(f.connection.client);
  const uploads:any[]=[];let incarnation='incarnation';
  f.connection.client.exchange=async(payload:any)=>{
    const c=payload.command;
    if(c.op==='upload_image'){
-     uploads.push(c);incarnation='resumed';
-     return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation,result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7,media_type:'image/png'}}};
+     uploads.push(c);
+     return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation,result:await imageReceipt(c)}};
    }
-   if(c.op==='snapshot')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation,result:{session_id:'a',revision:1,observation_cursor:3,messages:[],run:{state:'idle'}}}};
+   if(c.op==='snapshot')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation,result:{session_id:'a',revision:1,observation_cursor:3,messages:[],inference:imageInference,workspace:'/work',run:{state:'idle'}}}};
    if(c.op==='decisions')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation,result:[]}};
    return original(payload);
  };
  // First read observed the old owner, upload is answered by its resumed owner.
  await f.workspace.refresh(key);
- await f.workspace.attach(key,[new File(['picture'],'2587.jpg',{type:'image/jpeg'}),new File(['picture'],'2588.jpg',{type:'image/jpeg'})]);
+ await f.workspace.attach(key,[new File([imageBytes],'2587.png',{type:'image/png'}),new File([imageBytes],'2588.png',{type:'image/png'})]);
  await f.workspace.act(key,'submit');
  const tab=f.workspace.tabs.get(key)!;
  assert.equal(tab.notice,'');
- assert.equal(tab.incarnation,'resumed');assert.equal(tab.stale,false);
+ assert.equal(tab.incarnation,'incarnation');assert.equal(tab.stale,false);
  assert.equal(uploads.length,2,'each picture uploaded only once');
  assert.equal(f.commands.filter(c=>c.op==='submit_content').length,1);
  assert.equal(tab.pictures.length,0);f.workspace.close();
@@ -270,11 +275,11 @@ test('post-upload changed revision or active run never silently submits',async()
   const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);
   let uploaded=false;const original=f.connection.client.exchange.bind(f.connection.client);
   f.connection.client.exchange=async(payload:any)=>{
-   if(payload.command.op==='upload_image'){uploaded=true;return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'resumed',result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7}}};}
+   if(payload.command.op==='upload_image'){uploaded=true;return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'resumed',result:await imageReceipt(payload.command)}};}
    if(uploaded&&payload.command.op==='snapshot')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'resumed',result:{session_id:'a',revision:1,run:{state:'idle'},messages:[],...change}}};
    return original(payload);
   };
-  await f.workspace.attach(key,[new File(['picture'],'example.png',{type:'image/png'})]);await f.workspace.act(key,'submit');
+  await f.workspace.attach(key,[new File([imageBytes],'example.png',{type:'image/png'})]);await f.workspace.act(key,'submit');
   assert.equal(f.commands.some(c=>c.op==='submit_content'),false);
   assert.equal(f.storage.length,0);assert.equal(f.workspace.tabs.get(key)!.pictures.length,1);
   f.workspace.close();
@@ -286,14 +291,14 @@ test('pictures steer the active run rather than queueing a new turn',async()=>{
  const tab=f.workspace.tabs.get(key)!;tab.snapshot.run={state:'running',run_id:'r'};
  const original=f.connection.client.exchange.bind(f.connection.client);
  f.connection.client.exchange=async(payload:any)=>{
-  if(payload.command.op==='upload_image')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{id:'artifact',sha256:'a'.repeat(64),byte_size:7}}};
-  if(payload.command.op==='snapshot')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{session_id:'a',revision:2,messages:[],run:{state:'running',run_id:'r'}}}};
+  if(payload.command.op==='upload_image'){f.commands.push(payload.command);return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:await imageReceipt(payload.command)}};}
+  if(payload.command.op==='snapshot'){f.commands.push(payload.command);return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{session_id:'a',revision:2,workspace:'/work',inference:imageInference,messages:[],run:{state:'running',run_id:'r'}}}};}
   return original(payload);
  };
  await f.workspace.refresh(key);await new Promise(resolve=>setTimeout(resolve,0));
- await f.workspace.attach(key,[new File(['picture'],'photo.png',{type:'image/png'})]);
+ await f.workspace.attach(key,[new File([imageBytes],'photo.png',{type:'image/png'})]);
  await f.workspace.act(key,'steer');
- const command=f.commands.find(c=>c.op==='steer');assert.ok(command,tab.notice);assert.equal(command.run_id,'r');assert.equal(command.parts[0].attachment.id,'artifact');
+ const command=f.commands.find(c=>c.op==='steer');assert.ok(command,tab.notice);assert.equal(command.run_id,'r');assert.equal(command.parts[0].attachment.id,f.commands.find(c=>c.op==='upload_image')?.upload_id);
  assert.equal(f.commands.some(c=>c.op==='submit_content'),false);assert.equal(tab.pictures.length,0);f.workspace.close();
 });
 
@@ -497,4 +502,56 @@ test('cancel is not content admission and close during submission cannot clear i
  const pending=new Promise<void>(resolve=>release=resolve),admitted=new Promise<void>(resolve=>entered=resolve);
  f.connection.client.exchange=async(payload:any)=>{if(payload.command.op==='submit'){entered();await pending;}return original(payload);};
  const action=f.workspace.act(key,'submit');await admitted;f.workspace.close();release();await action;assert.equal(f.workspace.tabs.get(key)!.draft,'Keep');
+});
+
+test('image effects stop on map replacement, revocation and account changes before next upload',async()=>{
+ for(const timing of ['catalogue','first-upload'])for(const change of ['map','scope','account']){
+  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);const tab=f.workspace.tabs.get(key)!;
+  await f.workspace.attach(key,[new File([imageBytes],'same.png',{type:'image/png'}),new File([imageBytes],'same.png',{type:'image/png'})]);
+  const original=f.connection.client.exchange.bind(f.connection.client);let uploads=0;
+  const mutate=()=>{if(change==='map'){f.replaceConnection({...f.connection});}else if(change==='scope'){tab.scope='scoped';tab.rights=[];}else tab.snapshot.inference={...imageInference,account:{...imageAccount,identity_generation:2}};};
+  f.connection.client.exchange=async(payload:any)=>{
+   if(payload.command.op==='account_models'){const response=await original(payload);if(timing==='catalogue')mutate();return response;}
+   if(payload.command.op==='upload_image'){uploads++;const result=await imageReceipt(payload.command);if(timing==='first-upload')mutate();return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result}};}
+   return original(payload);
+  };
+  await f.workspace.act(key,'submit');assert.equal(uploads,timing==='catalogue'?0:1);assert.equal(f.commands.some(c=>c.op==='submit_content'),false);assert.equal(tab.pictures.length,2);f.workspace.close();
+ }
+});
+
+test('bounded preparation lifecycle handles duplicate names, removal and failure',async()=>{
+ const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);const tab=f.workspace.tabs.get(key)!;
+ assert.equal(await f.workspace.attach(key,[new File([imageBytes],'same.png',{type:'image/png'}),new File([imageBytes],'same.png',{type:'image/png'})]),true);
+ assert.equal(new Set(tab.pictures.map(p=>p.id)).size,2);assert.deepEqual(tab.preparingItems,[]);
+ f.workspace.removePicture(key,tab.pictures[0].id);assert.equal(tab.pictures.length,1);assert.deepEqual(tab.preparingItems,[]);
+ assert.equal(await f.workspace.attach(key,[new File(['bad'],'bad.png',{type:'image/png'})]),false);assert.equal(tab.preparingItems?.[0].state,'failed');assert.equal(tab.pictures.length,1);
+ await f.workspace.attach(key,Array.from({length:5},()=>new File([imageBytes],'same.png',{type:'image/png'})));assert.ok(tab.pictures.length<=4);assert.ok((tab.preparingItems?.length??0)<=4);f.workspace.close();
+});
+
+test('cached image receipt revalidates payload and newer input survives admitted image submission',async()=>{
+ const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);await f.workspace.attach(key,[new File([imageBytes],'p.png',{type:'image/png'})]);const tab=f.workspace.tabs.get(key)!;
+ const original=f.connection.client.exchange.bind(f.connection.client);let release!:()=>void,entered!:()=>void;
+ const waiting=new Promise<void>(resolve=>release=resolve),admitted=new Promise<void>(resolve=>entered=resolve);
+ f.connection.client.exchange=async(payload:any)=>{
+  if(payload.command.op==='upload_image')return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:await imageReceipt(payload.command)}};
+  if(payload.command.op==='submit_content'){entered();await waiting;}
+  return original(payload);
+ };
+ f.workspace.draft(key,'A');const pending=f.workspace.act(key,'submit');await admitted;f.workspace.draft(key,'B');f.workspace.draft(key,'A');release();await pending;assert.equal(tab.draft,'A');assert.equal(tab.pictures.length,1);assert.equal(tab.pictures[0].state,'confirmed');
+ tab.pictures[0].attachment={...tab.pictures[0].attachment,width:2};await f.workspace.act(key,'submit');assert.equal(f.commands.filter(c=>c.op==='submit_content').length,1);assert.equal(tab.draft,'A');f.workspace.close();
+});
+
+
+test('history reads stop before another chunk when client or scope changes',async()=>{
+ for(const change of ['client','scope']){
+  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);const tab=f.workspace.tabs.get(key)!;
+  let reads=0;const original=f.connection.client.exchange.bind(f.connection.client);
+  f.connection.client.exchange=async(payload:any)=>{
+   if(payload.command.op!=='read_artifact')return original(payload);
+   reads++;if(change==='client')f.replaceConnection({...f.connection,client:{}});else tab.scope='scoped';
+   return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{offset:0,data_base64:''}}};
+  };
+  await assert.rejects(f.workspace.artifact(key,{id:'11111111-1111-4111-8111-111111111111',name:'history.png',sha256:'a'.repeat(64),media_type:'image/png',byte_size:65537,width:1,height:1}),/history authority changed/);
+  assert.equal(reads,1);f.workspace.close();
+ }
 });

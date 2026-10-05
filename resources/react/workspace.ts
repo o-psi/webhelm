@@ -1,3 +1,6 @@
+import {preparedMetadata,bindImageReceipt} from '../js/image-metadata.js';
+import {requireImageModel} from './image-preflight';
+import {vesselRead} from './settings';
 import {DraftSlot,type DraftRepository} from './drafts';
 import {assertGoalReview,validateGoalAction,goalReceipt,type GoalAction,type GoalReview} from './goals';
 import {uuid, request, voyageResult, mutation, resolved, receiptStatus} from '../js/vessel-client.js';
@@ -6,8 +9,8 @@ import {preparePicture, MAX_PICTURE_BYTES, MAX_PICTURES} from './prepare-picture
 import {inspectionRequest,inventorySupports,type InspectionScope} from './inspection-command';
 
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
-export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any; file?:File};
-export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; contentGeneration: number; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; capabilities?:string[]; pictures: Picture[]; scrollTop?: number; following?: boolean; draftState?:DraftSlot; draftLoading?:boolean};
+export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any; expected?:any; state?:'ready'|'uploading'|'confirmed'|'failed'|'uncertain'; file?:File};
+export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; contentGeneration: number; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; capabilities?:string[]; pictures: Picture[]; preparingItems?:{id:number;name:string;state:string}[]; scrollTop?: number; following?: boolean; draftState?:DraftSlot; draftLoading?:boolean};
 const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision',goal_update:'goal change'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const statusReadNotice='Voyage status unavailable. Check the Vessel connection.';
@@ -66,7 +69,8 @@ export class Workspace {
     private async picture(blob:Blob,name:string):Promise<Picture>{
         const bytes=new Uint8Array(await blob.arrayBuffer());let binary='';
         for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
-        return {id:uuid(),name,size:blob.size,url:URL.createObjectURL(blob),base64:btoa(binary),uploadId:uuid(),file:new File([blob],name,{type:blob.type})};
+        const uploadId=uuid(),expected=await preparedMetadata(blob,name,uploadId);
+        return {id:uuid(),expected,state:'ready',name,size:blob.size,url:URL.createObjectURL(blob),base64:btoa(binary),uploadId,file:new File([blob],name,{type:blob.type})};
     }
     private messageFingerprint(tab:Tab){return JSON.stringify([tab.draft,tab.pictures.map(p=>[p.name,p.base64])]);}
     private duplicateMessage(tab:Tab){
@@ -216,25 +220,39 @@ export class Workspace {
         tab.busy = true; this.changed();
         try {
             if (['submit','steer'].includes(op) && pictures.length) {
+                const inference=structuredClone(origin.inference);
+                const session=tab.session,scope=tab.scope;
+                const assertContext=()=>{if(this.closed||this.tabs.get(key)!==tab||this.connections().get(tab.vessel)!==connection||connection.client!==client||tab.session!==session||tab.incarnation!==incarnation||tab.scope!==scope||tab.stale||!this.permitted(tab,op)||JSON.stringify(tab.snapshot?.inference)!==JSON.stringify(inference))throw Error('Image authority or model context changed.');};
+                assertContext();
+                const catalogue=await vesselRead(connection,'account_models',{workspace:origin.workspace,account:inference?.account});
+                if(this.closed||this.tabs.get(key)!==tab||connection.client!==client||tab.incarnation!==incarnation||JSON.stringify(tab.snapshot?.inference)!==JSON.stringify(inference)||tab.stale||!this.permitted(tab,op))throw Error('Image model authority changed. Review before sending.');
+                assertContext();requireImageModel(catalogue,inference?.account,inference?.model);
                 const content: any[] = draft ? [{type: 'text', text: draft}] : [];
                 for (const picture of pictures) {
+                    if(!picture.expected||!picture.file)throw Error('Prepared picture metadata unavailable. Remove and attach again.');
+                    const expected=await preparedMetadata(picture.file,picture.name,picture.uploadId);assertContext();bindImageReceipt(picture.expected,expected);
+                    const bytes=new Uint8Array(await picture.file.arrayBuffer());assertContext();let encoded='';for(let i=0;i<bytes.length;i+=8192)encoded+=String.fromCharCode(...bytes.subarray(i,i+8192));if(btoa(encoded)!==picture.base64)throw Error('Prepared image bytes changed.');
+                    if(picture.state==='uncertain')throw Error('Image upload is unconfirmed. No automatic replay; retain this input and review the conversation.');
+                    if(picture.attachment)bindImageReceipt(picture.attachment,expected);
                     if (!picture.attachment) {
-                        const upload = await client.exchange(request('upload_image', {session_id: tab.session, upload_id: picture.uploadId, name: picture.name, data_base64: picture.base64}));
-                        if (upload?.error && upload.outcome_unknown === false) throw new Error(`Picture upload refused: ${upload.error}`);
+                        assertContext();picture.state='uploading';this.changed();assertContext();
+                        let upload:any;try{upload = await client.exchange(request('upload_image', {session_id: tab.session, upload_id: picture.uploadId, name: picture.name, data_base64: picture.base64}));}catch(error){picture.state='uncertain';throw error;}
+                        if(upload?.outcome_unknown!==false){picture.state='uncertain';throw Error('Image upload outcome is unconfirmed.');}
+                        if (upload?.error){picture.state='failed';throw new Error(`Picture upload refused: ${upload.error}`);}
                         const attachment = voyageResult(upload, tab.session).result;
-                        if (!attachment || typeof attachment.id !== 'string' || typeof attachment.sha256 !== 'string' || typeof attachment.byte_size !== 'number') throw new Error('Invalid picture upload receipt.');
-                        if (this.closed || this.tabs.get(key) !== tab || this.connections().get(tab.vessel)?.client !== client || tab.incarnation !== incarnation) throw new Error('Voyage connection changed while uploading pictures.');
+                        try{bindImageReceipt(attachment,expected);}catch(error){picture.state='uncertain';throw error;}
+                        if (this.closed || this.tabs.get(key) !== tab || this.connections().get(tab.vessel)?.client !== client || tab.incarnation !== incarnation) {picture.state='uncertain';throw new Error('Voyage connection changed while uploading pictures.');}
                         // Artifacts belong to the session, not its transient process.
                         // Keep confirmed uploads even when the process resumes.
-                        picture.attachment = attachment;
+                        picture.attachment = attachment;picture.state='confirmed';this.changed();
 
                     }
-                    content.push({type: 'image', attachment: picture.attachment});
+                    assertContext();content.push({type: 'image', attachment: picture.attachment});
                 }
                 // Snapshot is a read, not an upload/submit replay. Keep busy throughout
                 // so one click remains one admission even across a process wake-up.
                 const current = voyageResult(await client.exchange(request('snapshot', {session_id:tab.session})), tab.session).result;
-                if (this.closed || this.connections().get(tab.vessel)?.client !== client || this.tabs.get(key) !== tab) throw new Error('Voyage connection changed while preparing pictures.');
+                if (this.closed || this.connections().get(tab.vessel)?.client !== client || this.tabs.get(key) !== tab || JSON.stringify(current?.inference)!==JSON.stringify(inference)) throw new Error('Voyage connection changed while preparing pictures.');
                 if (op === 'steer') {
                     if (current?.session_id !== tab.session || current.run?.run_id !== origin.run?.run_id || current.recovery_pending || !['accepted','running','awaiting_decision'].includes(current.run?.state)) throw new Error('The addressed run finished while preparing pictures. Draft retained.');
                     fields = {prompt:draft, parts:content};
@@ -304,7 +322,8 @@ export class Workspace {
     }
     async attach(key: string, files: File[], guard?: () => boolean) {
         const tab = this.tabs.get(key); if (!tab || tab.busy || tab.draftLoading || this.closed || guard && !guard()) return false;
-        let success = true;
+        const picturesBefore=tab.pictures.length;
+        let success = true;tab.preparingItems=files.slice(0,MAX_PICTURES).map((file,id)=>({id,name:file.name,state:'preparing'}));
         tab.busy = true; this.changed();
         try {
             for (const file of files) {
@@ -313,21 +332,23 @@ export class Workspace {
                 const {blob,name} = await preparePicture(file,remaining);
                 const picture=await this.picture(blob,name||'pasted-image');
                 if (this.closed || this.tabs.get(key) !== tab || guard && !guard()) {URL.revokeObjectURL(picture.url);throw new Error('Voyage changed; capture not attached.');}
-                tab.contentGeneration++; tab.pictures.push(picture);this.saveDraft(tab);
+                tab.preparingItems=tab.preparingItems?.map(item=>item.id===tab.pictures.length-(picturesBefore)?{...item,state:'ready'}:item);tab.contentGeneration++; tab.pictures.push(picture);this.saveDraft(tab);
             }
         } catch (error) { success = false; tab.notice = error instanceof Error ? error.message : 'Picture unavailable.'; }
         finally { this.pruneMessagePayloads(); tab.busy = false; this.changed(); }
-        return success;
+        if(success)tab.preparingItems=[];if(!success){tab.preparingItems=tab.preparingItems?.map(item=>item.state==='preparing'?{...item,state:'failed'}:item);this.changed();}return success;
     }
     removePicture(key: string, id: string) {
         const tab = this.tabs.get(key); if (!tab || tab.busy) return;
-        tab.contentGeneration++; tab.pictures = tab.pictures.filter(picture => { if (picture.id !== id) return true; URL.revokeObjectURL(picture.url); return false; }); this.saveDraft(tab);this.changed();
+        tab.preparingItems=[];tab.contentGeneration++; tab.pictures = tab.pictures.filter(picture => { if (picture.id !== id) return true; URL.revokeObjectURL(picture.url); return false; }); this.saveDraft(tab);this.changed();
     }
     async artifact(key: string, attachment: any) {
         const tab = this.tabs.get(key), client = tab && this.connections().get(tab.vessel)?.client;
         if (!tab || !client) throw new Error('Vessel unavailable.');
         const {imageBytes} = await import('../js/attachments.js');
-        return imageBytes(client, attachment, {session_id: tab.session} as any);
+        const incarnation=tab.incarnation,session=tab.session,scope=tab.scope,rights=JSON.stringify(tab.rights);
+        const assertCurrent=()=>{if(this.closed||this.tabs.get(key)!==tab||this.connections().get(tab.vessel)?.client!==client||tab.session!==session||tab.incarnation!==incarnation||tab.scope!==scope||JSON.stringify(tab.rights)!==rights||tab.stale)throw Error('Image history authority changed.');};
+        assertCurrent();return imageBytes(client,attachment,{session_id:session,assertCurrent} as any);
     }
     async output(key: string, offset: number) {
         const tab = this.tabs.get(key); if (!tab || !this.actionable(tab)) return;
