@@ -104,7 +104,7 @@ const rewriteEntry = (f: ReturnType<typeof fixture>, change: (entry: any) => any
     f.storage.setItem(f.connection.journal.key + entry.command_id, JSON.stringify(change(entry)));
     return entry;
 };
-test('unknown receipt settles only after the command can no longer be admitted', async () => {
+test('unknown observation remains pending even after a locally recorded deadline', async () => {
     const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
     f.workspace.draft(key, 'Not delivered'); f.mode('unknown'); await f.workspace.act(key, 'submit');
     const entry = f.connection.journal.entries()[0];
@@ -115,14 +115,14 @@ test('unknown receipt settles only after the command can no longer be admitted',
     assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!, 'submit'), false);
     rewriteEntry(f, value => ({...value, expires_at_ms: Date.now() - 1}));
     await f.workspace.reconcile(key);
-    assert.equal(f.storage.length, 0);
-    assert.match(f.workspace.tabs.get(key)?.notice || '', /message was not sent\. You can send it again\./);
-    assert.equal(f.workspace.tabs.get(key)?.receiptStates[entry.command_id], undefined);
-    assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!, 'submit'), true);
+    assert.equal(f.storage.length,1,'expiry alone does not certify non-admission');
+    assert.match(f.workspace.tabs.get(key)?.notice||'',/outcome remains unconfirmed/);
+    assert.equal(f.workspace.tabs.get(key)?.receiptStates[entry.command_id],'unknown');
+    assert.equal(f.workspace.actionable(f.workspace.tabs.get(key)!,'submit'),false);
     assert.equal(f.commands.filter(c => c.op === 'submit').length, 1, 'settling never replays the command');
     f.workspace.close();
 });
-test('unknown receipt for an entry without a recorded deadline uses its creation time', async () => {
+test('legacy creation timestamps never certify an unknown command as absent', async () => {
     const f = fixture(), key = f.workspace.open('vessel', 'a', 'A'); await f.workspace.refresh(key);
     f.workspace.draft(key, 'Older entry'); f.mode('unknown'); await f.workspace.act(key, 'submit');
     rewriteEntry(f, ({expires_at_ms: _dropped, ...value}) => ({...value, created_at: Date.now() - 59000}));
@@ -130,8 +130,8 @@ test('unknown receipt for an entry without a recorded deadline uses its creation
     assert.equal(f.storage.length, 1, 'sixty seconds have not passed since the entry was written');
     rewriteEntry(f, value => ({...value, created_at: Date.now() - 60001}));
     await f.workspace.reconcile(key);
-    assert.equal(f.storage.length, 0);
-    f.workspace.draft(key, 'No usable time'); await f.workspace.act(key, 'submit');
+    assert.equal(f.storage.length,1);
+    f.workspace.draft(key,'No usable time');
     rewriteEntry(f, ({expires_at_ms: _dropped, created_at: _created, ...value}) => value);
     await f.workspace.reconcile(key);
     assert.equal(f.storage.length, 1, 'an entry with no usable time stays pending');
@@ -615,5 +615,29 @@ test('history reads stop before another chunk when client or scope changes',asyn
   };
   await assert.rejects(f.workspace.artifact(key,{id:'11111111-1111-4111-8111-111111111111',name:'history.png',sha256:'a'.repeat(64),media_type:'image/png',byte_size:65537,width:1,height:1}),/history authority changed/);
   assert.equal(reads,1);f.workspace.close();
+ }
+});
+
+
+test('delayed pre-expiry absence cannot settle an intervening admitted command',async()=>{
+ const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);f.workspace.draft(key,'Keep exact intent');f.mode('unknown');await f.workspace.act(key,'submit');
+ const actualNow=Date.now;let clock=actualNow();const entry=rewriteEntry(f,value=>({...value,expires_at_ms:clock+10}));const exchange=f.connection.client.exchange.bind(f.connection.client);
+ let release!:(value:any)=>void;f.connection.client.exchange=async(payload:any)=>payload.command.op==='receipt'?await new Promise(resolve=>release=resolve):exchange(payload);
+ try{
+  Date.now=()=>clock;const pending=f.workspace.reconcile(key);assert.ok(release,'read started before expiry');clock+=20;f.mode('accepted');
+  release({protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:'incarnation',result:{command_id:entry.command_id,status:'unknown'}}});await pending;
+  assert.equal(f.storage.length,1);assert.equal(f.workspace.tabs.get(key)!.receiptStates[entry.command_id],'unknown');assert.doesNotMatch(f.workspace.tabs.get(key)!.notice,/not sent/);
+  f.connection.client.exchange=exchange;await f.workspace.reconcile(key);assert.equal(f.storage.length,0,'a fresh positive receipt can settle');assert.equal(f.commands.filter(c=>c.op==='submit').length,1,'no replay');
+ }finally{Date.now=actualNow;f.workspace.close();}
+});
+test('receipt settlement rejects a replaced client or foreign owner incarnation',async()=>{
+ for(const change of ['client','incarnation']){
+  const f=fixture(),key=f.workspace.open('vessel','a','A');await f.workspace.refresh(key);f.workspace.draft(key,'Keep');f.mode('unknown');await f.workspace.act(key,'submit');const entry=f.connection.journal.entries()[0];
+  const original=f.connection.client.exchange.bind(f.connection.client);f.connection.client.exchange=async(payload:any)=>{
+   if(payload.command.op!=='receipt')return original(payload);
+   if(change==='client')f.replaceConnection({...f.connection,client:{}});
+   return {protocol:1,outcome_unknown:false,result:{session_id:'a',incarnation:change==='incarnation'?'foreign':'incarnation',result:{command_id:entry.command_id,status:'accepted'}}};
+  };
+  await f.workspace.reconcile(key);assert.equal(f.storage.length,1);assert.equal(f.commands.filter(c=>c.op==='submit').length,1);f.workspace.close();
  }
 });

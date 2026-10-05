@@ -631,3 +631,11 @@ History acquisition uses the exact full-slice image chunk contract in Core
 remaining full slice, next offset and EOF, with immutable metadata. Web permits
 at most 64 requests for a 4 MiB image and a 30-second total acquisition deadline;
 short nonfinal fragments or changed metadata are refused, not retried.
+
+A receipt result of `unknown` means no command record was found at that lookup.
+It does not certify that the command was never admitted: delayed observation and
+owner/client changes can overlap admission. Helm Web retains the exact intent,
+even after a locally recorded deadline, until an identity-bound definitive
+receipt resolves it. Recovery may move retained input to a reviewed new-voyage
+composer, but never automatically repeats the original command. Legacy creation
+timestamps do not reconstruct a conclusive admission deadline.

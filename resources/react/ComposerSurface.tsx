@@ -18,6 +18,6 @@ export function ComposerSurface({children,configuration,recovery,toolbar,input,o
    {recovery&&<Button type="button" variant="ghost" size="sm" aria-expanded={recoveryOpen} onClick={()=>setRecoveryOpen(!recoveryOpen)}>Review pending work</Button>}
   </div>
   {configOpen&&<div className="min-w-0 border-t pt-3" aria-label="Composer configuration">{configuration}</div>}
-  {recoveryOpen&&<div className="min-w-0 border-t pt-3" aria-label="Pending work review">{recovery}</div>}
+  {recovery&&recoveryOpen&&<div className="min-w-0 border-t pt-3" aria-label="Pending work review">{recovery}</div>}
  </div>;
 }

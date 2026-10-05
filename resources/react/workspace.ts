@@ -15,7 +15,7 @@ const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const statusReadNotice='Voyage status unavailable. Check the Vessel connection.';
 const notApplied=(status:string)=>['not_applied','not_admitted','rejected'].includes(status);
-const settledNotice=(op:string,status:string)=>status==='unknown'?`Your ${actionName(op)} was not sent. You can send it again.`:notApplied(status)?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
+const settledNotice=(op:string,status:string)=>notApplied(status)?`Your ${actionName(op)} was not applied. Review the current voyage before trying again.`:`Your ${actionName(op)} was ${status==='accepted'||status==='queued'||status==='requested'?'accepted':'recorded'}. Check the voyage for its result.`;
 // Transport state outlives React renders; optional local drafts never dispatch.
 export class Workspace {
     tabs = new Map<string, Tab>();
@@ -428,20 +428,23 @@ export class Workspace {
     async reconcile(key: string) {
         const tab = this.tabs.get(key); if (!tab || tab.busy) return;
         const connection = this.connections().get(tab.vessel); if (!connection?.client) return;
+        const client=connection.client,session=tab.session,incarnation=tab.incarnation;
+        const currentOwner=()=>!this.closed&&this.tabs.get(key)===tab&&this.connections().get(tab.vessel)===connection&&connection.client===client&&tab.session===session&&tab.incarnation===incarnation;
         tab.busy = true; this.changed();
         try {
             let lastSettled:{op:string;status:string}|null=null;
             for (const entry of this.pending(tab)) {
-                const response = await connection.client.exchange(request('receipt', {session_id: tab.session, command_id: entry.command_id}));
+                if(!currentOwner())throw Error('Receipt owner changed.');
+                const response = await client.exchange(request('receipt', {session_id: session, command_id: entry.command_id}));
+                if(!currentOwner()||!incarnation||response?.result?.incarnation!==incarnation)throw Error('Receipt owner changed.');
                 const status=receiptStatus(response);
-                // The voyage answers "unknown" when it has no record of the command. That is only
-                // conclusive once the command can no longer be admitted, so settle it after its deadline.
-                const receiptMatches=response?.protocol===1 && response.outcome_unknown===false && response.error==null && response.result?.session_id===tab.session && response.result?.result?.command_id===entry.command_id;
-                const confirmed=resolved(response, entry.command_id, tab.session, true) || (status==='unknown' && receiptMatches);
-                if (confirmed && typeof status==='string') tab.receiptStates[entry.command_id]=status;
-                const deadline=Number.isSafeInteger(entry.expires_at_ms)?entry.expires_at_ms:Number.isSafeInteger(entry.created_at)?entry.created_at+60000:null;
-                const expired=deadline!==null&&Date.now()>=deadline;
-                if (confirmed && (status!=='unknown'||expired) && (entry.op!=='goal_update'||status==='unknown_after_restart'||status==='unknown'||notApplied(status)||goalReceipt(response.result?.result))) {
+                const receiptMatches=response?.protocol===1&&response.outcome_unknown===false&&response.error==null&&response.result?.session_id===session&&response.result?.result?.command_id===entry.command_id;
+                const confirmed=resolved(response,entry.command_id,session,true)||(status==='unknown'&&receiptMatches);
+                if(confirmed&&typeof status==='string')tab.receiptStates[entry.command_id]=status;
+                // Absence at a receipt lookup is not an owner-ordered negative
+                // outcome. Local expiry or response arrival cannot rule out an
+                // intervening admission, and legacy times are not exact deadlines.
+                if(confirmed&&status!=='unknown'&&(entry.op!=='goal_update'||status==='unknown_after_restart'||notApplied(status)||goalReceipt(response.result?.result))){
                     if (status === 'unknown_after_restart') tab.receiptStates[entry.command_id] = status;
                     else {
                         connection.journal.settle(entry.command_id);
@@ -451,7 +454,7 @@ export class Workspace {
                 }
             }
             const pending=this.pending(tab);
-            tab.notice=pending.length===1&&tab.receiptStates[pending[0].command_id]==='unknown_after_restart'?`The Vessel cannot confirm whether your ${actionName(pending[0].op)} was applied after a restart. Review this conversation before sending similar work in a new voyage.`:pending.length===1?uncertainNotice(pending[0].op):pending.length>1?`We can’t confirm ${pending.length} actions yet. Check the conversation and receipts before trying again.`:lastSettled?settledNotice(lastSettled.op,lastSettled.status):tab.notice;
+            tab.notice=pending.length===1&&tab.receiptStates[pending[0].command_id]==='unknown'?'No record was found at the last receipt check. The outcome remains unconfirmed.':pending.length===1&&tab.receiptStates[pending[0].command_id]==='unknown_after_restart'?`The Vessel cannot confirm whether your ${actionName(pending[0].op)} was applied after a restart. Review this conversation before sending similar work in a new voyage.`:pending.length===1?uncertainNotice(pending[0].op):pending.length>1?`We can’t confirm ${pending.length} actions yet. Check the conversation and receipts before trying again.`:lastSettled?settledNotice(lastSettled.op,lastSettled.status):tab.notice;
         } catch { tab.notice = 'We can’t check the receipt right now. Check the current voyage before trying again.'; }
         finally { this.pruneMessagePayloads(); tab.busy = false; this.changed(); }
     }

@@ -100,10 +100,10 @@ test('uncertain earlier message stays inspectable while a fresh composer can sen
     const root=createRoot(dom.window.document.querySelector('#mount')!);
     const id='a0c1465a-f47c-47aa-8a17-04c786833419';
     const tab:any={key:'t',title:'Voyage',snapshot:{messages:[]},decisions:[],pictures:[],draftState:{message:'Draft saved on this browser.',value:{delivery:'review'}},draft:'Retained',notice:'We can’t confirm whether your message went through. Check the conversation and receipt before trying again.',busy:false};
-    let checks=0;
+    let checks=0,recoveries=0;
     const workspace:any={actionable:()=>true,permitted:()=>true,pending:()=>[{op:'submit',command_id:id}],reconcile:async()=>{checks++;}};
     try{
-        await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:true,onSettings:()=>{},onRecover:()=>{},connection:{client:{}},voyage:{}})));
+        await React.act(async()=>root.render(React.createElement(Conversation,{tab,workspace,active:true,onSettings:()=>{},onRecover:()=>{recoveries++;},connection:{client:{}},voyage:{}})));
         assert.equal(dom.window.document.querySelector('.composer-feedback'),null,'technical recovery stays absent until requested');
         await React.act(async()=>[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Review pending work')!.click());
         const feedback=dom.window.document.querySelector('.composer-feedback')!;
@@ -114,7 +114,8 @@ test('uncertain earlier message stays inspectable while a fresh composer can sen
         assert.match(feedback.querySelector('code')!.textContent!,new RegExp(id));
         await React.act(async()=>dom.window.document.querySelector<HTMLButtonElement>('.composer-feedback button')!.click());
         assert.equal(checks,1);
-        assert.equal([...dom.window.document.querySelectorAll<HTMLButtonElement>('.composer-feedback button')].some(button=>button.textContent==='Continue in a new voyage'),false);
+        assert.equal([...dom.window.document.querySelectorAll<HTMLButtonElement>('.composer-feedback button')].some(button=>button.textContent==='Continue in a new voyage'),true);
+        await React.act(async()=>[...dom.window.document.querySelectorAll<HTMLButtonElement>('.composer-feedback button')].find(button=>button.textContent==='Continue in a new voyage')!.click());assert.equal(recoveries,1);assert.equal(checks,1,'recovery does not repeat receipt or send work');
         assert.equal(dom.window.document.querySelector<HTMLButtonElement>('.composer [aria-label="Send"]')?.disabled,false);
     }finally{await React.act(async()=>root.unmount());Object.assign(globalThis,saved);dom.window.close();}
 });

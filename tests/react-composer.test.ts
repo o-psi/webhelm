@@ -18,9 +18,9 @@ test('actual composer preserves keyboard, run transitions and command safety gat
     const connection:any={id:'v',name:'Fixture Vessel',client:{},journal:{entries:()=>pending}};
     const workspace=new Workspace(()=>new Map([['v',connection]]));
     const tab:any={key:'v:s',vessel:'v',session:'s',incarnation:'i',scope:'owner',rights:[],capabilities:[],snapshot:{revision:7,access:'approval',run:{state:'idle'}},freshAt:Date.now(),stale:false,busy:false,contentGeneration:0,draft:'A message',pictures:[],draftLoading:false};
-    const effects:Array<[string,string]>=[];
+    const effects:Array<[string,string]>=[];let recoveries=0;
     workspace.act=async(key,op)=>{effects.push([key,op]);};
-    const render=async()=>{await React.act(async()=>root.render(React.createElement(Composer,{tab,workspace,connection,voyage:{session_id:'s',name:'Fixture',incarnation:'i',access:'approval'},onSettings:()=>{}})));};
+    const render=async()=>{await React.act(async()=>root.render(React.createElement(Composer,{tab,workspace,connection,voyage:{session_id:'s',name:'Fixture',incarnation:'i',access:'approval'},onSettings:()=>{},onRecover:()=>{recoveries++;}})));};
     const button=(label:string)=>dom.window.document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
     const keyboard=async(init:KeyboardEventInit={})=>{
         const event=new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...init});
@@ -76,12 +76,16 @@ test('actual composer preserves keyboard, run transitions and command safety gat
         const count=effects.length;await keyboard();assert.equal(effects.length,count);
         assert.equal(pending[0].command_id,'uncertain-access','render/keypress never consumes uncertain records');
         pending=[{session_id:'s',command_id:'uncertain-send',op:'submit'}];await render();
+        const reviewButton=[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(node=>node.textContent?.trim()==='Review pending work');assert.ok(reviewButton);await React.act(async()=>reviewButton.click());
+        const disclosure=dom.window.document.querySelector<HTMLElement>('.composer-feedback>summary');assert.ok(disclosure);await React.act(async()=>disclosure.click());
+        const recovery=[...dom.window.document.querySelectorAll<HTMLButtonElement>('button')].find(node=>node.textContent?.trim()==='Continue in a new voyage');assert.ok(recovery,'message-only pending state offers an explicit way forward');
+        const beforeRecovery=effects.length;await React.act(async()=>recovery.click());assert.equal(recoveries,1);assert.equal(effects.length,beforeRecovery,'recovery offer does not resend a mutation');
         assert.equal(button('Send to current run')!.disabled,true,'cold unknown message payload refuses without invented fingerprint history');
         assert.equal(button('Stop run')!.disabled,true,'cancel still requires receipt resolution');
         const coldCount=effects.length;await keyboard();assert.equal(effects.length,coldCount);
         assert.equal(pending[0].command_id,'uncertain-send');
-        pending=[];tab.snapshot.run.state='idle';await render();assert.equal(button('Stop run'),null);
-        await React.act(async()=>root.render(React.createElement(Composer,{workspace,onSettings:()=>{}})));
+        pending=[];tab.snapshot.run.state='idle';await render();assert.equal(button('Stop run'),null);assert.equal(dom.window.document.querySelector('[aria-label="Pending work review"]'),null,'settled recovery leaves no empty panel');
+        await React.act(async()=>root.render(React.createElement(Composer,{workspace,onSettings:()=>{},onRecover:()=>{recoveries++;}})));
         assert.equal(button('Stop run'),null);assert.equal(button('Send')!.disabled,true);
         tab.scope='owner';tab.stale=false;tab.busy=false;tab.snapshot={revision:9,run:{state:'idle'},goal:{revision:1,goal:null}};tab.draft='/goal';
         pending=[{command_id:'uncertain',op:'submit'}];
