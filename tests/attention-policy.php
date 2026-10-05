@@ -1,6 +1,13 @@
 <?php
 
+use App\Attention\AttentionPolicy;
+use App\Models\Tenant;
+use App\Services\AttentionPolicyStore;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+
 // Offline isolated SQLite checks. Run with the repository's installed vendor tree.
+try {
 $ownedRoot = sys_get_temp_dir().'/attention-policy-'.bin2hex(random_bytes(12));
 mkdir($ownedRoot, 0700);
 foreach (['storage/framework/sessions', 'storage/framework/cache/data', 'storage/views', 'storage/logs'] as $directory) {
@@ -9,7 +16,7 @@ foreach (['storage/framework/sessions', 'storage/framework/cache/data', 'storage
 touch($ownedRoot.'/database.sqlite');
 $originalEnvironment = [];
 foreach ([
-    'APP_ENV' => 'testing', 'APP_KEY' => 'base64:'.base64_encode(str_repeat('p', 32)),
+    'APP_ENV' => 'local', 'APP_KEY' => 'base64:'.base64_encode(str_repeat('p', 32)),
     'DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => $ownedRoot.'/database.sqlite',
     'SESSION_DRIVER' => 'database', 'CACHE_STORE' => 'array', 'LOG_CHANNEL' => 'single',
     'APP_CONFIG_CACHE' => $ownedRoot.'/absent-config.php',
@@ -52,11 +59,6 @@ foreach (glob(__DIR__.'/../database/migrations/*.php') as $file) {
     (require $file)->up();
 }
 
-use App\Attention\AttentionPolicy;
-use App\Models\Tenant;
-use App\Services\AttentionPolicyStore;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
 
 $checks = 0;
 function policyCheck(bool $value, string $name): void
@@ -134,12 +136,18 @@ config(['helm.enabled' => true, 'session.driver' => 'database', 'session.encrypt
 $app->instance('env', 'local'); // Do not allow testing-mode CSRF bypass.
 $http = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $user = App\Models\User::create(['name' => 'HTTP policy', 'tenant_id' => $other->id]);
-$sessionId = Str::random(40);
-$csrf = Str::random(40);
-$loginKey = auth()->guard()->getName();
-DB::table('sessions')->insert(['id' => $sessionId, 'user_id' => $user->id,
-    'payload' => base64_encode(serialize(['_token' => $csrf, $loginKey => $user->id, 'helm_operator_until' => time() + 600])),
-    'last_activity' => time()]);
+$session = app('session')->driver();
+$session->flush();
+$session->regenerate();
+Illuminate\Support\Facades\Auth::login($user);
+$session->put('helm_operator_until', time() + 600);
+$session->regenerateToken();
+$session->save();
+$sessionId = $session->getId();
+$csrf = $session->token();
+policyCheck(in_array(config('session.serialization'), ['json', 'php'], true), 'known selected session serialization');
+policyCheck(DB::table('sessions')->where('id', $sessionId)->exists(), 'actual session driver saved');
+policyCheck(!$app->runningUnitTests(), 'real CSRF not unit-test bypassed');
 $cookieName = config('session.cookie');
 $cookie = app('encrypter')->encrypt(Illuminate\Cookie\CookieValuePrefix::create($cookieName, app('encrypter')->getKey()).$sessionId, false);
 $routed = function (string $method, string $path, ?array $body = null, bool $signedIn = true, ?string $token = null) use ($http, $cookieName, $cookie): Symfony\Component\HttpFoundation\Response {
@@ -153,7 +161,8 @@ $routed = function (string $method, string $path, ?array $body = null, bool $sig
     return $response;
 };
 $httpRead = $routed('GET', '/console/attention-policy');
-policyCheck($httpRead->getStatusCode() === 200 && str_contains($httpRead->headers->get('Cache-Control'), 'no-store'), 'routed session GET private');
+fwrite(STDERR, 'attention-policy routed_get status='.$httpRead->getStatusCode()."\n");
+policyCheck($httpRead->getStatusCode() === 200 && str_contains($httpRead->headers->get('Cache-Control'), 'no-store'), 'routed session GET private status='.$httpRead->getStatusCode());
 policyCheck($routed('GET', '/console/attention-policy', null, false)->getStatusCode() === 401, 'routed anonymous refused');
 $httpOperation = (string) Str::uuid();
 $httpPayload = ['operation_id' => $httpOperation, 'expected_revision' => 0, 'stale_policy' => 'seven_days'];
@@ -169,7 +178,7 @@ foreach ([['operation_id' => (string) Str::uuid()],
 }
 policyCheck($routed('POST', '/console/logout', [], true, $csrf)->getStatusCode() === 302, 'routed logout');
 policyCheck($routed('GET', '/console/attention-policy')->getStatusCode() === 401, 'old session denied after logout');
-$app->instance('env', 'testing');
+
 
 // Actual two-process race against a disposable file-backed SQLite copy. No fallback
 // to pretending sequential calls are a race when pcntl is unavailable.
@@ -211,7 +220,7 @@ try {
                 file_put_contents($resultPath, json_encode($result, JSON_THROW_ON_ERROR));
                 exit(0);
             } catch (Throwable $error) {
-                file_put_contents($resultPath, $error->getMessage());
+                file_put_contents($resultPath, 'race_fixture_error');
                 exit(1);
             }
         }
@@ -261,4 +270,8 @@ try {
     }
 }
 echo "$checks attention policy checks passed\n";
-
+} catch (Throwable $failure) {
+    // Fixed safe category only: never print exception/request/session payloads.
+    fwrite(STDERR, "FAIL attention-policy assertion_or_fixture_error\n");
+    exit(1);
+}
