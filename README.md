@@ -447,20 +447,26 @@ a request.
 
 ### Composer drafts
 
-Message and new-voyage drafts save text and prepared pictures in IndexedDB on the
-current browser, separately for each signed-in tenant and Vessel/voyage. Reload
-restores content for review; it never sends a message or restores execution approval.
-Accepted messages clear their saved content. An uncertain send retains the draft
-with a review warning so it is not silently repeated. Sign-out leaves drafts on
-this browser for that account; use **Discard draft** or clear site data to remove them.
-These drafts do not synchronize to another device.
+Message and new-voyage composers retain text and prepared pictures only in the
+current account's window memory. Navigation within that window retains composition;
+reload, closing the window and sign-out lose it. Legacy IndexedDB records are never
+opened, restored, updated, migrated or deleted. Execution intent and receipt
+journals remain durable and separate; uncertain requests are never automatically
+repeated. Copy unsent work before leaving the page.
 
-Storage is bounded to 64 drafts and 32 MiB per account, with 64 KiB of UTF-8 text
-and the existing four-picture/4 MiB prepared-image limit per draft. Nothing is
-automatically evicted. Conflicting tabs, unavailable storage and quota failures
-show a warning and preserve the current text for copying. Sending waits for the
-recovery marker to save. Runtime credentials, grants and command receipts stay
-outside the draft store.
+Window composition is bounded to 64 nonempty compositions and 32 MiB aggregate,
+with 64 KiB UTF-8 text and four prepared pictures / 4 MiB aggregate per composition.
+Same-key stale writes are refused without replacing the current window record.
+Revision identities, including cleared-key tombstones, are bounded to 1024 keys
+of at most 8 KiB UTF-8 each per window (16 times the active composition cap).
+Tombstones are never silently evicted: exhausting this metadata allowance refuses
+new identities, while existing-key revision checks and edits remain available.
+Copy unsent work before opening a fresh window to reset window-owned state.
+Metadata bounds supplement, rather than weaken, the content byte/count limits;
+File labels and destination strings retain their existing validation limits.
+Limits preserve current input for review rather than silently evicting another
+composition. Accepted input clears only if its content generation is unchanged;
+newer edits, refused and uncertain results retain composition.
 
 ### Console verification
 
@@ -490,9 +496,9 @@ The stopped recovery action keeps its accessible label/title consistent with its
 displayed intent. The same Chromium fixture prepares that assertion after
 synthetic close and requires all replay instances to be retired; runtime restart
 admission remains enforced by the executing Voyage.
-Run `node tests/browser-drafts-browser.mjs` against the built bundle for real
-IndexedDB reload, prepared-picture retention, tenant/voyage isolation, conflicting
-tabs, accepted/uncertain send handling, new-voyage approval reset and discard checks
+Run `node tests/browser-drafts-browser.mjs` against the built bundle for sandboxed
+volatile reload, prepared-picture navigation retention, tenant/window isolation,
+accepted/uncertain send handling, legacy-data preservation and sign-out checks
 at desktop and mobile widths. This uses synthetic transport without provider calls.
 `node tests/browser-conversation-browser.mjs` exercises the built shell with
 synthetic public-v2 frames in real Chromium at wide desktop, narrow desktop and

@@ -1,4 +1,4 @@
-// Production bundle, real IndexedDB, synthetic scoped transport. No provider.
+// Production bundle, volatile composers, synthetic scoped transport. No provider.
 import {createServer} from 'node:http';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {resolve,dirname,extname} from 'node:path';
@@ -17,6 +17,7 @@ const server=createServer(async(req,res)=>{
             const bootstrap={tenantId:url.searchParams.get('tenant')||'draft-account-a',vessels:[{id:vessel,vessel_id:'v',name:'Draft Vessel'}],ticketUrl:'/console/ticket',connectionsUrl:'/connections',logoutUrl:'/console/logout'};
             res.setHeader('Content-Type','text/html');res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">${entry.css.map(css=>`<link rel="stylesheet" href="/build/${css}">`).join('')}</head><body><div id="helm-react" data-bootstrap='${JSON.stringify(bootstrap)}'></div><script type="module" src="/build/${entry.file}"></script></body></html>`);return;
         }
+        if(url.pathname==='/console/logout'){assert.equal(req.method,'POST');res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>Signed out</title><h1>Signed out</h1>');return;}
         if(url.pathname==='/console/ticket'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({url:'wss://fixture.invalid/v1/vessel/browser-socket',vessel_id:'v',token:'a'.repeat(64),expires_at_ms:Date.now()+120000}));return;}
         const path=resolve(build,`.${url.pathname.replace(/^\/build/,'')}`);
         if(!path.startsWith(build+'/')){res.writeHead(404).end();return;}
@@ -25,7 +26,7 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin=`http://127.0.0.1:${server.address().port}`;await mkdir(output,{recursive:true});
-const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true});
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,chromiumSandbox:true});
 const report={at:new Date().toISOString(),chromium:browser.version(),entry:entry.file,sha256:createHash('sha256').update(await readFile(`${build}/${entry.file}`)).digest('hex'),cases:[]};
 try{
  for(const width of [1440,390]){
@@ -44,7 +45,7 @@ try{
                 const c=f.request.command;window.fixtureCommands.push(c);const envelope=result=>({session_id:c.session_id,incarnation:'i',result});let result;
                 if(c.op==='capabilities')result={scope:'owner',vessel_id:'v',features:['execution_profiles'],workspaces:[{path:'/work',name:'Work'}]};
                 else if(c.op==='catalogue')result=sessions.map((session,index)=>({session_id:session,incarnation:'i',name:`Draft voyage ${index+1}`,state:'live',catalogue:{summary:{run_state:'idle'}}}));
-                else if(c.op==='snapshot')result=envelope({session_id:c.session_id,name:'Draft voyage',workspace:'/work',revision:1,observation_cursor:5,messages:[],run:{state:'idle'}});
+                else if(c.op==='snapshot')result=envelope({session_id:c.session_id,name:`Draft voyage ${sessions.indexOf(c.session_id)+1}`,workspace:'/work',revision:1,observation_cursor:5,messages:[],run:{state:'idle'}});
                 else if(c.op==='decisions')result=envelope([]);
                 else if(c.op==='profiles')result={revision:1,default_profile_id:'fixture',profiles:[{id:'fixture',name:'Fixture',model:'m',account}]};
                 else if(c.op==='accounts')result={accounts:[{id:'a',connection_id:'p',identity_generation:1,label:'Fixture',state:'ready',availability:'available'}],connections:[{id:'p',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};
@@ -64,37 +65,51 @@ try{
     },{sessions});
     const page=await context.newPage();const path=`${origin}/voyages/${vessel}/${sessions[0]}`;
     const editor=p=>p.locator('.conversation:not([hidden]) textarea[aria-label="Message"]');
-    const saved=p=>p.locator('.conversation:not([hidden])').getByText('Draft saved on this browser.',{exact:true}).waitFor();
     const ready=async p=>{await editor(p).waitFor();await p.waitForFunction(()=>{const e=document.querySelector('.conversation:not([hidden]) textarea');return e&&!e.disabled;});};
-    await page.goto(path);await ready(page);await editor(page).fill('Private unsent <literal>\n界');
+    let nativeWarnings=0;page.on('dialog',dialog=>{if(dialog.type()==='beforeunload')nativeWarnings++;return dialog.accept();});
+    await page.goto(path);await ready(page);
+    await page.evaluate(async()=>{
+        const database=await new Promise((resolve,reject)=>{const request=indexedDB.open('helm-composer:draft-account-a',1);request.onupgradeneeded=()=>request.result.createObjectStore('drafts');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+        await new Promise((resolve,reject)=>{const tx=database.transaction('drafts','readwrite');tx.objectStore('drafts').put({revision:'legacy',value:{text:'DO NOT RESTORE',pictures:[]}},'legacy');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});database.close();
+    });
+await editor(page).fill('Private unsent <literal> 界');
     await page.locator('.conversation:not([hidden]) input[type="file"]').setInputFiles({name:'tiny.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII=','base64')});
-    await page.locator('.conversation:not([hidden]) .pictures img').waitFor();await saved(page);
-    await page.reload();await ready(page);assert.equal(await editor(page).inputValue(),'Private unsent <literal>\n界');assert.equal(await page.locator('.conversation:not([hidden]) .pictures img').count(),1);
-    assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),0);
-    await page.goto(`${origin}/voyages/${vessel}/${sessions[1]}`);await ready(page);assert.equal(await editor(page).inputValue(),'');
-    await page.goto(path+'?tenant=draft-account-b');await ready(page);assert.equal(await editor(page).inputValue(),'');assert.equal(await page.locator('.conversation:not([hidden]) .pictures img').count(),0);
-    await page.goto(path);await ready(page);assert.equal(await editor(page).inputValue(),'Private unsent <literal>\n界');
-    const second=await context.newPage();await second.goto(path);await ready(second);
-    await editor(page).fill('First tab saved');await saved(page);await editor(second).fill('Second tab retained');await second.getByText(/Another tab saved this draft/).waitFor();
-    assert.equal(await editor(second).inputValue(),'Second tab retained');second.on('dialog',dialog=>dialog.accept());await second.reload();await ready(second);assert.equal(await editor(second).inputValue(),'First tab saved');await second.close();
-    await page.getByRole('button',{name:'Remove tiny.png',exact:true}).click();await saved(page);
-    await editor(page).press('Enter');await page.waitForFunction(()=>Number(sessionStorage.getItem('fixture-sends')||0)===1);
-    await page.waitForFunction(()=>document.querySelector('.conversation:not([hidden]) textarea')?.value==='');await page.locator('.conversation:not([hidden])').getByText('Draft cleared on this browser.',{exact:true}).waitFor();
+    await page.locator('.conversation:not([hidden]) .pictures img').waitFor();
+    if(width<1024)await page.getByRole('button',{name:'Open voyage navigation'}).click();await page.locator('button.voyage-card').filter({hasText:'Draft voyage 2'}).click();await ready(page);assert.equal(await editor(page).inputValue(),'');
+    if(width<1024)await page.getByRole('button',{name:'Open voyage navigation'}).click();await page.locator('button.voyage-card').filter({hasText:'Draft voyage 1'}).click();await ready(page);assert.equal(await editor(page).inputValue(),'Private unsent <literal> 界');
+    assert.equal(await page.locator('.conversation:not([hidden]) .pictures img').count(),1);
+    const second=await context.newPage();await second.goto(path);await ready(second);assert.equal(await editor(second).inputValue(),'');await second.close();
+    const ordinaryWarnings=nativeWarnings;await page.reload();assert.ok(nativeWarnings>ordinaryWarnings,'ordinary unsent reload remains protected');await ready(page);assert.equal(await editor(page).inputValue(),'');assert.equal(await page.locator('.conversation:not([hidden]) .pictures img').count(),0);
+    await editor(page).fill('Accepted message');await page.getByRole('button',{name:'Send',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.conversation:not([hidden]) textarea')?.value==='');
+    await editor(page).fill('Unknown message');await page.evaluate(()=>window.fixtureUnknown=true);await page.getByRole('button',{name:'Send',exact:true}).click();
+    await page.getByText('This draft may already have been sent. Check the conversation before sending it again.',{exact:true}).waitFor();
+    const identity=await page.evaluate(()=>window.fixtureCommands.filter(command=>['submit','submit_content'].includes(command.op)).at(-1).command_id);
     await page.reload();await ready(page);assert.equal(await editor(page).inputValue(),'');
-    await editor(page).fill('Potentially delivered');await saved(page);await page.evaluate(()=>{window.fixtureUnknown=true;});await page.locator('.conversation:not([hidden])').getByRole('button',{name:'Send',exact:true}).click();await page.waitForFunction(()=>Number(sessionStorage.getItem('fixture-sends')||0)===2);
-    await page.reload();await ready(page);assert.equal(await editor(page).inputValue(),'Potentially delivered');await page.getByText('This draft may already have been sent. Check the conversation before sending it again.',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),2);
-    await page.screenshot({path:`${output}/${width}-restored.png`});
-    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-    await page.evaluate(()=>document.documentElement.classList.add('dark'));await page.waitForFunction(()=>{const probe=document.createElement('span');probe.style.color='var(--foreground)';document.body.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return getComputedStyle(document.querySelector('.conversation:not([hidden]) textarea')).color===expected;});await page.screenshot({path:`${output}/${width}-restored-dark.png`});
-    assert.equal(await editor(page).inputValue(),'Potentially delivered');
-    await page.goto(origin);const composer=page.getByRole('form',{name:'New voyage composer'});
-    await composer.locator('textarea').fill('New voyage draft');await composer.locator('input[type="file"]').setInputFiles({name:'new.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ0AAAAASUVORK5CYII=','base64')});await composer.getByRole('button',{name:'Remove new.png'}).waitFor();
-    await composer.getByRole('button',{name:/^Access: /}).click();await page.getByRole('menuitemradio',{name:'Full access',exact:true}).click();await composer.getByText('Draft saved on this browser.',{exact:true}).waitFor();
-    await page.reload();await composer.locator('textarea').waitFor();await page.waitForFunction(()=>!document.querySelector('.new-voyage textarea')?.disabled);assert.equal(await composer.locator('textarea').inputValue(),'New voyage draft');await composer.getByRole('button',{name:'Remove new.png'}).waitFor();assert.equal(await composer.getByRole('button',{name:/^Access: /}).getAttribute('aria-label'),'Access: Approval');
-    await composer.getByRole('button',{name:'Discard draft',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.new-voyage textarea')?.value==='');await composer.getByText('Draft cleared on this browser.',{exact:true}).waitFor();
-    await page.reload();await page.waitForFunction(()=>!document.querySelector('.new-voyage textarea')?.disabled);assert.equal(await composer.locator('textarea').inputValue(),'');assert.equal(await composer.getByRole('button',{name:'Remove new.png'}).count(),0);
-    assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),2);assert.deepEqual(errors,[]);
-    report.cases.push({width,pictureReload:true,tenantAndVoyageIsolation:true,concurrentTabConflict:true,acceptedCleared:true,unknownRetainedWithoutReplay:true,newDraftRestored:true,approvalReset:true,discardPersisted:true,errors});await context.close();
+    assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),2);
+    const receiptIds=await page.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('helm-web:intent:')).map(key=>JSON.parse(localStorage.getItem(key)).command_id));assert.ok(receiptIds.includes(identity));
+    await page.waitForFunction(identity=>window.fixtureCommands.some(command=>command.op==='receipt'&&command.command_id===identity),identity,{timeout:12000});
+    assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('fixture-sends')||0)),2);
+    await page.goto(path+'?tenant=draft-account-b');await ready(page);assert.equal(await editor(page).inputValue(),'');
+    await page.goto(origin);const composer=page.locator('.new-voyage');await composer.locator('textarea').waitFor();await composer.locator('textarea').fill('New unsent message');
+    await page.reload();await composer.locator('textarea').waitFor();assert.equal(await composer.locator('textarea').inputValue(),'');
+    await composer.locator('textarea').fill('Discard on signout');
+    await page.evaluate(()=>localStorage.setItem('unrelated-history','preserved'));
+    if(width<1024)await page.getByRole('button',{name:'Open voyage navigation'}).click();
+    await page.getByRole('button',{name:'Account and appearance'}).click();await page.getByRole('menuitem',{name:'Sign out',exact:true}).click();
+    const review=page.getByRole('dialog');await review.getByText('Sign out with unsent work?',{exact:true}).waitFor();
+    await review.getByRole('button',{name:'Keep working'}).click();assert.equal(await composer.locator('textarea').inputValue(),'Discard on signout');
+    if(width<1024){const navigation=page.getByRole('button',{name:'Open voyage navigation'});if(await navigation.isVisible()&&await navigation.getAttribute('aria-expanded')!=='true')await navigation.click();}
+    await page.getByRole('button',{name:'Account and appearance'}).click();await page.getByRole('menuitem',{name:'Sign out',exact:true}).click();
+    const warningsBeforeConfirmed=nativeWarnings;await review.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByRole('heading',{name:'Signed out',exact:true}).waitFor();assert.equal(nativeWarnings,warningsBeforeConfirmed,'confirmed App/New signout has no duplicate native warning');
+    await page.goto(origin);await composer.locator('textarea').waitFor();assert.equal(await composer.locator('textarea').inputValue(),'');
+    assert.equal(await page.evaluate(()=>localStorage.getItem('unrelated-history')),'preserved');
+    assert.ok(await page.evaluate(identity=>Object.keys(localStorage).filter(key=>key.startsWith('helm-web:intent:')).some(key=>JSON.parse(localStorage.getItem(key)).command_id===identity),identity));
+    assert.equal(await page.evaluate(async()=>{
+        const database=await new Promise(resolve=>{const request=indexedDB.open('helm-composer:draft-account-a',1);request.onsuccess=()=>resolve(request.result);});
+        const record=await new Promise(resolve=>{const request=database.transaction('drafts').objectStore('drafts').get('legacy');request.onsuccess=()=>resolve(request.result);});database.close();return record.value.text;
+    }),'DO NOT RESTORE');
+    assert.deepEqual(errors,[]);
+    report.cases.push({width,volatilePictures:true,tabRetention:true,reloadClears:true,accountIsolation:true,windowIsolation:true,acceptedCleared:true,exactUnknownReceipt:identity,newComposerReloadClears:true,signoutDiscards:true,signoutKeepsReceipts:true,errors});await context.close();
  }
  await writeFile(`${output}/report.json`,JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

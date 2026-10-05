@@ -12,8 +12,8 @@ test('only literal goal command boundaries intercept inference',()=>{
 });
 function fixture(){
     const calls:string[]=[];
-    const tab:any={snapshot:{session_id:'s',access:'approval',goal:{revision:0,goal:null}},incarnation:'i',stale:false,pictures:[],draft:''};
-    const workspace:any={tabs:new Map([['k',tab]]),refresh:async()=>{calls.push('read');},restoreDraft:async()=>{},draft:(_key:string,text:string)=>{tab.draft=text;},saveDrafts:async()=>{},goalUpdate:async(_key:any,_review:any,action:any)=>{calls.push('goal');assert.equal(action.continue_automatically,false);return true;},actionable:()=>true,permitted:()=>true,act:async()=>{calls.push('inference');}};
+    const tab:any={snapshot:{session_id:'s',access:'approval',goal:{revision:0,goal:null}},incarnation:'i',stale:false,pictures:[],draft:'',contentGeneration:0};
+    const workspace:any={tabs:new Map([['k',tab]]),refresh:async()=>{calls.push('read');},restoreDraft:async()=>{},draft:(_key:string,text:string)=>{tab.contentGeneration++;tab.draft=text;},clearContent:(_key:string,generation:number)=>{if(tab.contentGeneration===generation){tab.contentGeneration++;tab.draft='';return true;}return false;},saveDrafts:async()=>{},goalUpdate:async(_key:any,_review:any,action:any)=>{calls.push('goal');assert.equal(action.continue_automatically,false);return true;},actionable:()=>true,permitted:()=>true,act:async()=>{calls.push('inference');}};
     return {workspace,calls};
 }
 test('status reads while ordinary objective directly defines paused metadata',async()=>{

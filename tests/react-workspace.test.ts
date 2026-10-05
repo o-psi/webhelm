@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Workspace} from '../resources/react/workspace.ts';
+import {BrowserDrafts} from '../resources/react/drafts';
 import {IntentJournal} from '../resources/js/vessel-client.js';
 
 class Storage {
@@ -446,4 +447,54 @@ test('actual uncertain dispatch retains fingerprint and permits only distinct fr
     assert.equal(f.workspace.actionable(tab,'submit'),true,'fresh distinct payload remains permitted');
     assert.equal(f.commands.filter(c=>c.op==='submit').length,1);
     f.workspace.close();
+});
+
+test('actual admitted submission clears unchanged content but not A to B to A edits',async()=>{
+ for(const edit of [false,true]){
+  const f=fixture(new BrowserDrafts('generation-account')),key=f.workspace.open('vessel','a','A');await f.workspace.restoreDraft(key);await f.workspace.refresh(key);f.workspace.draft(key,'A');
+  const original=f.connection.client.exchange.bind(f.connection.client);let release!:()=>void,entered!:()=>void;
+  const pending=new Promise<void>(resolve=>release=resolve),admitted=new Promise<void>(resolve=>entered=resolve);
+  f.connection.client.exchange=async(payload:any)=>{if(payload.command.op==='submit'){entered();await pending;}return original(payload);};
+  const action=f.workspace.act(key,'submit');await admitted;
+  if(edit){f.workspace.draft(key,'B');f.workspace.draft(key,'A');}
+  release();await action;
+  assert.equal(f.workspace.tabs.get(key)!.draft,edit?'A':'');assert.equal(f.commands.filter(c=>c.op==='submit').length,1);f.workspace.close();
+ }
+});
+
+test('volatile composition survives refused and uncertain sends without replay and closes without persistence',async()=>{
+ for(const mode of ['unknown','refused']){
+  const repository=new BrowserDrafts('account'),f=fixture(repository),key=f.workspace.open('vessel','a','A');await f.workspace.restoreDraft(key);await f.workspace.refresh(key);f.workspace.draft(key,'Keep');
+  f.mode(mode);await f.workspace.act(key,'submit');assert.equal(f.workspace.tabs.get(key)!.draft,'Keep');
+  if(mode==='unknown'){await f.workspace.act(key,'submit');assert.equal(f.commands.filter(c=>c.op==='submit').length,1);}
+  const other=f.workspace.open('vessel','b','B');await f.workspace.restoreDraft(other);assert.equal(f.workspace.open('vessel','a','A'),key);assert.equal(f.workspace.tabs.get(key)!.draft,'Keep');
+  f.workspace.close();assert.equal(await new BrowserDrafts('account').read(key),null);
+ }
+});
+
+test('deferred actual Goal admission protects newer same-value composer input',async()=>{
+ const {completeNewVoyage}=await import('../resources/react/new-voyage-delivery');
+ const {defaultGoalLimits}=await import('../resources/react/goals');
+ for(const edit of [false,true]){
+  const f=fixture(new BrowserDrafts('goal-account')),key=f.workspace.open('vessel','a','A');await f.workspace.restoreDraft(key);
+  const original=f.connection.client.exchange.bind(f.connection.client);let release!:()=>void,entered!:()=>void;
+  const pending=new Promise<void>(resolve=>release=resolve),admitted=new Promise<void>(resolve=>entered=resolve);
+  f.connection.client.exchange=async(payload:any)=>{
+   if(payload.command.op==='snapshot'){const response:any=await original(payload);response.result.result.access='approval';response.result.result.goal={revision:0,goal:null};return response;}
+   if(payload.command.op==='goal_update'){entered();await pending;const response:any=await original(payload);Object.assign(response.result.result,{status:'applied',goal_revision:1,goal_id:payload.command.command_id});return response;}
+   return original(payload);
+  };
+  const action=completeNewVoyage(f.workspace,key,{text:'/goal A',pictures:[],access:'approval',send:true,applyAccess:true,goalIntent:{objective:'A',limits:defaultGoalLimits,replace_goal_id:null,continue_automatically:false}});
+  await admitted;if(edit){f.workspace.draft(key,'/goal B');f.workspace.draft(key,'/goal A');}release();await action;
+  assert.equal(f.workspace.tabs.get(key)!.draft,edit?'/goal A':'');assert.equal(f.commands.filter(c=>c.op==='submit').length,0);f.workspace.close();
+ }
+});
+
+test('cancel is not content admission and close during submission cannot clear input',async()=>{
+ const f=fixture(new BrowserDrafts('close-account')),key=f.workspace.open('vessel','a','A');await f.workspace.restoreDraft(key);await f.workspace.refresh(key);f.workspace.draft(key,'Keep');
+ await f.workspace.act(key,'cancel');assert.equal(f.workspace.tabs.get(key)!.draft,'Keep');
+ const original=f.connection.client.exchange.bind(f.connection.client);let release!:()=>void,entered!:()=>void;
+ const pending=new Promise<void>(resolve=>release=resolve),admitted=new Promise<void>(resolve=>entered=resolve);
+ f.connection.client.exchange=async(payload:any)=>{if(payload.command.op==='submit'){entered();await pending;}return original(payload);};
+ const action=f.workspace.act(key,'submit');await admitted;f.workspace.close();release();await action;assert.equal(f.workspace.tabs.get(key)!.draft,'Keep');
 });

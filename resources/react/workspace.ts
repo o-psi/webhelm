@@ -7,7 +7,7 @@ import {inspectionRequest,inventorySupports,type InspectionScope} from './inspec
 
 export type Connection = {id: string; name: string; client: any; journal: any; voyages: any[]; status: string};
 export type Picture = {id: string; name: string; size: number; url: string; base64: string; uploadId: string; attachment?: any; file?:File};
-export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; capabilities?:string[]; pictures: Picture[]; scrollTop?: number; following?: boolean; draftState?:DraftSlot; draftLoading?:boolean};
+export type Tab = {key: string; vessel: string; session: string; title: string; draft: string; contentGeneration: number; snapshot: any; incarnation: string | null; stale: boolean; busy: boolean; notice: string; receiptStates: Record<string,string>; freshAt: number; decisions: any[]; rights?: string[]; scope?: string; capabilities?:string[]; pictures: Picture[]; scrollTop?: number; following?: boolean; draftState?:DraftSlot; draftLoading?:boolean};
 const actionName=(op:string)=>['submit','submit_content','steer'].includes(op)?'message':({operator_tool:'workspace request',set_access:'access change',set_account_inference:'model change',cancel:'stop request',respond:'decision',goal_update:'goal change'} as Record<string,string>)[op]||'action';
 const uncertainNotice=(op:string)=>`We can’t confirm whether your ${actionName(op)} went through. Check the conversation and receipt before trying again.`;
 const statusReadNotice='Voyage status unavailable. Check the Vessel connection.';
@@ -36,7 +36,7 @@ export class Workspace {
     open(vessel: string, session: string, title: string) {
         const key = JSON.stringify([vessel, session]);
         if (!this.tabs.has(key)) {
-            const tab:Tab = {key, vessel, session, title, draft: '', snapshot: null, incarnation: null, stale: true, busy: false, notice: '', receiptStates: {}, freshAt: 0, decisions: [], pictures: []};
+            const tab:Tab = {key, vessel, session, title, draft: '', contentGeneration:0, snapshot: null, incarnation: null, stale: true, busy: false, notice: '', receiptStates: {}, freshAt: 0, decisions: [], pictures: []};
             this.tabs.set(key,tab);
             if(this.drafts){
                 const slot=new DraftSlot(this.drafts,key,()=>this.changed());tab.draftState=slot;tab.draftLoading=true;
@@ -52,13 +52,14 @@ export class Workspace {
         }
         this.changed(); void this.refresh(key); return key;
     }
-    draft(key: string, value: string) { const tab = this.tabs.get(key); if (tab && !tab.draftLoading) { tab.draft = value; this.saveDraft(tab); this.changed(); } }
+    draft(key: string, value: string) { const tab = this.tabs.get(key); if (tab && !tab.draftLoading) { tab.contentGeneration++; tab.draft = value; this.saveDraft(tab); this.changed(); } }
     private saveDraft(tab:Tab){tab.draftState?.set({text:tab.draft,pictures:tab.pictures.map(p=>p.file!).filter(Boolean),delivery:tab.draftState.value.delivery});}
+    clearContent(key:string,generation:number){const tab=this.tabs.get(key);if(this.closed||!tab||tab.contentGeneration!==generation)return false;tab.contentGeneration++;tab.draft='';tab.pictures.forEach(p=>URL.revokeObjectURL(p.url));tab.pictures=[];this.saveDraft(tab);this.changed();return true;}
     async restoreDraft(key:string){await this.draftReads.get(key);}
     async saveDrafts(){await Promise.all([...this.tabs.values()].map(tab=>tab.draftState?.flush()));}
     async clearDraft(key:string){
         const tab=this.tabs.get(key);if(!tab||tab.busy||tab.draftLoading)return;
-        tab.draft='';tab.pictures.forEach(p=>URL.revokeObjectURL(p.url));tab.pictures=[];
+        tab.contentGeneration++;tab.draft='';tab.pictures.forEach(p=>URL.revokeObjectURL(p.url));tab.pictures=[];
         this.changed();
         await tab.draftState?.discard();
     }
@@ -201,6 +202,7 @@ export class Workspace {
         const connection = this.connections().get(tab.vessel)!;
         const client = connection.client;
         const draft = tab.draft;
+        const contentGeneration=tab.contentGeneration;
         const messageFingerprint=this.messageFingerprint(tab);
         if (['submit', 'steer'].includes(op)) {
             if ((!draft.trim() && !tab.pictures.length) || new TextEncoder().encode(draft).length > 65536) { tab.notice = 'Message must contain 1–65536 UTF-8 bytes.'; this.changed(); return; }
@@ -261,8 +263,7 @@ export class Workspace {
             if(known&&!response.error&&!notApplied(status)&&status!=='unknown_after_restart')onReceipt?.(response.result?.result);
             tab.notice = response.error ? `Vessel refused: ${response.error}` : !known || status === 'unknown_after_restart' ? uncertainNotice(op) : notApplied(status) ? settledNotice(op,status) : '';
             if (known && !response.error && ['accepted', 'queued', 'applied'].includes(status) && ['submit', 'steer', 'submit_content'].includes(op)) {
-                if (tab.draft === draft) tab.draft = '';
-                tab.pictures = tab.pictures.filter(picture => !pictures.includes(picture)); pictures.forEach(picture => URL.revokeObjectURL(picture.url));
+                if(!this.closed&&this.tabs.get(key)===tab&&tab.contentGeneration===contentGeneration){tab.draft='';tab.pictures=[];tab.contentGeneration++;pictures.forEach(picture=>URL.revokeObjectURL(picture.url));}
                 this.saveDraft(tab); await tab.draftState?.flush();
             }
             return Boolean(known && !response.error && !notApplied(status) && status!=='unknown_after_restart');
@@ -312,7 +313,7 @@ export class Workspace {
                 const {blob,name} = await preparePicture(file,remaining);
                 const picture=await this.picture(blob,name||'pasted-image');
                 if (this.closed || this.tabs.get(key) !== tab || guard && !guard()) {URL.revokeObjectURL(picture.url);throw new Error('Voyage changed; capture not attached.');}
-                tab.pictures.push(picture);this.saveDraft(tab);
+                tab.contentGeneration++; tab.pictures.push(picture);this.saveDraft(tab);
             }
         } catch (error) { success = false; tab.notice = error instanceof Error ? error.message : 'Picture unavailable.'; }
         finally { this.pruneMessagePayloads(); tab.busy = false; this.changed(); }
@@ -320,7 +321,7 @@ export class Workspace {
     }
     removePicture(key: string, id: string) {
         const tab = this.tabs.get(key); if (!tab || tab.busy) return;
-        tab.pictures = tab.pictures.filter(picture => { if (picture.id !== id) return true; URL.revokeObjectURL(picture.url); return false; }); this.saveDraft(tab);this.changed();
+        tab.contentGeneration++; tab.pictures = tab.pictures.filter(picture => { if (picture.id !== id) return true; URL.revokeObjectURL(picture.url); return false; }); this.saveDraft(tab);this.changed();
     }
     async artifact(key: string, attachment: any) {
         const tab = this.tabs.get(key), client = tab && this.connections().get(tab.vessel)?.client;

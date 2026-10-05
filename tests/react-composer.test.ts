@@ -17,7 +17,7 @@ test('actual composer preserves keyboard, run transitions and command safety gat
     let pending:any[]=[];
     const connection:any={id:'v',name:'Fixture Vessel',client:{},journal:{entries:()=>pending}};
     const workspace=new Workspace(()=>new Map([['v',connection]]));
-    const tab:any={key:'v:s',vessel:'v',session:'s',incarnation:'i',scope:'owner',rights:[],capabilities:[],snapshot:{revision:7,access:'approval',run:{state:'idle'}},freshAt:Date.now(),stale:false,busy:false,draft:'A message',pictures:[],draftLoading:false};
+    const tab:any={key:'v:s',vessel:'v',session:'s',incarnation:'i',scope:'owner',rights:[],capabilities:[],snapshot:{revision:7,access:'approval',run:{state:'idle'}},freshAt:Date.now(),stale:false,busy:false,contentGeneration:0,draft:'A message',pictures:[],draftLoading:false};
     const effects:Array<[string,string]>=[];
     workspace.act=async(key,op)=>{effects.push([key,op]);};
     const render=async()=>{await React.act(async()=>root.render(React.createElement(Composer,{tab,workspace,connection,voyage:{session_id:'s',name:'Fixture',incarnation:'i',access:'approval'},onSettings:()=>{}})));};
@@ -107,12 +107,12 @@ test('actual composer preserves keyboard, run transitions and command safety gat
         await keyboard();
         assert.ok(dom.window.document.querySelector('[aria-label="Goal review"]'),'bare goal status is nonmodal while message receipt is pending');
         assert.equal(dom.window.document.querySelector('[role="dialog"]'),null);assert.equal(effects.length,beforeGoal,'goal status never dispatches inference');
-        pending=[];tab.draft='/goal Build';tab.notice='';
+        pending=[];workspace.draft(tab.key,'/goal Build');tab.notice='';
         let finish!: (value:boolean)=>void;
         workspace.goalUpdate=async()=>await new Promise<boolean>(resolve=>{finish=resolve;});
-        workspace.draft=(key,text)=>{assert.equal(key,tab.key);tab.draft=text;};workspace.changed=()=>{};
+        workspace.changed=()=>{};
         await render();await keyboard();
-        tab.draft='New text typed while metadata is pending';
+        workspace.draft(tab.key,'New text typed while metadata is pending');
         await React.act(async()=>{finish(true);await Promise.resolve();});
         assert.equal(tab.draft,'New text typed while metadata is pending','confirmed goal cannot erase newer user input');
         assert.equal(effects.length,beforeGoal,'definition remains metadata only');

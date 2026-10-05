@@ -16,6 +16,7 @@ export async function completeNewVoyage(workspace:Workspace,key:string,message:N
         tab.notice='Some pictures could not be prepared. Review the retained draft before sending.';
         workspace.changed();return;
     }
+    const contentGeneration=tab.contentGeneration;
     if(!message.applyAccess)return;
     if(!workspace.actionable(tab)||!workspace.permitted(tab,'set_access')){
         tab.notice='Voyage created. Access could not be reviewed yet; your message is unsent.';
@@ -35,7 +36,7 @@ export async function completeNewVoyage(workspace:Workspace,key:string,message:N
         const review=reviewGoal(tab.snapshot,tab.incarnation);
         if(review.state.goal)throw Error('Review the existing goal before applying this retained intent.');
         const applied=await workspace.goalUpdate(key,review,{action:'set',...message.goalIntent});
-        if(applied&&tab.draft===message.text){workspace.draft(key,'');await workspace.saveDrafts();}
+        if(applied){workspace.clearContent(key,contentGeneration);await workspace.saveDrafts();}
         return;
     }
     if(!message.send)return;
