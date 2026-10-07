@@ -480,6 +480,19 @@ newer edits, refused and uncertain results retain composition.
 
 ### Console verification
 
+Chat messages and provisional live replies render inline math with `\(…\)` or
+`$…$`, and display math with `\[…\]` or `$$…$$`. Ordinary prices, escaped
+dollars and code spans/blocks stay literal. Incomplete streaming expressions,
+unsupported commands and expressions exceeding the rendering budget remain
+readable LaTeX source. Copy response retains the original canonical message.
+KaTeX and its fonts ship with the console; no external math service is used.
+The existing prose HTML sanitizer remains narrow, while only generated KaTeX
+markup is inserted afterward. Trusted URL/HTML commands are disabled, macros
+are isolated per expression, expansion is capped at 1,000 and requested sizes
+at 10 em. Each render admits up to 64 expressions, 8 KiB UTF-8 per expression
+and 32 KiB aggregate math input. Equations scroll inside their message at narrow
+widths. This supports mathematics in chat, not full `.tex` document compilation.
+
 Run `npm test` for the active shared transport/auth and React suites. On the
 supported Linux verification host, React files run sequentially in separate
 transient systemd user services with private umask `0077`, each capped at

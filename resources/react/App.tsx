@@ -34,8 +34,8 @@ import {completeNewVoyage} from './new-voyage-delivery';
 import {Decisions} from './Decisions';
 import {VesselFleet} from '../js/vessel-fleet.js';
 import {voyageList, filterVoyages, activityLabel, cardStatus, sidebarGroups, voyageGroup} from './presentation';
-import {marked} from 'marked';
-import DOMPurify from 'dompurify';
+import {ChatProse} from './ChatProse';
+export {prose} from './chat-prose';
 import {Workspace, type Tab} from './workspace';
 import {voyageLocation, voyagePath} from './voyage-url';
 import workingStatuses from '../../shared/helm/assets/working-statuses.json';
@@ -46,9 +46,6 @@ function content(value: unknown): string {
     if (typeof value === 'string') return value;
     if (Array.isArray(value)) return value.map(part => part?.text || (part?.type === 'image' ? '[Image attachment]' : JSON.stringify(part))).join('\n');
     return value == null ? '' : JSON.stringify(value, null, 2);
-}
-export function prose(text: string) {
-    return DOMPurify.sanitize(marked.parse(text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'')) as string, {ALLOWED_TAGS:['p','br','strong','em','del','code','pre','blockquote','ul','ol','li','h1','h2','h3','h4','hr','a','table','thead','tbody','tr','th','td'], ALLOWED_ATTR:['href','title'], ALLOW_DATA_ATTR:false});
 }
 export function CopyResponse({tab,workspace,message}:{tab:Tab;workspace:Workspace;message:any}){
     const [copied,setCopied]=useState(false),[error,setError]=useState(false);
@@ -232,7 +229,7 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
     };
     useEffect(() => {if (active) {loadNearTop();updateTurnNavigation();}}, [active, tab.snapshot?.message_offset, tab.snapshot?.messages]);
     const renderMessage=(message:any)=>{return <article key={message.message_index} className={`message ${message.role}`} data-message-index={message.message_index} tabIndex={-1}>
-                    {['tool','function'].includes(message.role) ? <pre>{content(message.content)}</pre> : <><div className="flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{message.role==='user'?'You':message.role==='assistant'?'Voyage':message.role}</span><TurnLink tab={tab} message={message}/></div><div className="prose" dangerouslySetInnerHTML={{__html:prose(message.parts?.length?message.parts.filter((part:any)=>part.type==='text').map((part:any)=>part.text).join('\n'):content(message.content))}}/></>}
+                    {['tool','function'].includes(message.role) ? <pre>{content(message.content)}</pre> : <><div className="flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{message.role==='user'?'You':message.role==='assistant'?'Voyage':message.role}</span><TurnLink tab={tab} message={message}/></div><ChatProse text={message.parts?.length?message.parts.filter((part:any)=>part.type==='text').map((part:any)=>part.text).join('\n'):content(message.content)}/></>}
                     {message.interrupted_attempt&&<small className="message-meta">Interrupted attempt</small>}
                     {message.parts?.filter((part:any)=>part.type==='image').map((part:any,index:number)=><ImagePart key={part.attachment?.id||index} attachment={part.attachment} tab={tab} workspace={workspace}/>)}
                     {message.projection_truncated && <Button variant="ghost" disabled={tab.busy} onClick={()=>void workspace.expand(tab.key,message.message_index)}>Read complete message</Button>}
