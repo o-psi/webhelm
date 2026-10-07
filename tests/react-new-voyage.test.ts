@@ -7,7 +7,7 @@ import {completeNewVoyage} from '../resources/react/new-voyage-delivery';
 
 const binding={account_id:'account',connection_id:'provider',identity_generation:1,connection_revision:1,transport:'chatgpt_oauth'};
 
-async function mount({bootstrapPending=false,uncertain=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false,unknownModels=false,reorderedProfile=false}:{reorderedProfile?:boolean;unknownModels?:boolean;accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
+async function mount({bootstrapPending=false,uncertain=false,automaticRecovery=false,recovery=null,scoped=false,revokeWorkspace=false,accountChanged=false,unknownModels=false,reorderedProfile=false}:{automaticRecovery?:boolean;reorderedProfile?:boolean;unknownModels?:boolean;accountChanged?:boolean;uncertain?:boolean;recovery?:any;scoped?:boolean;revokeWorkspace?:boolean}={}){
     const dom=new JSDOM('<div id="root"></div>',{url:'https://helm.test',pretendToBeVisual:true});
     // Radix focus traversal and Floating UI must see constructors from this window.
     const globals:Record<string,unknown>={window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true,
@@ -30,7 +30,7 @@ async function mount({bootstrapPending=false,uncertain=false,recovery=null,scope
             case 'accounts':accountReads++;result={accounts:[{id:'account',connection_id:'provider',identity_generation:accountChanged&&accountReads>1?2:1,label:'Account',state:'ready',availability:'available'}],connections:[{id:'provider',revision:1,label:'Provider',transports:['chatgpt_oauth']}]};break;
             case 'account_models':if(failModels)throw Error('Catalogue unavailable');result={account:binding,models:[{id:'m',input_modalities:['text','image'],display_name:'Everyday model',reasoning_efforts:['low','high']},{id:'other',input_modalities:['text'],display_name:'Other model',reasoning_efforts:['low'],service_tiers:['flex']}]};break;
             case 'start_account':if(uncertain)return {protocol:1,outcome_unknown:true,result:null};result={session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'};break;
-            case 'resolve_start_account':result={command_id:command.command_id,session_id:command.session_id,status:'created',process:{session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'}};break;
+            case 'resolve_start_account':if(!automaticRecovery&&commands.filter(c=>c.op==='resolve_start_account').length===1)return {protocol:1,outcome_unknown:false,error:null,result:{command_id:command.command_id,session_id:command.session_id,status:'unknown'}};result={command_id:command.command_id,session_id:command.session_id,status:'created',process:{session_id:command.session_id,workspace:'/work',incarnation:'i',name:'New voyage'}};break;
             default:throw new Error(command.op);
         }
         return {protocol:1,outcome_unknown:false,error:null,result};
@@ -106,7 +106,7 @@ test('uncertain creation is never replayed and recovery transfers an unsent draf
         assert.equal(view.commands.filter(command=>command.op==='start_account').length,1);
         await view.openRecovery();await act(async()=>view.button('Check creation · Fixture Vessel').click());
         assert.equal(view.commands.filter(command=>command.op==='start_account').length,1);
-        assert.equal(view.commands.filter(command=>command.op==='resolve_start_account').length,1);
+        assert.equal(view.commands.filter(command=>command.op==='resolve_start_account').length,2);
         assert.equal(view.created[0].message.text,'Keep this draft');
         assert.equal(view.created[0].message.send,false);
         assert.equal(view.created[0].message.applyAccess,false);
@@ -391,8 +391,25 @@ test('uncertain picture creation reconciles read-only even when current model me
   await view.openRecovery();await act(async()=>view.button('Check creation · Fixture Vessel').click());
   assert.equal(view.commands.filter(c=>c.op==='account_models').length,modelReads,'receipt lookup does not require model preflight');
   assert.equal(view.commands.filter(c=>c.op==='start_account').length,1,'uncertain creation is never replayed');
-  assert.equal(view.commands.filter(c=>c.op==='resolve_start_account').length,1);
+  assert.equal(view.commands.filter(c=>c.op==='resolve_start_account').length,2);
   assert.equal(view.created.length,1);assert.equal(view.created[0].message.pictures.length,1);
   assert.equal(view.created[0].message.text,'Retain image intent');assert.equal(view.created[0].message.send,false);assert.equal(view.created[0].message.applyAccess,false);
+ }finally{await view.dispose();}
+});
+
+ test('lost creation confirmation checks the exact receipt once and keeps the prompt unsent',async()=>{
+ const view=await mount({uncertain:true,automaticRecovery:true});
+ try{
+  await act(async()=>{const input=document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!;Object.getOwnPropertyDescriptor(view.dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(input,'Keep this exact prompt');input.dispatchEvent(new view.dom.window.Event('input',{bubbles:true}));});
+  await act(async()=>view.button('Send').click());
+  assert.equal(view.created.length,1);
+  assert.equal(view.created[0].message.text,'Keep this exact prompt');
+  assert.equal(view.created[0].message.send,false);
+  assert.equal(view.created[0].message.applyAccess,false);
+  const start=view.commands.find(c=>c.op==='start_account'),resolve=view.commands.find(c=>c.op==='resolve_start_account');
+  assert.deepEqual(resolve,{...start,op:'resolve_start_account'});
+  assert.equal(view.commands.filter(c=>c.op==='start_account').length,1);
+  assert.equal(view.commands.filter(c=>c.op==='resolve_start_account').length,1);
+  assert.equal(view.commands.some(c=>['submit','set_access'].includes(c.op)),false);
  }finally{await view.dispose();}
 });

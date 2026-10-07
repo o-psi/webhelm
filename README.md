@@ -76,7 +76,7 @@ and [the tracked legacy delivery defect](https://github.com/o-psi/helm.vessel.vo
 The new-voyage screen opens with a message draft and Vessel, workspace, profile and
 access controls. Sending creates an independent voyage, confirms its selected
 access mode, then submits the first message. An uncertain creation keeps the draft
-and requires exact receipt review; recovery never sends the message. Users can also
+and requires exact receipt review; recovery never sends the message. An uncertain initial creation reply triggers one lookup of the original creation receipt. If confirmed, Helm opens that voyage with the retained message unsent; it never repeats creation or applies access settings during recovery. If the receipt remains unavailable, explicit Check creation stays available. Proven synchronous pre-send refusals leave no blocking creation journal. Safe connection diagnostics record whether creation failed before dispatch, lost its connection/reply, or received a server-unknown result; payloads and private diagnostics are excluded. Users can also
 create a voyage without a first message. Unsent text and prepared pictures save
 per account and voyage in this browser and restore after reload for review. Profile setup carries over the archived console’s compact
 overview, separate searchable pickers, back navigation, fixed actions, deletion

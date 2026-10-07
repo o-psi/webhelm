@@ -1,3 +1,4 @@
+import {CommandNotSentError,VesselSocket} from '../resources/js/vessel-client.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Creation,accountChoices,vesselRead} from '../resources/react/settings.ts';
@@ -24,4 +25,47 @@ test('model access denial stays distinct and secret-free without retry or billin
  await assert.rejects(()=>vesselRead(connection,'account_models'),error=>error instanceof Error&&error.message==='The provider denied model discovery for this account. Review provider permissions and model access.');
  assert.equal(calls,1);
  await assert.rejects(()=>vesselRead(connection,'profiles'),/Vessel could not confirm/);
+});
+
+test('closed socket proves creation was not sent and does not leave a blocking journal',async()=>{
+ const storage=new Storage(),creation=new Creation(storage as any,'t');
+ const socket:any={readyState:3,addEventListener(){},send(){assert.fail('closed socket must not send');}};
+ const c:any={id:'c',vessel_id:'v',voyages:[],client:new VesselSocket(socket,()=>{})};
+ await assert.rejects(()=>creation.start(c,'/work',{model:'m'}),/Creation was not sent/);
+ assert.equal(storage.length,0);
+ await assert.rejects(()=>c.client.exchange({protocol:1,command:{op:'start_account'}}),CommandNotSentError);
+});
+
+test('unclassified exchange failure retains the exact creation even when it resembles a pre-send refusal',async()=>{
+ const storage=new Storage(),creation=new Creation(storage as any,'t');
+ const c:any={id:'c',vessel_id:'v',voyages:[],client:{exchange(){throw new Error('Connection unavailable.');}}};
+ await assert.rejects(()=>creation.start(c,'/work',{model:'m'}),/can’t confirm/);
+ assert.equal(creation.pending().length,1);
+});
+
+test('capacity and synchronous send failures release only proven undispatched creation',async()=>{
+ for(const failure of ['capacity','send_failed']){
+  const storage=new Storage(),creation=new Creation(storage as any,'t');let sends=0;
+  const socket:any={readyState:1,addEventListener(){},send(){sends++;throw Error('private socket detail');}};
+  const client=new VesselSocket(socket,()=>{});
+  if(failure==='capacity')for(let i=0;i<16;i++)client.pending.set(String(i),{});
+  const c:any={id:'c',vessel_id:'v',voyages:[],client};
+  await assert.rejects(()=>creation.start(c,'/work',{model:'m'}),/Creation was not sent/);
+  assert.equal(storage.length,0);assert.equal(sends,failure==='capacity'?0:1);
+  assert.equal(client.pending.size,failure==='capacity'?16:0);
+ }
+});
+
+test('a mismatched recovery receipt cannot clear an uncertain creation',async()=>{
+ const storage=new Storage(),creation=new Creation(storage as any,'t');
+ const c:any={id:'c',vessel_id:'v',voyages:[],client:{async exchange({command}:any){return command.op==='start_account'?{protocol:1,outcome_unknown:true}:{protocol:1,outcome_unknown:false,result:{status:'created',command_id:'other',session_id:command.session_id}};}}};
+ await assert.rejects(()=>creation.start(c,'/work',{model:'m'}));
+ await assert.rejects(()=>creation.reconcile(c,creation.pending()[0]),/identity changed/);
+ assert.equal(storage.length,1);assert.equal(c.voyages.length,0);
+});
+
+test('a connection lost before creation admission leaves no uncertain record',async()=>{
+ const storage=new Storage(),creation=new Creation(storage as any,'t');
+ await assert.rejects(()=>creation.start({id:'c',vessel_id:'v',client:null},'/work',{model:'m'}),/Creation was not sent/);
+ assert.equal(storage.length,0);
 });

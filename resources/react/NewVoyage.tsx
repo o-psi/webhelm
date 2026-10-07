@@ -19,7 +19,7 @@ import {SelectCombobox} from './components/ui/select-combobox';
 import {ComposerBox,ComposerInput} from './ComposerPrimitives';
 import {WorkspacePicker} from './WorkspacePicker';
 import {sameAccount,profileSettings} from '../js/execution-profiles.js';
-import {Creation,accountChoices,vesselRead} from './settings';
+import {Creation,CreationNotCreated,CreationUnconfirmed,accountChoices,vesselRead} from './settings';
 import {preparePicture,MAX_PICTURE_BYTES,MAX_PICTURES} from './prepare-picture';
 
 export type NewVoyageMessage = {goalIntent?:ComposerGoalIntent;text:string; pictures:File[]; access:'read-only'|'approval'|'unrestricted'; send:boolean; applyAccess:boolean};
@@ -186,7 +186,26 @@ export function NewVoyage({fleet,tenant,drafts,departure,onDraftChange,hidden,re
             const process=await creation.current.start(connection,path,settings);
             await onCreated(vessel,process,{text,pictures:[...pictures],access,send,applyAccess:true,goalIntent});
             if(contentGeneration.current===admittedGeneration){setText('');setPictures([]);draftSlot?.set({text:'',pictures:[]});}
-        }catch(error){setNotice(error instanceof Error?error.message:'Creation unavailable.');}
+        }catch(error){
+            if(error instanceof CreationNotCreated)draftSlot?.set({...draftSlot.value,delivery:undefined});
+            if(error instanceof CreationUnconfirmed){
+                setNotice('Checking the original creation receipt…');
+                try{
+                    // One exact resolution; never replay creation, access or the
+                    // first message after a lost/uncertain acknowledgement.
+                    const process=await creation.current!.reconcile(connection,error.record);
+                    if(process){
+                        await onCreated(vessel,process,{text,pictures:[...pictures],access,send:false,applyAccess:false,goalIntent});
+                        if(contentGeneration.current===admittedGeneration){setText('');setPictures([]);draftSlot?.set({text:'',pictures:[]});}
+                        return;
+                    }
+                    draftSlot?.set({...draftSlot.value,delivery:undefined});
+                    setNotice('Creation was not admitted. Review the retained draft before trying again.');
+                    return;
+                }catch{ /* Retain the exact journal and draft for explicit recovery. */ }
+            }
+            setNotice(error instanceof Error?error.message:'Creation unavailable.');
+        }
         finally{setBusy(false);}
     }
     async function reconcile(record:any){

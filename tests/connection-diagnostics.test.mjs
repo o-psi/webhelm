@@ -6,6 +6,6 @@ test('connection diagnostics never include supplied content, secrets or error ob
  console.debug=(...args)=>{captured=args;};
  try { connectionDiagnostic('request',{op:'submit',request_id:'fixture',prompt:'secret text',ticket:'credential',url:'private',error:new Error('sensitive')}); }
  finally {console.debug=original;}
- assert.equal(captured[1].op,'submit');
+ assert.equal(JSON.parse(captured[1]).op,'submit');
  assert.doesNotMatch(JSON.stringify(captured),/secret text|credential|private|sensitive/);
 });

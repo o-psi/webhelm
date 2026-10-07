@@ -48,6 +48,11 @@ export class IntentJournal {
     }
     settle(commandId) { this.storage.removeItem(this.key + commandId); }
 }
+// A synchronous pre-send refusal proves there was no dispatch. Other failures
+// retain uncertainty even if the connection later recovers.
+export class CommandNotSentError extends Error {
+    constructor(reason) { super('Connection unavailable; command was not sent.'); this.reason = reason; }
+}
 export class VesselSocket {
     constructor(socket, onDisconnect) {
         this.socket = socket; this.pending = new Map(); this.subscriptions = new Map(); this.onDisconnect = onDisconnect;
@@ -74,13 +79,13 @@ export class VesselSocket {
     }
     exchange(value) {
         return new Promise((resolve, reject) => {
-            if (this.socket.readyState !== 1 || this.pending.size >= 16) return reject(new Error('Connection unavailable.'));
+            if (this.socket.readyState !== 1 || this.pending.size >= 16) return reject(new CommandNotSentError(this.socket.readyState !== 1 ? 'socket_unavailable' : 'capacity'));
             const id = uuid();
             const timer = setTimeout(() => { log('reply_timeout',{request_id:id,op:value.command.op,pending:this.pending.size}); this.pending.delete(id); reject(new Error('Reply timed out; command outcome may be unknown.')); }, 30000);
             this.pending.set(id, {resolve, reject, timer,op:value.command.op,started:Date.now()});
             log('request',{request_id:id,op:value.command.op,pending:this.pending.size});
             try { this.socket.send(JSON.stringify({type: 'command', request_id: id, request: value})); }
-            catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
+            catch (error) { clearTimeout(timer); this.pending.delete(id); reject(new CommandNotSentError('send_failed')); }
         });
     }
     subscribe(session, incarnation, after, onEvent, projection = 'public-v2') {

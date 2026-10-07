@@ -3,5 +3,5 @@ const fields = new Set(['connection','generation','request_id','op','elapsed_ms'
 export function connectionDiagnostic(event, metadata = {}) {
     const safe = {at:new Date().toISOString(),event};
     for (const [key,value] of Object.entries(metadata)) if (fields.has(key) && ['string','number','boolean'].includes(typeof value)) safe[key] = value;
-    console.debug('[Helm connection]',safe);
+    console.debug('[Helm connection]',JSON.stringify(safe));
 }

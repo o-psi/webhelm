@@ -1,4 +1,5 @@
-import {request,uuid} from '../js/vessel-client.js';
+import {connectionDiagnostic as log} from '../js/connection-diagnostics.js';
+import {CommandNotSentError,request,uuid} from '../js/vessel-client.js';
 export async function vesselRead(connection:any,op:string,fields:Record<string,unknown>={}) {
     const client=connection?.client;if(!client)throw new Error('Vessel is offline.');
     const response=await client.exchange(request(op,fields));
@@ -15,6 +16,12 @@ export function accountChoices(catalogue:any) {
         return (provider?.transports||[]).map((transport:string)=>({label:`${account.label} · ${provider.label} · ${transport.replaceAll('_',' ')}`,state:account.state,availability:account.availability,ready:account.state==='ready'&&account.availability==='available',binding:{account_id:account.id,connection_id:provider.id,identity_generation:account.identity_generation,connection_revision:provider.revision,transport}}));
     });
 }
+export class CreationNotCreated extends Error {}
+export class CreationUnconfirmed extends Error {
+    constructor(public record:any,public reason:string) {
+        super('We can’t confirm whether the voyage was created. Your draft is kept; check creation before trying again.');
+    }
+}
 // Creation intent is separate from message submission and is never automatically replayed.
 export class Creation {
     constructor(private storage:Storage,private tenant:string) {}
@@ -27,14 +34,30 @@ export class Creation {
     }
     private async startLocked(connection:any,workspace:string,settings:any) {
         if(this.pending().some(record=>record.vessel===connection.id))throw new Error('Creation unconfirmed. Check creation before trying again.');
+        const client=connection.client;
+        if(!client)throw new CreationNotCreated('Vessel is offline. Creation was not sent; your draft is kept.');
         const command={op:'start_account',command_id:uuid(),session_id:uuid(),workspace:workspace==='/'?workspace:workspace.replace(/\/+$/,''),...settings};
         const key=`${this.prefix()}${connection.id}:${connection.vessel_id}:${command.command_id}`;
-        this.storage.setItem(key,JSON.stringify({vessel:connection.id,vessel_id:connection.vessel_id,command}));
+        const record={key,vessel:connection.id,vessel_id:connection.vessel_id,command};
+        this.storage.setItem(key,JSON.stringify({vessel:record.vessel,vessel_id:record.vessel_id,command}));
         let response:any;
-        try{response=await connection.client.exchange({protocol:1,command});}
-        catch{throw new Error('We can’t confirm whether the voyage was created. Your draft is kept; check creation before trying again.');}
-        if(response?.protocol!==1||response.outcome_unknown!==false)throw new Error('We can’t confirm whether the voyage was created. Your draft is kept; check creation before trying again.');
-        if(response.error!=null){this.storage.removeItem(key);throw new Error('Creation refused. Review settings.');}
+        try{response=await client.exchange({protocol:1,command});}
+        catch(error){
+            if(error instanceof CommandNotSentError){
+                this.storage.removeItem(key);
+                log('creation_not_sent',{connection:connection.id,reason:error.reason});
+                throw new CreationNotCreated('Creation was not sent. Check the Vessel connection and try again with your retained draft.');
+            }
+            const reason=error instanceof Error&&error.message==='Reply timed out; command outcome may be unknown.'?'reply_timeout':error instanceof Error&&error.message==='Connection lost; command outcome may be unknown.'?'connection_lost':'exchange_failed';
+            log('creation_unconfirmed',{connection:connection.id,reason});
+            throw new CreationUnconfirmed(record,reason);
+        }
+        if(response?.protocol!==1||response.outcome_unknown!==false){
+            const reason=response?.protocol===1&&response.outcome_unknown===true?'server_unknown':'invalid_reply';
+            log('creation_unconfirmed',{connection:connection.id,reason});
+            throw new CreationUnconfirmed(record,reason);
+        }
+        if(response.error!=null){this.storage.removeItem(key);throw new CreationNotCreated('Creation refused. Review settings.');}
         return this.accept(connection,key,command,response.result);
     }
     // The matching start reply/resolve receipt proves the request identity. Vessel
