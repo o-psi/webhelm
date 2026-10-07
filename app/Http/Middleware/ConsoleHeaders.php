@@ -18,7 +18,7 @@ class ConsoleHeaders
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Referrer-Policy', 'no-referrer');
-        $response->headers->set('Content-Security-Policy', "frame-ancestors 'none'; object-src 'none'; base-uri 'self'");
+        $response->headers->set('Content-Security-Policy', "frame-ancestors 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'");
         return $response;
     }
 }

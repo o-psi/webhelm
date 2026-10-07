@@ -10,10 +10,21 @@ export const toolTrigger='tool-trigger h-auto min-h-6 w-full items-start justify
 export function toolRunActive(state:unknown):boolean {
     return typeof state==='string'&&['accepted','running','awaiting_decision','cancel_requested','starting','cancelling'].includes(state);
 }
-export type ToolEntry={key:string;call?:any;request?:any;result?:any};
+export type ToolEntry={key:string;call?:any;request?:any;result?:any;ambiguous?:boolean};
 export type ThreadRow={key:string;message?:any;entries?:ToolEntry[]};
+function presentedCalls(message:any):any[]{
+    if(message.tool_calls?.length)return message.tool_calls;
+    const calls=message.tool_call_summaries;
+    if(message.role!=='assistant'||message.projection_truncated!==true||message.tool_call_summaries_complete!==true||!Array.isArray(calls)||calls.length>64)return [];
+    if(calls.some(call=>typeof call.id!=='string'||!call.id||call.id.length>128||typeof call.name!=='string'||!call.name||call.name.length>128)||new Set(calls.map(call=>call.id)).size!==calls.length)return [];
+    return calls.map(call=>({id:call.id,name:call.name,summary_only:true}));
+}
 export function threadRows(messages:any[]):ThreadRow[]{
-    const calls=new Set(messages.flatMap(message=>(message.tool_calls||[]).map((call:any)=>call.id)).filter(Boolean));
+    const calls=new Set(messages.flatMap(message=>presentedCalls(message).map((call:any)=>call.id)).filter(Boolean));
+    const identities=messages.flatMap(message=>presentedCalls(message).map((call:any)=>call.id));
+    const duplicated=new Set(identities.filter((id,index)=>identities.indexOf(id)!==index));
+    const resultIds=messages.filter(message=>['tool','function'].includes(message.role)).map(message=>message.tool_call_id);
+    resultIds.forEach((id,index)=>{if(resultIds.indexOf(id)!==index)duplicated.add(id);});
     const results=new Map(messages.filter(message=>['tool','function'].includes(message.role)&&message.tool_call_id).map(message=>[message.tool_call_id,message]));
     const rows:ThreadRow[]=[];let group:ThreadRow|undefined;
     messages.forEach((message,index)=>{
@@ -21,10 +32,10 @@ export function threadRows(messages:any[]):ThreadRow[]{
         const key=String(message.message_index??index),result=['tool','function'].includes(message.role);
         if(result&&calls.has(message.tool_call_id))return;
         const text=message.parts?.some((part:any)=>part.type==='image'||(part.type==='text'&&part.text?.trim()))||String(message.content||'').trim();
-        if(!result&&(!message.tool_calls?.length||text)){rows.push({key:`message:${key}`,message});group=undefined;}
-        if(!result&&!message.tool_calls?.length)return;
+        if(!result&&(!presentedCalls(message).length||text)){rows.push({key:`message:${key}`,message});group=undefined;}
+        if(!result&&!presentedCalls(message).length)return;
         if(!group){group={key:`tools:${key}`,entries:[]};rows.push(group);}
-        if(message.tool_calls?.length)message.tool_calls.forEach((call:any,i:number)=>group!.entries!.push({key:call.id||`${key}:${i}`,call,request:message,result:results.get(call.id)}));
+        if(presentedCalls(message).length)presentedCalls(message).forEach((call:any,i:number)=>group!.entries!.push({key:call.id||`${key}:${i}`,call,request:message,result:results.get(call.id),...(duplicated.has(call.id)?{ambiguous:true}:{})}));
         else group.entries!.push({key:`result:${key}`,result:message});
     });
     return rows;

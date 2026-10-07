@@ -287,6 +287,12 @@
 .prose .chat-math-display .katex-display{margin:0;text-align:left}
 .prose .chat-math-display .katex-display>.katex{display:inline-block;min-width:100%;text-align:center}
 .prose .math-source{white-space:pre-wrap;overflow-wrap:anywhere}
+.html-preview{margin:16px 0;min-width:0;max-width:100%;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.html-preview>header{padding:4px 8px;border-bottom:1px solid var(--border)}
+.html-preview-document iframe{display:block;width:100%;border:0;background:var(--background)}
+.html-preview-document>p{margin:0;padding:8px 12px}
+.html-preview-source{margin:0;padding:12px;max-height:480px;overflow:auto;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.html-preview-expanded{width:calc(100vw - 32px);max-width:1100px!important;max-height:95dvh;overflow:auto}
 .message-actions{position:absolute;right:0;bottom:-20px;z-index:1;display:flex;justify-content:flex-end;opacity:0;transition:opacity 120ms}
 .message.assistant:hover .message-actions,.message.assistant:focus-within .message-actions{opacity:1}
 .message-actions [data-slot="button"]{height:25px;color:var(--muted-foreground);font-size:11px}.message-actions svg{width:13px;height:13px}

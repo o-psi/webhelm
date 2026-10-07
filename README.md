@@ -693,3 +693,20 @@ pass. Actual native-platform qualification is also not claimed. This documentati
 does not close Web #30 or Core #313.
 
 [image-retention-core]: https://github.com/o-psi/helm.vessel.voyage/tree/e11ee1df2d39878680bd85c024d39e33eb24ab3d
+
+### Interactive visual replies in chat
+
+Voyage can explicitly publish a self-contained page with `html_render`; use
+`html_preview` first to inspect its screenshot and console output. The tools are
+implemented in [Voyage #438](https://github.com/o-psi/helm.vessel.voyage/issues/438)
+and require that runtime on the executing Vessel. Ordinary HTML/Markdown fences
+remain code. Successful publications appear directly in chat, interactive immediately,
+with expansion and light/dark theme support; there are no activation or source controls.
+
+Pages use inline styles/scripts, data images and the app's CSS theme variables.
+They are limited to 128 KiB UTF-8 each and six/256 KiB per tool group. Web verifies
+session-authorized artifact metadata, chunk continuation and SHA-256 before rendering.
+An opaque iframe sandbox and document CSP block app/session access, external requests,
+forms, popups, downloads and navigation. This is a visual reply, not a tool-connected
+MCP app or an OS resource sandbox. Inactive/stale/truncated or unsuccessful results
+stay unexecuted. [Web #77](https://github.com/o-psi/webhelm/issues/77) tracks delivery.

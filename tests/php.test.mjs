@@ -75,6 +75,8 @@ test('personal tenants: HTTP session, connection isolation, direct browser crede
   assert.equal((await call('/voyages/not-a-uuid/'+voyageId,{},'alice')).status,404);
   const react=await call('/',{},'alice');const reactHtml=await react.text();
   assert.equal(react.status,200);assert.match(react.headers.get('cache-control'),/no-store/);
+  assert.match(react.headers.get('content-security-policy'),/frame-src 'none'/);
+  assert.match(react.headers.get('content-security-policy'),/frame-ancestors 'none'/);
   assert.match(reactHtml,/Helm Console/);assert.match(reactHtml,/alice vessel/);
   assert.match(reactHtml,/alice\.example\.com/);assert.ok(!reactHtml.includes('bob.example.com'));
   assert.ok(!reactHtml.includes('bob vessel'));assert.ok(!reactHtml.includes('a'.repeat(64)));assert.ok(!reactHtml.includes(pairingSecret));

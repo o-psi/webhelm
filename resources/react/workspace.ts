@@ -342,6 +342,14 @@ export class Workspace {
         const tab = this.tabs.get(key); if (!tab || tab.busy) return;
         tab.preparingItems=[];tab.contentGeneration++; tab.pictures = tab.pictures.filter(picture => { if (picture.id !== id) return true; URL.revokeObjectURL(picture.url); return false; }); this.saveDraft(tab);this.changed();
     }
+    async htmlArtifact(key: string, artifact: any) {
+        const tab=this.tabs.get(key),client=tab&&this.connections().get(tab.vessel)?.client;
+        if(!tab||!client)throw Error('Vessel unavailable.');
+        const incarnation=tab.incarnation,session=tab.session,scope=tab.scope,rights=JSON.stringify(tab.rights);
+        const assertCurrent=()=>{if(this.closed||this.tabs.get(key)!==tab||this.connections().get(tab.vessel)?.client!==client||tab.session!==session||tab.incarnation!==incarnation||tab.scope!==scope||JSON.stringify(tab.rights)!==rights||tab.stale)throw Error('Visual reply authority changed.');};
+        const {htmlArtifactBytes}=await import('../js/html-artifacts.js');
+        assertCurrent();return htmlArtifactBytes(client,artifact,{session_id:session,assertCurrent});
+    }
     async artifact(key: string, attachment: any) {
         const tab = this.tabs.get(key), client = tab && this.connections().get(tab.vessel)?.client;
         if (!tab || !client) throw new Error('Vessel unavailable.');

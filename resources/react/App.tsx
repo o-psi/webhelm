@@ -21,6 +21,7 @@ import {MessageActions} from './MessageActions';
 import {HostBrowser} from './HostBrowser';
 import {ComposerDiscovery} from './ComposerDiscovery';
 import React, {useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} from 'react';
+import {HtmlPublishedReply,htmlPublications} from './HtmlPublishedReply';
 import {ToolGroup,threadRows,toolTrigger,toolRunActive} from './ToolGroup';
 import {Connections} from './Connections';
 import {ImagePart,Output} from './MessageParts';
@@ -243,7 +244,11 @@ export function Conversation({tab, workspace, active, onSettings, onRecover, con
         <p role="status" className="px-3 text-sm text-muted-foreground" hidden={!linkNotice}>{linkNotice}</p>
         <div className="transcript" ref={scroll} tabIndex={0} aria-label="Conversation messages" onScroll={() => {if(!activeRef.current||loadingHistory.current)return;const el=scroll.current!;tab.scrollTop=el.scrollTop;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;tab.following=following.current;setShowJump(!following.current);updateTurnNavigation();loadNearTop();}}><div className="thread">
             {!tab.snapshot && <p className="empty">Waiting for a current Vessel snapshot…</p>}
-            {threadRows(tab.snapshot?.messages||[]).map(row=>row.entries?<ToolGroup key={row.key} groupKey={row.key} scope={tenant?{tenant,vessel:tab.vessel,session:tab.session}:undefined} entries={row.entries} running={toolRunActive(run?.state)} messageStart={run?.message_start} decisions={tab.decisions.length>0} renderMessage={renderMessage}/>:<React.Fragment key={row.key}>{renderMessage(row.message)}</React.Fragment>)}
+            {threadRows(tab.snapshot?.messages||[]).map(row=>{
+                if(!row.entries)return <React.Fragment key={row.key}>{renderMessage(row.message)}</React.Fragment>;
+                const publications=htmlPublications(row.entries),other=row.entries.filter(entry=>!publications.has(entry.key));
+                return <React.Fragment key={row.key}>{other.length>0&&<ToolGroup groupKey={row.key} scope={tenant?{tenant,vessel:tab.vessel,session:tab.session}:undefined} entries={other} running={toolRunActive(run?.state)} messageStart={run?.message_start} decisions={tab.decisions.length>0} renderMessage={renderMessage}/>} {Array.from(publications,([key,publication])=><HtmlPublishedReply key={key} publication={publication} identity={[tenant,tab.vessel,tab.session,tab.incarnation,key].join(':')} allowed={active&&!tab.stale} tab={tab} workspace={workspace}/>)}</React.Fragment>;
+            })}
             <Output tab={tab} workspace={workspace}/>
             {(run?.tool_previews || []).filter((preview:any)=>!(tab.snapshot?.messages||[]).some((message:any)=>message.tool_calls?.some((call:any)=>call.id===preview.call_id))).map((preview:any,index:number) => <Collapsible className="tool-entry" key={index}><CollapsibleTrigger asChild><Button variant="ghost" className={toolTrigger} type="button"><ChevronRightIcon className="tool-chevron" aria-hidden="true"/><span className="tool-summary-text">Tool preview · {preview.name || 'Tool'}</span></Button></CollapsibleTrigger><CollapsibleContent><pre>{content(preview.arguments)}</pre></CollapsibleContent></Collapsible>)}
             {(run?.reasoning_previews||[]).map((preview:any,index:number)=><Collapsible className="tool-entry" key={index}><CollapsibleTrigger asChild><Button variant="ghost" className={toolTrigger} type="button"><ChevronRightIcon className="tool-chevron" aria-hidden="true"/><span className="tool-summary-text">{preview.kind==='summary'?'Reasoning summary':'Provider thinking'} · {preview.finalized?'finalized disclosure':'streaming · provisional'}</span></Button></CollapsibleTrigger><CollapsibleContent><pre>{preview.text}</pre>{preview.truncated&&<small>Preview truncated</small>}</CollapsibleContent></Collapsible>)}
